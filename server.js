@@ -502,6 +502,46 @@ app.get("/api/admin/sales", adminAuth, async (req,res,next) => {
   } catch(e){ next(e); }
 });
 
+app.patch("/api/admin/sales/:saleId/reference", adminAuth, async (req,res,next) => {
+  try {
+    const saleId = Number(req.params.saleId);
+    if (!Number.isInteger(saleId) || saleId <= 0) {
+      return res.status(400).json({error:"Invalid sale."});
+    }
+
+    const existing = await pool.query(
+      `SELECT id,payment_method,
+              COALESCE(payment_provider, CASE WHEN payment_method='GCash' THEN 'GCash' ELSE NULL END) AS payment_provider
+       FROM sales WHERE id=$1 LIMIT 1`,
+      [saleId]
+    );
+
+    if (!existing.rows.length) return res.status(404).json({error:"Sale not found."});
+    const sale = existing.rows[0];
+    if (sale.payment_method === "Cash") {
+      return res.status(400).json({error:"Cash transactions do not use a payment receipt reference."});
+    }
+
+    const provider = sale.payment_provider || "";
+    const reference = normalizePaymentReference(req.body.reference, provider);
+    if (!isValidPaymentReference(reference, provider)) {
+      return res.status(400).json({error:"Enter a valid payment reference before marking this receipt complete."});
+    }
+
+    const { rows } = await pool.query(
+      `UPDATE sales
+       SET payment_reference=$1,
+           gcash_reference=CASE WHEN payment_method='GCash' THEN $1 ELSE gcash_reference END,
+           payment_reference_status='manual'
+       WHERE id=$2
+       RETURNING id,payment_reference,payment_reference_status`,
+      [reference,saleId]
+    );
+
+    res.json(rows[0]);
+  } catch(e) { next(e); }
+});
+
 app.get("/api/admin/receipts/:saleId", adminAuth, async (req,res,next) => {
   try {
     const { rows } = await pool.query("SELECT receipt_mime,receipt_image FROM sales WHERE id=$1", [req.params.saleId]);
