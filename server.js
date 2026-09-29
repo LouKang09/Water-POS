@@ -94,6 +94,10 @@ function adminAuth(req, res, next) {
   }
 }
 
+function digitsOnly(value) {
+  return String(value || "").split("").filter(ch => ch >= "0" && ch <= "9").join("");
+}
+
 function txRef() {
   const d = new Date();
   const stamp = [
@@ -159,10 +163,23 @@ app.post("/api/sales", upload.single("receipt"), async (req,res,next) => {
     const items = await validatedItems(JSON.parse(req.body.items || "[]"));
     const total = items.reduce((s,i)=>s+i.lineTotal,0);
     const reference = txRef();
-    const gcashReference = paymentMethod === "GCash" ? String(req.body.gcashReference || "").trim() : null;
+    const gcashReference = paymentMethod === "GCash" ? digitsOnly(req.body.gcashReference) : null;
+    const gcashDetectedReference = paymentMethod === "GCash" ? digitsOnly(req.body.gcashDetectedReference) : null;
+    const gcashOcrVerified = req.body.gcashOcrVerified === "true";
 
     if (paymentMethod === "GCash" && !req.file) return res.status(400).json({error:"GCash receipt image is required."});
-    if (paymentMethod === "GCash" && !gcashReference) return res.status(400).json({error:"GCash reference is required."});
+    if (paymentMethod === "GCash" && !String(req.file.mimetype || "").startsWith("image/")) {
+      return res.status(400).json({error:"The GCash receipt must be an image."});
+    }
+    if (paymentMethod === "GCash" && (!gcashOcrVerified || !gcashDetectedReference)) {
+      return res.status(400).json({error:"GCash receipt could not be verified. Upload a clear GCash receipt with a readable reference number."});
+    }
+    if (paymentMethod === "GCash" && (gcashDetectedReference.length < 10 || gcashDetectedReference.length > 18)) {
+      return res.status(400).json({error:"The GCash reference read from the image is not valid. Upload a clearer receipt."});
+    }
+    if (paymentMethod === "GCash" && gcashReference !== gcashDetectedReference) {
+      return res.status(400).json({error:"GCash reference must come from the uploaded receipt image."});
+    }
 
     await client.query("BEGIN");
     const sale = await client.query(
@@ -271,8 +288,54 @@ app.get("/api/admin/summary", adminAuth, async (req,res,next) => {
   } catch(e){ next(e); }
 });
 
+app.get("/api/admin/sales-trend", adminAuth, async (req,res,next) => {
+  try {
+    const today = new Date();
+    const defaultTo = today.toISOString().slice(0,10);
+    const start = new Date(today);
+    start.setUTCDate(start.getUTCDate() - 13);
+    const defaultFrom = start.toISOString().slice(0,10);
+    const from = req.query.from || defaultFrom;
+    const to = req.query.to || defaultTo;
+
+    const { rows } = await pool.query(`
+      WITH days AS (
+        SELECT generate_series($1::date, $2::date, interval '1 day')::date AS day
+      ),
+      daily AS (
+        SELECT created_at::date AS day,
+               COALESCE(SUM(total),0)::numeric AS sales,
+               COALESCE(SUM(total) FILTER (WHERE payment_method='Cash'),0)::numeric AS cash,
+               COALESCE(SUM(total) FILTER (WHERE payment_method='GCash'),0)::numeric AS gcash,
+               COUNT(*)::int AS transactions
+        FROM sales
+        WHERE created_at::date BETWEEN $1::date AND $2::date
+        GROUP BY created_at::date
+      )
+      SELECT to_char(days.day,'YYYY-MM-DD') AS date,
+             COALESCE(daily.sales,0)::numeric AS sales,
+             COALESCE(daily.cash,0)::numeric AS cash,
+             COALESCE(daily.gcash,0)::numeric AS gcash,
+             COALESCE(daily.transactions,0)::int AS transactions
+      FROM days
+      LEFT JOIN daily ON daily.day = days.day
+      ORDER BY days.day
+    `, [from,to]);
+
+    res.json(rows.map(r => ({
+      date:r.date,
+      sales:Number(r.sales),
+      cash:Number(r.cash),
+      gcash:Number(r.gcash),
+      transactions:Number(r.transactions)
+    })));
+  } catch(e){ next(e); }
+});
+
 app.get("/api/admin/sales", adminAuth, async (req,res,next) => {
   try {
+    const from = req.query.from || "2000-01-01";
+    const to = req.query.to || "2999-12-31";
     const { rows } = await pool.query(`
       SELECT s.id,s.transaction_ref,s.payment_method,s.gcash_reference,s.total,s.created_at,
              (s.receipt_image IS NOT NULL) AS has_receipt,
@@ -280,8 +343,9 @@ app.get("/api/admin/sales", adminAuth, async (req,res,next) => {
                'category',i.category,'label',i.label,'unitPrice',i.unit_price,'qty',i.qty,'lineTotal',i.line_total
              ) ORDER BY i.id) FILTER (WHERE i.id IS NOT NULL), '[]') AS items
       FROM sales s LEFT JOIN sale_items i ON i.sale_id=s.id
-      GROUP BY s.id ORDER BY s.created_at DESC LIMIT 200
-    `);
+      WHERE s.created_at::date BETWEEN $1::date AND $2::date
+      GROUP BY s.id ORDER BY s.created_at DESC LIMIT 500
+    `, [from,to]);
     res.json(rows.map(r => ({...r,total:Number(r.total)})));
   } catch(e){ next(e); }
 });
