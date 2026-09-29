@@ -1,10 +1,17 @@
 const tokenKey="waterpos_admin_token";
 let token=sessionStorage.getItem(tokenKey)||"";
 let setupMode=false;
+let salesChart=null;
 const $=s=>document.querySelector(s);
 const money=n=>"₱"+Number(n||0).toLocaleString("en-PH",{minimumFractionDigits:0,maximumFractionDigits:2});
 const fmtDate=d=>new Date(d).toLocaleString("en-PH",{dateStyle:"medium",timeStyle:"short"});
 const today=()=>new Date().toISOString().slice(0,10);
+const dateDaysAgo=days=>{
+  const d=new Date();
+  d.setDate(d.getDate()-days);
+  return d.toISOString().slice(0,10);
+};
+const shortDate=value=>new Date(value+"T00:00:00").toLocaleDateString("en-PH",{month:"short",day:"numeric"});
 
 function toast(msg){const el=$("#toast");el.textContent=msg;el.classList.add("show");clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.remove("show"),2200);}
 async function api(url,opts={}){
@@ -30,8 +37,43 @@ async function loadSummary(){
   $("#statNet").textContent=money(d.net);
   $("#txCount").textContent=d.transactions+" transaction"+(d.transactions===1?"":"s");
 }
+async function loadTrend(){
+  const rows=await api("/api/admin/sales-trend?"+queryDates());
+  $("#chartRange").textContent=($("#fromDate").value||"")+" to "+($("#toDate").value||"");
+  const canvas=$("#salesTrendChart");
+  if(!window.Chart){
+    canvas.parentElement.innerHTML='<div class="empty-state">Chart library could not load. Sales data is still available below.</div>';
+    return;
+  }
+  if(salesChart)salesChart.destroy();
+  salesChart=new Chart(canvas,{
+    type:"line",
+    data:{
+      labels:rows.map(r=>shortDate(r.date)),
+      datasets:[
+        {label:"Total Sales",data:rows.map(r=>r.sales),borderWidth:3,pointRadius:4,pointHoverRadius:6,tension:.28},
+        {label:"Cash",data:rows.map(r=>r.cash),borderWidth:2,pointRadius:3,pointHoverRadius:5,tension:.28},
+        {label:"GCash",data:rows.map(r=>r.gcash),borderWidth:2,pointRadius:3,pointHoverRadius:5,tension:.28}
+      ]
+    },
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      interaction:{mode:"index",intersect:false},
+      plugins:{
+        legend:{position:"top",align:"end"},
+        tooltip:{callbacks:{label:ctx=>ctx.dataset.label+": "+money(ctx.parsed.y)}}
+      },
+      scales:{
+        x:{grid:{display:false},ticks:{maxRotation:0,autoSkip:true,maxTicksLimit:14}},
+        y:{beginAtZero:true,ticks:{callback:value=>money(value)}}
+      }
+    }
+  });
+}
+
 async function loadSales(){
-  const rows=await api("/api/admin/sales");
+  const rows=await api("/api/admin/sales?"+queryDates());
   $("#salesBody").innerHTML=rows.length?rows.map(r=>`
     <tr>
       <td>${fmtDate(r.created_at)}</td>
@@ -74,7 +116,7 @@ async function loadUsed(){
     await loadUsed();toast("Used pricing updated.");
   }));
 }
-async function refreshAll(){await Promise.all([loadSummary(),loadSales(),loadExpenses(),loadUsed()]);}
+async function refreshAll(){await Promise.all([loadSummary(),loadTrend(),loadSales(),loadExpenses(),loadUsed()]);}
 
 $("#loginForm").addEventListener("submit",async e=>{
   e.preventDefault();$("#loginError").textContent="";
@@ -87,7 +129,14 @@ $("#loginForm").addEventListener("submit",async e=>{
   }catch(err){$("#loginError").textContent=err.message;}
 });
 $("#logoutBtn").addEventListener("click",logout);
-$("#applyFilter").addEventListener("click",()=>loadSummary().catch(e=>toast(e.message)));
+$("#applyFilter").addEventListener("click",async()=>{
+  try{
+    if($("#fromDate").value && $("#toDate").value && $("#fromDate").value>$("#toDate").value){
+      return toast("From date cannot be after To date.");
+    }
+    await Promise.all([loadSummary(),loadTrend(),loadSales()]);
+  }catch(e){toast(e.message);}
+});
 $("#closeReceipt").addEventListener("click",()=>$("#receiptModal").close());
 
 document.querySelectorAll(".side-nav button").forEach(btn=>btn.addEventListener("click",()=>{
@@ -118,6 +167,8 @@ $("#usedForm").addEventListener("submit",async e=>{
 
 (async function init(){
   $("#expenseDate").value=today();
+  $("#fromDate").value=dateDaysAgo(13);
+  $("#toDate").value=today();
   showApp();
   if(token){refreshAll().catch(()=>logout());return;}
   try{
