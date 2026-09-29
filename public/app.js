@@ -15,6 +15,7 @@ const state = {
   receiptPreviewUrl: "",
   captureSource: "upload",
   deliveryRoomUnit: "",
+  onlineQueue: [],
 };
 
 const els = {
@@ -49,6 +50,13 @@ const els = {
   successTotal: document.querySelector("#successTotal"),
   newOrderBtn: document.querySelector("#newOrderBtn"),
   toast: document.querySelector("#toast"),
+  onlineQueueBtn: document.querySelector("#onlineQueueBtn"),
+  onlineQueueCount: document.querySelector("#onlineQueueCount"),
+  onlineQueueDialog: document.querySelector("#onlineQueueDialog"),
+  closeOnlineQueue: document.querySelector("#closeOnlineQueue"),
+  refreshOnlineQueue: document.querySelector("#refreshOnlineQueue"),
+  onlineQueueList: document.querySelector("#onlineQueueList"),
+  queueUpdatedText: document.querySelector("#queueUpdatedText"),
 };
 
 const money = n => "₱" + Number(n).toLocaleString("en-PH", {maximumFractionDigits:2});
@@ -906,6 +914,109 @@ function resetOrder() {
   renderCart();
 }
 
+function queuePaymentLabel(row){
+  if(row.payment_method==="Cash") return "Pending · Cash";
+  return "Paid · "+(row.payment_provider||row.payment_method);
+}
+
+function queueReferenceLabel(row){
+  if(row.payment_method==="Cash") return "Cash upon delivery";
+  if(row.payment_reference_status==="unreadable") return "Reference unreadable · receipt attached";
+  if(row.payment_reference) return "Ref: "+row.payment_reference;
+  return "Receipt attached";
+}
+
+function renderOnlineQueue(){
+  const rows=state.onlineQueue;
+  els.onlineQueueCount.textContent=String(rows.length);
+  els.onlineQueueCount.classList.toggle("has-items",rows.length>0);
+
+  if(!rows.length){
+    els.onlineQueueList.innerHTML='<div class="empty-state">No online delivery requests.</div>';
+    return;
+  }
+
+  els.onlineQueueList.innerHTML=rows.map(row=>`
+    <article class="online-queue-card">
+      <div class="queue-card-top">
+        <div>
+          <span class="queue-unit">Unit ${escapeHtml(String(row.unit_no))}</span>
+          <h3>${escapeHtml(row.tenant_name)}</h3>
+          <a href="tel:${escapeHtml(row.tenant_phone)}">${escapeHtml(row.tenant_phone)}</a>
+        </div>
+        <span class="queue-payment-status ${row.payment_method==="Cash"?"pending":"paid"}">${escapeHtml(queuePaymentLabel(row))}</span>
+      </div>
+      <div class="queue-order-line">
+        <strong>₱${Number(row.unit_price).toLocaleString("en-PH")} × ${Number(row.qty)}</strong>
+        <span>${money(row.total)}</span>
+      </div>
+      <div class="queue-meta-line">
+        <span>${escapeHtml(queueReferenceLabel(row))}</span>
+        <small>${new Date(row.created_at).toLocaleString("en-PH",{dateStyle:"medium",timeStyle:"short"})}</small>
+      </div>
+      <div class="queue-card-actions">
+        ${row.has_receipt?`<button type="button" class="small-button queue-view-receipt" data-id="${row.id}">View Receipt</button>`:""}
+        <button type="button" class="primary-button queue-complete" data-id="${row.id}">
+          ${row.payment_method==="Cash"?"Paid Cash & Complete":"Complete Delivery"}
+        </button>
+      </div>
+    </article>
+  `).join("");
+
+  document.querySelectorAll(".queue-view-receipt").forEach(btn=>btn.addEventListener("click",()=>{
+    window.open("/api/pos/queue/"+btn.dataset.id+"/receipt","_blank","noopener");
+  }));
+
+  document.querySelectorAll(".queue-complete").forEach(btn=>btn.addEventListener("click",()=>completeOnlineQueue(btn.dataset.id)));
+}
+
+function escapeHtml(value){
+  return String(value??"").replace(/[&<>"']/g,ch=>({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+  }[ch]));
+}
+
+async function loadOnlineQueue({quiet=false}={}){
+  try{
+    const res=await fetch("/api/pos/queue",{cache:"no-store"});
+    if(!res.ok) throw new Error("Unable to load queue.");
+    state.onlineQueue=await res.json();
+    renderOnlineQueue();
+    if(els.queueUpdatedText){
+      els.queueUpdatedText.textContent="Updated "+new Date().toLocaleTimeString("en-PH",{hour:"numeric",minute:"2-digit"});
+    }
+  }catch(err){
+    if(!quiet) toast(err.message);
+  }
+}
+
+async function completeOnlineQueue(id){
+  const row=state.onlineQueue.find(item=>String(item.id)===String(id));
+  if(!row) return;
+
+  const prompt=row.payment_method==="Cash"
+    ? "Confirm cash was collected and complete delivery for Unit "+row.unit_no+"?"
+    : "Complete delivery for Unit "+row.unit_no+" and record it in Sales?";
+  if(!confirm(prompt)) return;
+
+  const button=document.querySelector('.queue-complete[data-id="'+id+'"]');
+  if(button){button.disabled=true;button.textContent="Completing…";}
+
+  try{
+    const res=await fetch("/api/pos/queue/"+id+"/complete",{method:"POST"});
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(data.error||"Unable to complete request.");
+    toast("Queue completed · "+data.transactionRef);
+    await loadOnlineQueue({quiet:true});
+  }catch(err){
+    toast(err.message);
+    if(button){
+      button.disabled=false;
+      button.textContent=row.payment_method==="Cash"?"Paid Cash & Complete":"Complete Delivery";
+    }
+  }
+}
+
 document.querySelectorAll(".category-tab").forEach(btn=>{
   btn.addEventListener("click",()=>{
     state.category=btn.dataset.category;
@@ -949,6 +1060,12 @@ els.gcashReference.addEventListener("input",()=>{
 });
 els.confirmPayment.addEventListener("click",submitSale);
 els.newOrderBtn.addEventListener("click",()=>{els.successDialog.close();resetOrder();});
+els.onlineQueueBtn.addEventListener("click",async()=>{
+  els.onlineQueueDialog.showModal();
+  await loadOnlineQueue({quiet:true});
+});
+els.closeOnlineQueue.addEventListener("click",()=>els.onlineQueueDialog.close());
+els.refreshOnlineQueue.addEventListener("click",()=>loadOnlineQueue());
 
 (async function init(){
   try {
@@ -957,6 +1074,8 @@ els.newOrderBtn.addEventListener("click",()=>{els.successDialog.close();resetOrd
   } catch {}
   renderProducts();
   renderCart();
+  loadOnlineQueue({quiet:true});
+  setInterval(()=>loadOnlineQueue({quiet:true}),15000);
   const warm=()=>warmOcr().catch(()=>{});
   if("requestIdleCallback" in window) requestIdleCallback(warm,{timeout:2500});
   else setTimeout(warm,1800);
