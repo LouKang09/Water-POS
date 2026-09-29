@@ -477,6 +477,55 @@ function labelMatchesText(text,provider=selectedProvider()) {
   });
 }
 
+function fieldLabelLike(value) {
+  const lower=String(value||"").toLowerCase();
+  return [
+    "recipient","product name","payment id","amount","date & time","date and time",
+    "transaction details","completed","purchased on","reference id","reference number"
+  ].some(label=>lower.includes(label));
+}
+
+function candidatePiecesFromContext(context,provider=selectedProvider()) {
+  const upper=String(context||"").toUpperCase();
+  const pieces=[];
+
+  // Handles grouped IDs such as Maya: 888D EB7E 6992.
+  const grouped=upper.match(/(?:[A-Z0-9]{2,8}[ -]+){1,5}[A-Z0-9]{2,8}/g)||[];
+  for(const value of grouped){
+    const candidate=normalizeReference(value,provider);
+    if(validReferenceLength(candidate,provider)) pieces.push(candidate);
+  }
+
+  // Also support compact and hyphenated reference formats.
+  const compact=upper.match(/[A-Z0-9][A-Z0-9-]{5,39}/g)||[];
+  for(const value of compact){
+    const candidate=normalizeReference(value,provider);
+    if(validReferenceLength(candidate,provider)) pieces.push(candidate);
+  }
+
+  return [...new Set(pieces)];
+}
+
+function scoreReferenceCandidate(candidate,provider=selectedProvider()) {
+  const value=normalizeReference(candidate,provider);
+  let score=0;
+  const letters=(value.match(/[A-Z]/g)||[]).length;
+  const digits=(value.match(/\d/g)||[]).length;
+
+  if(provider==="Maya"){
+    if(value.length===12) score+=100;
+    if(letters>0 && digits>0) score+=60;
+    if(letters>=2) score+=20;
+    if(digits>=6) score+=15;
+    if(/^09\d{9}$/.test(value)) score-=200; // recipient/mobile number, never prefer this as Maya Reference ID
+  } else {
+    score+=Math.min(value.length,30);
+    if(letters>0 && digits>0) score+=20;
+  }
+
+  return score;
+}
+
 function referenceCandidateFromContext(text,provider=selectedProvider()) {
   const lines=String(text||"").split(/\n|\r/).map(line=>line.trim()).filter(Boolean);
   const labels=providerReferenceLabels(provider);
@@ -489,18 +538,28 @@ function referenceCandidateFromContext(text,provider=selectedProvider()) {
       const pos=lower.indexOf(label.toLowerCase());
       if(pos<0) continue;
 
-      const contexts=[
-        line.slice(pos+label.length),
-        lines[i+1]||"",
-        lines[i+2]||""
-      ];
+      const contexts=[];
+      const sameLine=line.slice(pos+label.length).trim();
+      if(sameLine) contexts.push(sameLine);
 
+      // OCR sometimes outputs the label column first and the values afterward.
+      for(let offset=1;offset<=4;offset++){
+        const next=lines[i+offset]||"";
+        if(!next) continue;
+        if(fieldLabelLike(next) && !/[A-Z0-9]{6,}/i.test(next.replace(/\s/g,""))) continue;
+        contexts.push(next);
+      }
+
+      const candidates=[];
       for(const context of contexts){
-        const pieces=String(context).toUpperCase().match(/[A-Z0-9][A-Z0-9-]{5,39}/g)||[];
-        for(const piece of pieces){
-          const candidate=normalizeReference(piece,provider);
-          if(validReferenceLength(candidate,provider)) return candidate;
+        for(const candidate of candidatePiecesFromContext(context,provider)){
+          candidates.push(candidate);
         }
+      }
+
+      if(candidates.length){
+        candidates.sort((x,y)=>scoreReferenceCandidate(y,provider)-scoreReferenceCandidate(x,provider));
+        return candidates[0];
       }
     }
   }
@@ -523,17 +582,26 @@ function extractDigitCandidates(text) {
 
 function extractReferenceCandidates(text,provider=selectedProvider()) {
   if(provider==="GCash") return extractDigitCandidates(text);
-  const found=[];
-  const tokens=String(text||"").toUpperCase().match(/[A-Z0-9][A-Z0-9-]{5,39}/g)||[];
-  for(const token of tokens){
-    const ref=normalizeReference(token,provider);
-    if(validReferenceLength(ref,provider)) found.push(ref);
+
+  const found=candidatePiecesFromContext(text,provider);
+  return [...new Set(found)].sort((x,y)=>
+    scoreReferenceCandidate(y,provider)-scoreReferenceCandidate(x,provider)
+  );
+}
+
+function chooseMayaReference(candidates) {
+  const clean=[...new Set(candidates.map(value=>normalizeReference(value,"Maya")))]
+    .filter(value=>validReferenceLength(value,"Maya"))
+    .filter(value=>!/^09\d{9}$/.test(value));
+
+  const alphanumeric=clean.filter(value=>/[A-Z]/.test(value) && /\d/.test(value));
+  if(alphanumeric.length){
+    alphanumeric.sort((x,y)=>scoreReferenceCandidate(y,"Maya")-scoreReferenceCandidate(x,"Maya"));
+    return alphanumeric[0];
   }
-  return [...new Set(found)].sort((x,y)=>{
-    const yd=(y.match(/\d/g)||[]).length;
-    const xd=(x.match(/\d/g)||[]).length;
-    return yd-xd || y.length-x.length;
-  });
+
+  clean.sort((x,y)=>scoreReferenceCandidate(y,"Maya")-scoreReferenceCandidate(x,"Maya"));
+  return clean[0]||"";
 }
 
 async function setOcrMode(worker,{digitsOnlyMode=false,singleLine=false}={}) {
@@ -641,27 +709,52 @@ async function scanReceipt(file) {
       setOcrStatus(providerReferenceHint(provider)+" found. Reading its value…");
       await setOcrMode(worker,{digitsOnlyMode:true,singleLine:false});
 
-      const numberAreas=provider==="GCash"
-        ? [
-            makePreparedCanvas(source,1800,0.46,0.60,0.48,0.94,true),
-            makePreparedCanvas(source,1800,0.52,0.67,0.48,0.94,true),
-            makePreparedCanvas(source,1800,0.40,0.68,0.46,0.95,true)
-          ]
-        : [
-            makePreparedCanvas(source,1800,0.18,0.90,0.35,0.98,true),
-            makePreparedCanvas(source,1800,0.05,0.95,0.25,0.98,true)
-          ];
-
       let candidates=[];
-      for(const area of numberAreas){
-        const result=await worker.recognize(area);
-        candidates=candidates.concat(extractReferenceCandidates(result.data.text || "",provider));
-      }
-      candidates=[...new Set(candidates)].filter(value=>validReferenceLength(value,provider));
-      if(provider==="GCash"){
-        preferred=candidates.find(value=>value.length===9) || candidates.sort((x,y)=>y.length-x.length)[0] || "";
+
+      if(provider==="Maya"){
+        // Maya commonly places Reference ID below Recipient/Product and above Payment ID.
+        // Keep this crop tight so the recipient mobile number cannot win the fallback.
+        const mayaBands=[
+          makePreparedCanvas(source,2100,0.39,0.55,0.05,0.98,true),
+          makePreparedCanvas(source,2100,0.42,0.60,0.30,0.98,true),
+          makePreparedCanvas(source,2100,0.35,0.62,0.05,0.98,true)
+        ];
+
+        for(const area of mayaBands){
+          const result=await worker.recognize(area);
+          const mayaText=result.data.text||"";
+          const anchored=referenceCandidateFromContext(mayaText,"Maya");
+          if(anchored){
+            preferred=anchored;
+            break;
+          }
+          candidates=candidates.concat(extractReferenceCandidates(mayaText,"Maya"));
+        }
+
+        if(!preferred) preferred=chooseMayaReference(candidates);
       } else {
-        preferred=candidates[0] || "";
+        const numberAreas=provider==="GCash"
+          ? [
+              makePreparedCanvas(source,1800,0.46,0.60,0.48,0.94,true),
+              makePreparedCanvas(source,1800,0.52,0.67,0.48,0.94,true),
+              makePreparedCanvas(source,1800,0.40,0.68,0.46,0.95,true)
+            ]
+          : [
+              makePreparedCanvas(source,1800,0.18,0.90,0.35,0.98,true),
+              makePreparedCanvas(source,1800,0.05,0.95,0.25,0.98,true)
+            ];
+
+        for(const area of numberAreas){
+          const result=await worker.recognize(area);
+          candidates=candidates.concat(extractReferenceCandidates(result.data.text || "",provider));
+        }
+
+        candidates=[...new Set(candidates)].filter(value=>validReferenceLength(value,provider));
+        if(provider==="GCash"){
+          preferred=candidates.find(value=>value.length===9) || candidates.sort((x,y)=>y.length-x.length)[0] || "";
+        } else {
+          preferred=candidates[0] || "";
+        }
       }
     }
 
@@ -674,7 +767,9 @@ async function scanReceipt(file) {
     state.gcashDetectedReference=normalizeReference(preferred,provider);
     els.gcashReference.value=state.gcashDetectedReference;
     els.gcashReference.readOnly=false;
-    els.gcashRefHelp.textContent=providerReferenceHint(provider)+" was read from the image. You may correct one OCR character if needed.";
+    els.gcashRefHelp.textContent=provider==="Maya"
+      ? "Maya Reference ID was read from the Reference ID row, not from Recipient or Payment ID. You may correct one OCR character if needed."
+      : providerReferenceHint(provider)+" was read from the image. You may correct one OCR character if needed.";
     setOcrStatus(providerReferenceHint(provider)+" detected successfully.","success");
   } catch {
     setOcrStatus("Error: the image could not be read. Please try a clearer screenshot.","error");
