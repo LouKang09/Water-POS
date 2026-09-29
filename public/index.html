@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0d6b69">
+  <title>Water POS</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="pos-page">
+  <header class="pos-header">
+    <div>
+      <p class="eyebrow">WATER REFILLING STATION</p>
+      <h1>Water POS</h1>
+    </div>
+    <a href="/admin.html" class="admin-link">Admin</a>
+  </header>
+
+  <main class="pos-shell">
+    <nav id="categories" class="category-tabs" aria-label="Order category">
+      <button class="category-tab active" data-category="Delivery">Delivery</button>
+      <button class="category-tab" data-category="Pick-Up">Pick-Up</button>
+      <button class="category-tab" data-category="New">New</button>
+      <button class="category-tab" data-category="Used">Used</button>
+    </nav>
+
+    <section class="catalog-card">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow" id="categoryHint">DELIVERY</p>
+          <h2 id="categoryTitle">Choose a price</h2>
+        </div>
+        <span class="tap-tip">Tap to add</span>
+      </div>
+      <div id="productGrid" class="product-grid"></div>
+    </section>
+
+    <section class="cart-card">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">CURRENT ORDER</p>
+          <h2>Order summary</h2>
+        </div>
+        <button id="clearCart" class="text-button" type="button">Clear</button>
+      </div>
+      <div id="cartEmpty" class="empty-state">No items yet. Tap a price above to start.</div>
+      <div id="cartItems" class="cart-items"></div>
+    </section>
+  </main>
+
+  <div class="checkout-bar">
+    <div>
+      <span>Total</span>
+      <strong id="cartTotal">₱0</strong>
+    </div>
+    <button id="checkoutBtn" class="primary-button" disabled>Payment</button>
+  </div>
+
+  <dialog id="paymentDialog" class="payment-dialog">
+    <form method="dialog" class="dialog-sheet" id="paymentForm">
+      <div class="dialog-header">
+        <div>
+          <p class="eyebrow">PAYMENT</p>
+          <h2>Complete transaction</h2>
+        </div>
+        <button type="button" class="icon-button" id="closePayment" aria-label="Close">×</button>
+      </div>
+
+      <div class="payment-methods">
+        <button type="button" class="payment-method active" data-payment="Cash">
+          <span class="payment-icon">₱</span>
+          <span><strong>Cash</strong><small>Automatic reference</small></span>
+        </button>
+        <button type="button" class="payment-method" data-payment="GCash">
+          <span class="payment-icon">G</span>
+          <span><strong>GCash</strong><small>Scan receipt reference</small></span>
+        </button>
+      </div>
+
+      <div id="cashPanel" class="payment-panel">
+        <p class="info-box">A Water POS transaction reference will be generated automatically after payment.</p>
+      </div>
+
+      <div id="gcashPanel" class="payment-panel hidden">
+        <label class="receipt-drop">
+          <input id="receiptInput" type="file" accept="image/*" capture="environment">
+          <span class="upload-icon">＋</span>
+          <strong>Add GCash receipt</strong>
+          <small>Camera or gallery · image saved for admin cross-checking</small>
+        </label>
+        <div id="ocrStatus" class="ocr-status hidden"></div>
+        <img id="receiptPreview" class="receipt-preview hidden" alt="GCash receipt preview">
+        <label class="field">
+          <span>Detected GCash reference</span>
+          <input id="gcashReference" autocomplete="off" inputmode="numeric" placeholder="Upload receipt to auto-detect">
+          <small>You can correct this if the image text was read incorrectly.</small>
+        </label>
+      </div>
+
+      <div class="dialog-total">
+        <span>Amount due</span>
+        <strong id="paymentTotal">₱0</strong>
+      </div>
+      <button id="confirmPayment" type="button" class="primary-button full">Confirm Cash Payment</button>
+    </form>
+  </dialog>
+
+  <dialog id="successDialog" class="success-dialog">
+    <div class="success-card">
+      <div class="success-mark">✓</div>
+      <p class="eyebrow">TRANSACTION SAVED</p>
+      <h2>Payment complete</h2>
+      <p id="successRef" class="reference-text"></p>
+      <p id="successTotal" class="success-total"></p>
+      <button id="newOrderBtn" class="primary-button full">New order</button>
+    </div>
+  </dialog>
+
+  <div id="toast" class="toast" role="status"></div>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
