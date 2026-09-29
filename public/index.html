@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0d6b69">
   <title>Water POS</title>
-  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/styles.css?v=20260929-3">
 </head>
 <body class="pos-page">
   <header class="pos-header">
@@ -82,26 +82,30 @@
       </div>
 
       <div id="gcashPanel" class="payment-panel hidden">
-        <label class="receipt-drop">
-          <input id="receiptInput" type="file" accept="image/*" capture="environment">
+        <label class="receipt-drop" id="receiptDrop">
+          <input id="receiptInput" type="file" accept="image/*">
           <span class="upload-icon">＋</span>
-          <strong>Add GCash receipt</strong>
-          <small>Camera or gallery · image saved for admin cross-checking</small>
+          <span class="receipt-drop-copy">
+            <strong>Add GCash receipt</strong>
+            <small>Camera or gallery · saved for admin cross-checking</small>
+          </span>
         </label>
         <div id="ocrStatus" class="ocr-status hidden"></div>
         <img id="receiptPreview" class="receipt-preview hidden" alt="GCash receipt preview">
-        <label class="field">
-          <span>Detected GCash reference</span>
-          <input id="gcashReference" autocomplete="off" inputmode="numeric" placeholder="Upload receipt to auto-detect" readonly>
-          <small>The reference must be read from the uploaded GCash receipt. If it cannot be read, the payment will not be accepted.</small>
+        <label class="field gcash-reference-field">
+          <span>GCash reference</span>
+          <input id="gcashReference" autocomplete="off" inputmode="numeric" placeholder="Waiting for receipt scan" readonly>
+          <small id="gcashRefHelp">The field unlocks only after an actual GCash receipt is verified. You may correct one OCR digit if needed.</small>
         </label>
       </div>
 
-      <div class="dialog-total">
-        <span>Amount due</span>
-        <strong id="paymentTotal">₱0</strong>
+      <div class="payment-actions">
+        <div class="dialog-total">
+          <span>Amount due</span>
+          <strong id="paymentTotal">₱0</strong>
+        </div>
+        <button id="confirmPayment" type="button" class="primary-button full">Confirm Cash Payment</button>
       </div>
-      <button id="confirmPayment" type="button" class="primary-button full">Confirm Cash Payment</button>
     </form>
   </dialog>
 
@@ -118,6 +122,6 @@
 
   <div id="toast" class="toast" role="status"></div>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="/app.js"></script>
+  <script src="/app.js?v=20260929-3"></script>
 </body>
 </html>
