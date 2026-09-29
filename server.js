@@ -120,6 +120,24 @@ function digitsOnly(value) {
   return String(value || "").split("").filter(ch => ch >= "0" && ch <= "9").join("");
 }
 
+function normalizePaymentReference(value, provider = "") {
+  const cleaned = String(value || "")
+    .toUpperCase()
+    .split("")
+    .filter(ch => (ch >= "A" && ch <= "Z") || (ch >= "0" && ch <= "9") || ch === "-")
+    .join("")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+  return provider === "GCash" ? digitsOnly(cleaned) : cleaned;
+}
+
+function isValidPaymentReference(value, provider = "") {
+  const ref = normalizePaymentReference(value, provider);
+  if (provider === "GCash") return ref.length >= 6 && ref.length <= 18;
+  const digitCount = ref.split("").filter(ch => ch >= "0" && ch <= "9").length;
+  return ref.length >= 6 && ref.length <= 40 && digitCount >= 4;
+}
+
 function isSingleDigitCorrection(detected, submitted) {
   if (!detected || !submitted) return false;
   if (detected === submitted) return true;
@@ -235,10 +253,10 @@ app.post("/api/sales", upload.single("receipt"), async (req,res,next) => {
 
     const isDigital = paymentMethod !== "Cash";
     const paymentReference = isDigital
-      ? digitsOnly(req.body.paymentReference || req.body.gcashReference)
+      ? normalizePaymentReference(req.body.paymentReference || req.body.gcashReference, paymentProvider)
       : null;
     const detectedReference = isDigital
-      ? digitsOnly(req.body.detectedReference || req.body.gcashDetectedReference)
+      ? normalizePaymentReference(req.body.detectedReference || req.body.gcashDetectedReference, paymentProvider)
       : null;
     const ocrVerified = req.body.ocrVerified === "true" || req.body.gcashOcrVerified === "true";
 
@@ -251,11 +269,11 @@ app.post("/api/sales", upload.single("receipt"), async (req,res,next) => {
     if (isDigital && (!ocrVerified || !detectedReference)) {
       return res.status(400).json({error:"The receipt reference could not be verified. Upload an image with a visible Reference Number."});
     }
-    if (isDigital && (detectedReference.length < 6 || detectedReference.length > 18)) {
+    if (isDigital && !isValidPaymentReference(detectedReference, paymentProvider)) {
       return res.status(400).json({error:"The reference read from the image is not valid. Upload a clearer receipt."});
     }
-    if (isDigital && (paymentReference.length < 6 || paymentReference.length > 18)) {
-      return res.status(400).json({error:"The corrected payment reference is incomplete."});
+    if (isDigital && !isValidPaymentReference(paymentReference, paymentProvider)) {
+      return res.status(400).json({error:"The corrected payment reference is incomplete or invalid."});
     }
     if (isDigital && !isSingleDigitCorrection(detectedReference, paymentReference)) {
       return res.status(400).json({error:"The payment reference differs too much from what was read in the receipt. Re-scan a clearer image."});
