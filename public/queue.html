@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0d6b69">
+  <title>Water Delivery Queue · Preview</title>
+  <link rel="stylesheet" href="/queue.css?v=20260929-1">
+</head>
+<body>
+  <header class="queue-header">
+    <div>
+      <div class="preview-pill">PREVIEW</div>
+      <p>WATER REFILLING STATION</p>
+      <h1>Online Delivery Queue</h1>
+    </div>
+  </header>
+
+  <main class="queue-shell">
+    <section id="accountScreen" class="queue-card account-card">
+      <p class="eyebrow">TENANT ACCOUNT</p>
+      <h2>Create your preview account</h2>
+      <p class="muted">Enter your details once. This browser will remember your account during the preview.</p>
+      <form id="accountForm">
+        <label class="field"><span>Name</span><input id="tenantName" required maxlength="120" autocomplete="name" placeholder="Your name"></label>
+        <label class="field"><span>Phone</span><input id="tenantPhone" required maxlength="20" inputmode="tel" autocomplete="tel" placeholder="09XXXXXXXXX"></label>
+        <label class="field"><span>Unit #</span><input id="tenantUnit" required maxlength="80" placeholder="Example: 304"></label>
+        <div id="accountError" class="error-text"></div>
+        <button class="primary-button full">Create Account</button>
+      </form>
+    </section>
+
+    <section id="queueApp" class="hidden">
+      <div class="tenant-strip">
+        <div>
+          <span id="tenantUnitBadge">Unit —</span>
+          <strong id="tenantDisplayName"></strong>
+          <small id="tenantDisplayPhone"></small>
+        </div>
+        <button id="changeAccount" type="button">Change account</button>
+      </div>
+
+      <section class="queue-card">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">REQUEST DELIVERY</p>
+            <h2>Choose a delivery price</h2>
+          </div>
+          <span class="unit-chip" id="deliveryUnitChip">Unit —</span>
+        </div>
+
+        <div class="price-grid">
+          <button type="button" class="price-option active" data-price="25"><strong>₱25</strong><span>Delivery</span></button>
+          <button type="button" class="price-option" data-price="35"><strong>₱35</strong><span>Delivery</span></button>
+          <button type="button" class="price-option" data-price="45"><strong>₱45</strong><span>Delivery</span></button>
+        </div>
+
+        <div class="qty-row">
+          <div><span>Quantity</span><small>Number of gallons</small></div>
+          <div class="qty-control">
+            <button id="qtyMinus" type="button">−</button>
+            <strong id="qtyValue">1</strong>
+            <button id="qtyPlus" type="button">+</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="queue-card">
+        <div class="section-head">
+          <div><p class="eyebrow">PAYMENT</p><h2>How will you pay?</h2></div>
+        </div>
+
+        <div class="payment-grid">
+          <button type="button" class="payment-choice active" data-payment="Cash"><strong>Cash</strong><small>Pay upon delivery</small></button>
+          <button type="button" class="payment-choice" data-payment="GCash"><strong>GCash</strong><small>Attach receipt</small></button>
+          <button type="button" class="payment-choice" data-payment="Other"><strong>Other</strong><small>More wallets</small></button>
+        </div>
+
+        <div id="providerPanel" class="provider-panel hidden">
+          <span>Choose payment app</span>
+          <div class="provider-grid">
+            <button type="button" class="provider-option" data-provider="Maya">Maya</button>
+            <button type="button" class="provider-option" data-provider="MariBank">MariBank</button>
+            <button type="button" class="provider-option" data-provider="GoTyme">GoTyme</button>
+            <button type="button" class="provider-option" data-provider="VYBE by BPI">VYBE / BPI</button>
+          </div>
+        </div>
+
+        <div id="digitalPanel" class="digital-panel hidden">
+          <div class="receipt-actions">
+            <label class="receipt-action primary">
+              <input id="queueCameraInput" type="file" accept="image/*" capture="environment">
+              <strong>Take Photo</strong><small>Photograph your receipt</small>
+            </label>
+            <label class="receipt-action">
+              <input id="queueReceiptInput" type="file" accept="image/*">
+              <strong>Upload Image</strong><small>Screenshot / gallery</small>
+            </label>
+          </div>
+          <div id="queueOcrStatus" class="ocr-status hidden"></div>
+          <img id="queueReceiptPreview" class="receipt-preview hidden" alt="Payment receipt">
+          <label class="field">
+            <span id="queueReferenceLabel">Payment reference</span>
+            <input id="queueReference" readonly autocomplete="off" autocapitalize="characters" placeholder="Waiting for receipt">
+            <small id="queueReferenceHelp">If the reference cannot be read, you can still submit with the attached receipt.</small>
+          </label>
+        </div>
+      </section>
+
+      <section class="queue-card summary-card">
+        <div class="summary-row"><span>Deliver to</span><strong id="summaryUnit">Unit —</strong></div>
+        <div class="summary-row"><span>Order</span><strong id="summaryOrder">₱25 × 1</strong></div>
+        <div class="summary-row"><span>Payment</span><strong id="summaryPayment">Cash · Pending</strong></div>
+        <div class="summary-total"><span>Total</span><strong id="summaryTotal">₱25</strong></div>
+        <button id="submitRequest" type="button" class="primary-button full">Request Delivery</button>
+      </section>
+
+      <section class="queue-card">
+        <div class="section-head">
+          <div><p class="eyebrow">MY REQUESTS</p><h2>Recent queue</h2></div>
+          <button id="refreshHistory" class="text-button" type="button">Refresh</button>
+        </div>
+        <div id="requestHistory" class="history-list"><div class="empty">No requests yet.</div></div>
+      </section>
+    </section>
+  </main>
+
+  <div id="queueToast" class="toast"></div>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="/queue.js?v=20260929-1"></script>
+</body>
+</html>
