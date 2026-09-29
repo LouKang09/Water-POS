@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0d6b69">
   <title>Water POS</title>
-  <link rel="stylesheet" href="/styles.css?v=20260929-11">
+  <link rel="stylesheet" href="/styles.css?v=20260929-12">
 </head>
 <body class="pos-page">
   <header class="pos-header">
@@ -34,9 +34,9 @@
       </div>
       <div id="productGrid" class="product-grid"></div>
       <label id="roomUnitField" class="field room-unit-field">
-        <span>Room / Unit for Delivery</span>
-        <input id="roomUnit" autocomplete="off" maxlength="100" placeholder="Example: Room 301 / Unit 2B">
-        <small>Saved with this transaction for faster delivery handling.</small>
+        <span>Room / Unit for Delivery <b aria-hidden="true">*</b></span>
+        <input id="roomUnit" autocomplete="off" maxlength="100" placeholder="Required · Example: Room 301 / Unit 2B">
+        <small>Required whenever the order contains a Delivery item.</small>
       </label>
     </section>
 
@@ -151,6 +151,6 @@
 
   <div id="toast" class="toast" role="status"></div>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="/app.js?v=20260929-11"></script>
+  <script src="/app.js?v=20260929-12"></script>
 </body>
 </html>
