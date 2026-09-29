@@ -69,8 +69,11 @@ function presets(category) {
 }
 
 function renderDeliveryRoomField() {
-  const hasDelivery=state.category==="Delivery" || state.cart.some(item=>item.category==="Delivery");
-  els.roomUnitField.classList.toggle("hidden",!hasDelivery);
+  const cartHasDelivery=state.cart.some(item=>item.category==="Delivery");
+  const showField=state.category==="Delivery" || cartHasDelivery;
+  els.roomUnitField.classList.toggle("hidden",!showField);
+  els.roomUnit.required=cartHasDelivery;
+  els.roomUnitField.classList.toggle("required-field",cartHasDelivery);
 }
 
 function renderProducts() {
@@ -832,6 +835,14 @@ async function scanReceipt(file,{sourceType="upload"}={}) {
 async function submitSale() {
   if(!state.cart.length) return;
 
+  const hasDelivery=state.cart.some(item=>item.category==="Delivery");
+  if(hasDelivery && !state.deliveryRoomUnit.trim()){
+    els.paymentDialog.close();
+    els.roomUnit.focus();
+    toast("Room / Unit is required for Delivery.");
+    return;
+  }
+
   const isDigital=state.payment!=="Cash";
   const provider=selectedProvider();
 
@@ -914,6 +925,12 @@ document.querySelectorAll(".provider-option").forEach(btn=>btn.addEventListener(
 }));
 els.clearCart.addEventListener("click",()=>{state.cart=[];renderCart();});
 els.checkoutBtn.addEventListener("click",()=>{
+  const hasDelivery=state.cart.some(item=>item.category==="Delivery");
+  if(hasDelivery && !state.deliveryRoomUnit.trim()){
+    els.roomUnit.focus();
+    toast("Room / Unit is required for Delivery.");
+    return;
+  }
   warmOcr().catch(()=>{});
   els.paymentDialog.showModal();
 });
