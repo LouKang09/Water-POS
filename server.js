@@ -510,7 +510,7 @@ app.patch("/api/admin/sales/:saleId/reference", adminAuth, async (req,res,next) 
     }
 
     const existing = await pool.query(
-      `SELECT id,payment_method,
+      `SELECT id,payment_method,payment_reference_status,
               COALESCE(payment_provider, CASE WHEN payment_method='GCash' THEN 'GCash' ELSE NULL END) AS payment_provider
        FROM sales WHERE id=$1 LIMIT 1`,
       [saleId]
@@ -520,6 +520,9 @@ app.patch("/api/admin/sales/:saleId/reference", adminAuth, async (req,res,next) 
     const sale = existing.rows[0];
     if (sale.payment_method === "Cash") {
       return res.status(400).json({error:"Cash transactions do not use a payment receipt reference."});
+    }
+    if (sale.payment_reference_status !== "unreadable") {
+      return res.status(409).json({error:"Only unreadable receipts can be completed manually."});
     }
 
     const provider = sale.payment_provider || "";
