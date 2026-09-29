@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#092f2e">
   <title>Water POS Admin</title>
-  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/styles.css?v=20260929-8">
 </head>
 <body class="admin-page">
   <div class="admin-mobile-block">
@@ -55,7 +55,8 @@
           <input type="date" id="fromDate" aria-label="From date">
           <span>to</span>
           <input type="date" id="toDate" aria-label="To date">
-          <button id="applyFilter">Apply</button>
+          <button id="todayFilter" type="button" class="secondary-filter">Today</button>
+          <button id="applyFilter" type="button">View</button>
         </div>
       </div>
 
@@ -64,6 +65,7 @@
           <article class="stat-card"><span>Total Sales</span><strong id="statSales">₱0</strong></article>
           <article class="stat-card"><span>Cash</span><strong id="statCash">₱0</strong></article>
           <article class="stat-card"><span>GCash</span><strong id="statGcash">₱0</strong></article>
+          <article class="stat-card"><span>Other Digital</span><strong id="statOther">₱0</strong></article>
           <article class="stat-card"><span>Expenses</span><strong id="statExpenses">₱0</strong></article>
           <article class="stat-card"><span>Net</span><strong id="statNet">₱0</strong></article>
         </div>
@@ -71,7 +73,7 @@
           <div class="panel-header">
             <div class="panel-header-copy">
               <h2>Daily Sales Trend</h2>
-              <p>Connected day-to-day sales, split by Cash and GCash.</p>
+              <p>Connected day-to-day sales, split by Cash, GCash, and Other digital payments.</p>
             </div>
             <span id="chartRange" class="badge">Last 14 days</span>
           </div>
@@ -80,11 +82,23 @@
           </div>
         </div>
 
+        <div class="report-toolbar">
+          <div>
+            <strong>Print sales report</strong>
+            <small>Daily, weekly, or monthly using the selected date as the report date.</small>
+          </div>
+          <div class="report-buttons">
+            <button type="button" class="small-button print-report-btn" data-period="day">Print Day</button>
+            <button type="button" class="small-button print-report-btn" data-period="week">Print Week</button>
+            <button type="button" class="small-button print-report-btn" data-period="month">Print Month</button>
+          </div>
+        </div>
+
         <div class="panel" style="margin-top:16px">
           <div class="panel-header"><h2>Sales transactions</h2><span id="txCount" class="badge">0 transactions</span></div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>Date</th><th>Reference</th><th>Items</th><th>Payment</th><th>GCash Ref</th><th>Total</th><th>Receipt</th></tr></thead>
+              <thead><tr><th>Date</th><th>Transaction</th><th>Items</th><th>Payment</th><th>Provider</th><th>Payment Ref</th><th>Total</th><th>Receipt</th></tr></thead>
               <tbody id="salesBody"></tbody>
             </table>
           </div>
@@ -129,12 +143,13 @@
 
   <dialog id="receiptModal" class="receipt-modal">
     <div class="receipt-box">
-      <div class="dialog-header"><div><p class="eyebrow">GCASH CROSS-CHECK</p><h2>Receipt image</h2></div><button id="closeReceipt" class="icon-button">×</button></div>
-      <img id="receiptImage" alt="GCash receipt">
+      <div class="dialog-header"><div><p class="eyebrow">PAYMENT CROSS-CHECK</p><h2>Receipt image</h2></div><button id="closeReceipt" class="icon-button">×</button></div>
+      <img id="receiptImage" alt="Payment receipt">
     </div>
   </dialog>
+  <section id="printReport" class="print-report" aria-hidden="true"></section>
   <div id="toast" class="toast"></div>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-  <script src="/admin.js"></script>
+  <script src="/admin.js?v=20260929-8"></script>
 </body>
 </html>
