@@ -77,11 +77,23 @@ async function initDb() {
 
     ALTER TABLE sales ADD COLUMN IF NOT EXISTS payment_provider TEXT;
     ALTER TABLE sales ADD COLUMN IF NOT EXISTS payment_reference TEXT;
+    ALTER TABLE sales ADD COLUMN IF NOT EXISTS payment_reference_status TEXT;
+    ALTER TABLE sales ADD COLUMN IF NOT EXISTS delivery_room_unit TEXT;
 
     UPDATE sales
     SET payment_provider = COALESCE(payment_provider, 'GCash'),
-        payment_reference = COALESCE(payment_reference, gcash_reference)
+        payment_reference = COALESCE(payment_reference, gcash_reference),
+        payment_reference_status = COALESCE(payment_reference_status, 'verified')
     WHERE payment_method = 'GCash';
+
+    UPDATE sales
+    SET payment_reference_status = COALESCE(
+      payment_reference_status,
+      CASE WHEN payment_method = 'Cash' THEN NULL
+           WHEN payment_reference IS NOT NULL THEN 'verified'
+           ELSE 'unreadable'
+      END
+    );
 
     ALTER TABLE sales DROP CONSTRAINT IF EXISTS sales_payment_method_check;
     ALTER TABLE sales
@@ -250,9 +262,13 @@ app.post("/api/sales", upload.single("receipt"), async (req,res,next) => {
     const items = await validatedItems(JSON.parse(req.body.items || "[]"));
     const total = items.reduce((sum,item)=>sum+item.lineTotal,0);
     const reference = txRef();
+    const hasDelivery = items.some(item => item.category === "Delivery");
+    const deliveryRoomUnit = hasDelivery
+      ? String(req.body.roomUnit || "").trim().slice(0, 100) || null
+      : null;
 
     const isDigital = paymentMethod !== "Cash";
-    const paymentReference = isDigital
+    const submittedReference = isDigital
       ? normalizePaymentReference(req.body.paymentReference || req.body.gcashReference, paymentProvider)
       : null;
     const detectedReference = isDigital
@@ -266,33 +282,42 @@ app.post("/api/sales", upload.single("receipt"), async (req,res,next) => {
     if (isDigital && !String(req.file.mimetype || "").startsWith("image/")) {
       return res.status(400).json({error:"The payment receipt must be an image."});
     }
-    if (isDigital && (!ocrVerified || !detectedReference)) {
-      return res.status(400).json({error:"The receipt reference could not be verified. Upload an image with a visible Reference Number."});
-    }
-    if (isDigital && !isValidPaymentReference(detectedReference, paymentProvider)) {
-      return res.status(400).json({error:"The reference read from the image is not valid. Upload a clearer receipt."});
-    }
-    if (isDigital && !isValidPaymentReference(paymentReference, paymentProvider)) {
-      return res.status(400).json({error:"The corrected payment reference is incomplete or invalid."});
-    }
-    if (isDigital && !isSingleDigitCorrection(detectedReference, paymentReference)) {
-      return res.status(400).json({error:"The payment reference differs too much from what was read in the receipt. Re-scan a clearer image."});
+
+    // A digital payment may proceed without a readable OCR reference as long as the
+    // receipt image is attached. These are explicitly marked for admin cross-checking.
+    let paymentReference = null;
+    let referenceStatus = isDigital ? "unreadable" : null;
+
+    if (isDigital && ocrVerified && detectedReference) {
+      if (!isValidPaymentReference(detectedReference, paymentProvider)) {
+        return res.status(400).json({error:"The reference read from the image is not valid. Re-scan or save it as unreadable with the receipt attached."});
+      }
+      if (!isValidPaymentReference(submittedReference, paymentProvider)) {
+        return res.status(400).json({error:"The corrected payment reference is incomplete or invalid."});
+      }
+      if (!isSingleDigitCorrection(detectedReference, submittedReference)) {
+        return res.status(400).json({error:"The payment reference differs too much from what was read in the receipt. Re-scan or save the attached receipt for review."});
+      }
+      paymentReference = submittedReference;
+      referenceStatus = "verified";
     }
 
     await client.query("BEGIN");
     const sale = await client.query(
       `INSERT INTO sales (
-         transaction_ref,payment_method,payment_provider,payment_reference,gcash_reference,
-         total,receipt_mime,receipt_image
+         transaction_ref,payment_method,payment_provider,payment_reference,payment_reference_status,
+         gcash_reference,delivery_room_unit,total,receipt_mime,receipt_image
        )
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
        RETURNING id, transaction_ref, created_at`,
       [
         reference,
         paymentMethod,
         paymentProvider,
         paymentReference,
+        referenceStatus,
         paymentMethod === "GCash" ? paymentReference : null,
+        deliveryRoomUnit,
         total,
         req.file?.mimetype || null,
         req.file?.buffer || null
@@ -458,6 +483,8 @@ app.get("/api/admin/sales", adminAuth, async (req,res,next) => {
       SELECT s.id,s.transaction_ref,s.payment_method,
              COALESCE(s.payment_provider, CASE WHEN s.payment_method='GCash' THEN 'GCash' ELSE NULL END) AS payment_provider,
              COALESCE(s.payment_reference,s.gcash_reference) AS payment_reference,
+             s.payment_reference_status,
+             s.delivery_room_unit,
              s.total,s.created_at,
              (s.receipt_image IS NOT NULL) AS has_receipt,
              COALESCE(json_agg(json_build_object(
