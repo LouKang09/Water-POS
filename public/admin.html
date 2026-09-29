@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#092f2e">
   <title>Water POS Admin</title>
-  <link rel="stylesheet" href="/styles.css?v=20260929-11">
+  <link rel="stylesheet" href="/styles.css?v=20260929-12">
 </head>
 <body class="admin-page">
   <div class="admin-mobile-block">
@@ -166,13 +166,49 @@
 
   <dialog id="receiptModal" class="receipt-modal">
     <div class="receipt-box">
-      <div class="dialog-header"><div><p class="eyebrow">PAYMENT CROSS-CHECK</p><h2>Receipt image</h2></div><button id="closeReceipt" class="icon-button">×</button></div>
-      <img id="receiptImage" alt="Payment receipt">
+      <div class="dialog-header">
+        <div>
+          <p class="eyebrow">PAYMENT CROSS-CHECK</p>
+          <h2>Receipt image</h2>
+          <p id="receiptMeta" class="receipt-meta"></p>
+        </div>
+        <button id="closeReceipt" class="icon-button" type="button">×</button>
+      </div>
+
+      <div class="receipt-toolbar" aria-label="Receipt zoom controls">
+        <button id="zoomOutReceipt" class="small-button" type="button">− Zoom</button>
+        <button id="resetReceiptZoom" class="small-button" type="button">100%</button>
+        <button id="zoomInReceipt" class="small-button" type="button">+ Zoom</button>
+        <span id="receiptZoomLabel">100%</span>
+      </div>
+
+      <div id="receiptViewport" class="receipt-viewport">
+        <img id="receiptImage" alt="Payment receipt">
+      </div>
+
+      <div id="completeReceiptPanel" class="complete-receipt-panel hidden">
+        <div>
+          <p class="eyebrow">OPTIONAL ADMIN REVIEW</p>
+          <h3>Complete unreadable receipt</h3>
+          <p>Zoom the receipt, read the reference manually, then save it. The original image stays unchanged.</p>
+        </div>
+        <label class="field">
+          <span id="manualReferenceLabel">Payment reference</span>
+          <input id="manualReference" autocomplete="off" autocapitalize="characters" placeholder="Enter the reference from the receipt">
+          <small>This is optional. Leaving it empty keeps the transaction marked unreadable.</small>
+        </label>
+        <button id="saveManualReference" class="primary-button full" type="button">Save & Mark Complete</button>
+      </div>
+
+      <div id="completedReceiptPanel" class="completed-receipt-panel hidden">
+        <span class="badge">Completed manually</span>
+        <strong id="completedReference"></strong>
+      </div>
     </div>
   </dialog>
   <section id="printReport" class="print-report" aria-hidden="true"></section>
   <div id="toast" class="toast"></div>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-  <script src="/admin.js?v=20260929-11"></script>
+  <script src="/admin.js?v=20260929-12"></script>
 </body>
 </html>
