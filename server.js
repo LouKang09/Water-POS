@@ -216,6 +216,9 @@ app.post("/api/sales", upload.single("receipt"), async (req,res,next) => {
     if (paymentMethod === "GCash" && (gcashDetectedReference.length < 10 || gcashDetectedReference.length > 18)) {
       return res.status(400).json({error:"The GCash reference read from the image is not valid. Upload a clearer receipt."});
     }
+    if (paymentMethod === "GCash" && (gcashReference.length < 10 || gcashReference.length > 18)) {
+      return res.status(400).json({error:"The corrected GCash reference is incomplete."});
+    }
     if (paymentMethod === "GCash" && !isSingleDigitCorrection(gcashDetectedReference, gcashReference)) {
       return res.status(400).json({error:"The GCash reference differs too much from what was read in the receipt. Re-scan a clearer image."});
     }
