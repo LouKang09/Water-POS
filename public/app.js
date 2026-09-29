@@ -163,7 +163,10 @@ function updatePaymentButtonState() {
   }
 
   const submitted = digitsOnly(els.gcashReference.value);
-  const correctionOk = isSingleDigitCorrection(state.gcashDetectedReference, submitted);
+  const correctionOk =
+    submitted.length >= 10 &&
+    submitted.length <= 18 &&
+    isSingleDigitCorrection(state.gcashDetectedReference, submitted);
   els.confirmPayment.disabled =
     state.ocrInProgress ||
     !state.gcashVerified ||
