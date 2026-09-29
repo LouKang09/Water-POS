@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#092f2e">
   <title>Water POS Admin</title>
-  <link rel="stylesheet" href="/styles.css?v=20260929-8">
+  <link rel="stylesheet" href="/styles.css?v=20260929-11">
 </head>
 <body class="admin-page">
   <div class="admin-mobile-block">
@@ -94,11 +94,34 @@
           </div>
         </div>
 
+        <div class="panel service-breakdown-panel" style="margin-top:16px">
+          <div class="panel-header">
+            <div class="panel-header-copy">
+              <h2>Service Quantity Breakdown</h2>
+              <p>Gallons by service type and price for the selected date range.</p>
+            </div>
+          </div>
+          <div class="service-breakdown-grid">
+            <div class="service-breakdown-card">
+              <h3>Delivery</h3>
+              <div id="deliveryBreakdown" class="breakdown-lines"></div>
+            </div>
+            <div class="service-breakdown-card">
+              <h3>Pick-Up</h3>
+              <div id="pickupBreakdown" class="breakdown-lines"></div>
+            </div>
+            <div class="service-breakdown-card overall">
+              <h3>Overall</h3>
+              <div id="overallBreakdown" class="breakdown-lines"></div>
+            </div>
+          </div>
+        </div>
+
         <div class="panel" style="margin-top:16px">
           <div class="panel-header"><h2>Sales transactions</h2><span id="txCount" class="badge">0 transactions</span></div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>Date</th><th>Transaction</th><th>Items</th><th>Payment</th><th>Provider</th><th>Payment Ref</th><th>Total</th><th>Receipt</th></tr></thead>
+              <thead><tr><th>Date</th><th>Transaction</th><th>Room / Unit</th><th>Items</th><th>Payment</th><th>Provider</th><th>Payment Ref</th><th>Total</th><th>Receipt</th></tr></thead>
               <tbody id="salesBody"></tbody>
             </table>
           </div>
@@ -150,6 +173,6 @@
   <section id="printReport" class="print-report" aria-hidden="true"></section>
   <div id="toast" class="toast"></div>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-  <script src="/admin.js?v=20260929-8"></script>
+  <script src="/admin.js?v=20260929-11"></script>
 </body>
 </html>
