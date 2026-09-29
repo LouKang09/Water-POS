@@ -4,6 +4,9 @@ const state = {
   cart: [],
   usedProducts: [],
   receiptFile: null,
+  gcashVerified: false,
+  gcashDetectedReference: "",
+  ocrInProgress: false,
 };
 
 const els = {
@@ -110,51 +113,140 @@ function renderCart() {
   els.checkoutBtn.disabled = !state.cart.length;
 }
 
+function updatePaymentButtonState() {
+  if (state.payment === "Cash") {
+    els.confirmPayment.disabled = false;
+    return;
+  }
+  els.confirmPayment.disabled = state.ocrInProgress || !state.gcashVerified || !state.receiptFile || !state.gcashDetectedReference;
+}
+
+function setOcrStatus(message,type="") {
+  els.ocrStatus.classList.remove("hidden","success","error");
+  if (type) els.ocrStatus.classList.add(type);
+  els.ocrStatus.textContent = message;
+}
+
 function setPayment(method) {
   state.payment = method;
   document.querySelectorAll(".payment-method").forEach(b=>b.classList.toggle("active",b.dataset.payment===method));
   els.cashPanel.classList.toggle("hidden",method!=="Cash");
   els.gcashPanel.classList.toggle("hidden",method!=="GCash");
   els.confirmPayment.textContent = method === "Cash" ? "Confirm Cash Payment" : "Confirm GCash Payment";
+  updatePaymentButtonState();
 }
 
-function detectReference(text) {
-  const cleaned = text.replace(/\s+/g," ");
-  const nearRef = cleaned.match(/(?:ref(?:erence)?(?:\s*no\.?)?|reference)[^0-9]{0,18}([0-9][0-9\s-]{8,18}[0-9])/i);
-  const source = nearRef ? nearRef[1] : (cleaned.match(/\b\d[\d\s-]{9,16}\d\b/g)||[]).sort((a,b)=>b.length-a.length)[0];
-  return source ? source.replace(/\D/g,"") : "";
+function readDigitsAfter(text,startIndex) {
+  let digits="";
+  let started=false;
+  let beforeDigits=0;
+  let separatorCount=0;
+  const end=Math.min(text.length,startIndex+90);
+
+  for(let i=startIndex;i<end;i++){
+    const ch=text[i];
+    const isDigit=ch>="0" && ch<="9";
+
+    if(isDigit){
+      started=true;
+      digits+=ch;
+      separatorCount=0;
+      if(digits.length>18) return "";
+      continue;
+    }
+
+    if(!started){
+      beforeDigits+=1;
+      if(beforeDigits>28) break;
+      continue;
+    }
+
+    if(ch===" " || ch==="-" || ch===":" || ch==="#" || ch==="."){
+      separatorCount+=1;
+      if(separatorCount>6) break;
+      continue;
+    }
+
+    break;
+  }
+
+  return digits.length>=10 && digits.length<=18 ? digits : "";
+}
+
+function analyzeGcashReceipt(text) {
+  const cleaned=String(text||"").replaceAll("\n"," ").replaceAll("\r"," ").replaceAll("\t"," ");
+  const lower=cleaned.toLowerCase();
+  const looksLikeGcash=
+    lower.includes("gcash") ||
+    lower.includes("g cash") ||
+    (lower.includes("amount sent") && lower.includes("sent to") && lower.includes("reference"));
+
+  if(!looksLikeGcash) return {valid:false,reference:""};
+
+  const labels=["reference number","reference no.","reference no","reference #","ref no.","ref no","ref #","reference"];
+  for(const label of labels){
+    const index=lower.indexOf(label);
+    if(index<0) continue;
+    const reference=readDigitsAfter(cleaned,index+label.length);
+    if(reference) return {valid:true,reference};
+  }
+
+  return {valid:false,reference:""};
 }
 
 async function scanReceipt(file) {
-  state.receiptFile = file;
+  state.receiptFile = file || null;
+  state.gcashVerified = false;
+  state.gcashDetectedReference = "";
+  state.ocrInProgress = true;
+  els.gcashReference.value = "";
+  updatePaymentButtonState();
+
+  if (!file || !String(file.type || "").startsWith("image/")) {
+    state.ocrInProgress = false;
+    state.receiptFile = null;
+    setOcrStatus("Error: please upload an image of the actual GCash receipt.","error");
+    updatePaymentButtonState();
+    return;
+  }
+
   els.receiptPreview.src = URL.createObjectURL(file);
   els.receiptPreview.classList.remove("hidden");
-  els.ocrStatus.classList.remove("hidden");
-  els.ocrStatus.textContent = "Reading receipt image…";
-  els.gcashReference.value = "";
+  setOcrStatus("Reading GCash receipt image…");
+
   try {
     if (!window.Tesseract) throw new Error("OCR library unavailable");
     const result = await Tesseract.recognize(file,"eng",{
       logger:m=>{
-        if(m.status==="recognizing text") els.ocrStatus.textContent = `Reading receipt… ${Math.round((m.progress||0)*100)}%`;
+        if(m.status==="recognizing text") {
+          setOcrStatus(`Reading GCash receipt… ${Math.round((m.progress||0)*100)}%`);
+        }
       }
     });
-    const ref = detectReference(result.data.text || "");
-    if (ref) {
-      els.gcashReference.value = ref;
-      els.ocrStatus.textContent = "Reference detected. Please verify it before saving.";
-    } else {
-      els.ocrStatus.textContent = "I couldn't confidently detect a reference. Please type it below.";
+
+    const analysis=analyzeGcashReceipt(result.data.text || "");
+    if (!analysis.valid) {
+      setOcrStatus("Error: no valid GCash reference number could be read from this image. Upload a clear GCash receipt or screenshot. This transaction cannot continue with this image.","error");
+      return;
     }
+
+    state.gcashVerified = true;
+    state.gcashDetectedReference = analysis.reference;
+    els.gcashReference.value = analysis.reference;
+    setOcrStatus("GCash receipt verified. Reference number was read directly from the image.","success");
   } catch {
-    els.ocrStatus.textContent = "Automatic reading failed. Please type the GCash reference manually.";
+    setOcrStatus("Error: the receipt could not be read. Upload a clearer GCash receipt or screenshot. Manual reference entry is not accepted.","error");
+  } finally {
+    state.ocrInProgress = false;
+    updatePaymentButtonState();
   }
 }
 
 async function submitSale() {
   if (!state.cart.length) return;
   if (state.payment==="GCash" && !state.receiptFile) return toast("Add the GCash receipt image first.");
-  if (state.payment==="GCash" && !els.gcashReference.value.trim()) return toast("Enter or scan the GCash reference.");
+  if (state.payment==="GCash" && state.ocrInProgress) return toast("Wait for the GCash receipt scan to finish.");
+  if (state.payment==="GCash" && !state.gcashVerified) return toast("GCash receipt not verified. Upload a clear receipt with a readable reference number.");
 
   els.confirmPayment.disabled = true;
   els.confirmPayment.textContent = "Saving…";
@@ -162,7 +254,9 @@ async function submitSale() {
   fd.append("paymentMethod",state.payment);
   fd.append("items",JSON.stringify(state.cart));
   if (state.payment==="GCash") {
-    fd.append("gcashReference",els.gcashReference.value.trim());
+    fd.append("gcashReference",state.gcashDetectedReference);
+    fd.append("gcashDetectedReference",state.gcashDetectedReference);
+    fd.append("gcashOcrVerified","true");
     fd.append("receipt",state.receiptFile);
   }
   try {
@@ -176,18 +270,22 @@ async function submitSale() {
   } catch(e) {
     toast(e.message);
   } finally {
-    els.confirmPayment.disabled = false;
     els.confirmPayment.textContent = state.payment === "Cash" ? "Confirm Cash Payment" : "Confirm GCash Payment";
+    updatePaymentButtonState();
   }
 }
 
 function resetOrder() {
   state.cart = [];
   state.receiptFile = null;
+  state.gcashVerified = false;
+  state.gcashDetectedReference = "";
+  state.ocrInProgress = false;
   els.receiptInput.value = "";
   els.receiptPreview.src = "";
   els.receiptPreview.classList.add("hidden");
   els.ocrStatus.classList.add("hidden");
+  els.ocrStatus.classList.remove("success","error");
   els.gcashReference.value = "";
   setPayment("Cash");
   renderCart();
