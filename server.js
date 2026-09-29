@@ -264,8 +264,12 @@ app.post("/api/sales", upload.single("receipt"), async (req,res,next) => {
     const reference = txRef();
     const hasDelivery = items.some(item => item.category === "Delivery");
     const deliveryRoomUnit = hasDelivery
-      ? String(req.body.roomUnit || "").trim().slice(0, 100) || null
+      ? String(req.body.roomUnit || "").trim().slice(0, 100)
       : null;
+
+    if (hasDelivery && !deliveryRoomUnit) {
+      return res.status(400).json({error:"Room / Unit is required for Delivery orders."});
+    }
 
     const isDigital = paymentMethod !== "Cash";
     const submittedReference = isDigital
