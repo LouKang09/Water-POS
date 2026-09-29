@@ -2,6 +2,10 @@ const tokenKey="waterpos_admin_token";
 let token=sessionStorage.getItem(tokenKey)||"";
 let setupMode=false;
 let salesChart=null;
+let currentSales=[];
+let activeReceiptSale=null;
+let receiptObjectUrl="";
+let receiptZoom=1;
 const $=s=>document.querySelector(s);
 const money=n=>"₱"+Number(n||0).toLocaleString("en-PH",{minimumFractionDigits:0,maximumFractionDigits:2});
 const fmtDate=d=>new Date(d).toLocaleString("en-PH",{dateStyle:"medium",timeStyle:"short",timeZone:"Asia/Manila"});
@@ -120,11 +124,24 @@ function paymentReferenceHtml(row){
   if(row.payment_reference_status==="unreadable"){
     return '<span class="badge badge-warning">Unreadable · review receipt</span>';
   }
+  if(row.payment_reference_status==="manual"){
+    return '<span class="badge">Completed manually</span><br><small>'+escapeHtml(row.payment_reference||"—")+'</small>';
+  }
   return escapeHtml(row.payment_reference||"—");
+}
+
+function adminReferenceLabel(provider){
+  if(provider==="Maya") return "Maya Reference ID";
+  if(provider==="MariBank") return "MariBank Transaction Reference Number";
+  if(provider==="GoTyme") return "GoTyme Transfer Reference Number";
+  if(provider==="VYBE by BPI") return "BPI / VYBE Reference Number or Trace ID";
+  if(provider==="GCash") return "GCash Reference Number";
+  return "Payment reference";
 }
 
 async function loadSales(){
   const rows=await api("/api/admin/sales?"+queryDates());
+  currentSales=rows;
   renderServiceBreakdown(rows);
   $("#salesBody").innerHTML=rows.length?rows.map(r=>`
     <tr>
@@ -136,16 +153,81 @@ async function loadSales(){
       <td>${escapeHtml(r.payment_provider||"—")}</td>
       <td>${paymentReferenceHtml(r)}</td>
       <td><strong>${money(r.total)}</strong></td>
-      <td>${r.has_receipt?`<button class="small-button view-receipt" data-id="${r.id}">View</button>`:"—"}</td>
+      <td>${r.has_receipt?`<button class="small-button view-receipt" data-id="${r.id}">${r.payment_reference_status==="unreadable"?"Review":"View"}</button>`:"—"}</td>
     </tr>`).join(""):`<tr><td colspan="9">No sales for this date range.</td></tr>`;
   document.querySelectorAll(".view-receipt").forEach(b=>b.addEventListener("click",()=>viewReceipt(b.dataset.id)));
 }
+function setReceiptZoom(value){
+  receiptZoom=Math.max(.6,Math.min(4,Number(value)||1));
+  $("#receiptImage").style.width=(receiptZoom*100)+"%";
+  $("#receiptImage").style.maxWidth="none";
+  $("#receiptZoomLabel").textContent=Math.round(receiptZoom*100)+"%";
+}
+
+function resetReceiptViewer(){
+  setReceiptZoom(1);
+  $("#receiptViewport").scrollTop=0;
+  $("#receiptViewport").scrollLeft=0;
+}
+
+function renderReceiptReviewState(sale){
+  const provider=sale?.payment_provider||sale?.payment_method||"Payment";
+  $("#receiptMeta").textContent=[
+    provider,
+    sale?.transaction_ref||"",
+    sale?.payment_reference_status==="unreadable" ? "Unreadable reference" :
+      sale?.payment_reference_status==="manual" ? "Completed manually" : "Verified"
+  ].filter(Boolean).join(" · ");
+
+  $("#manualReferenceLabel").textContent=adminReferenceLabel(provider);
+  $("#manualReference").value="";
+  $("#completeReceiptPanel").classList.toggle("hidden",sale?.payment_reference_status!=="unreadable");
+  $("#completedReceiptPanel").classList.toggle("hidden",sale?.payment_reference_status!=="manual");
+  $("#completedReference").textContent=sale?.payment_reference_status==="manual"
+    ? (sale.payment_reference||"")
+    : "";
+}
+
 async function viewReceipt(id){
+  const sale=currentSales.find(row=>String(row.id)===String(id))||null;
+  activeReceiptSale=sale;
   const res=await fetch("/api/admin/receipts/"+id,{headers:{Authorization:"Bearer "+token}});
   if(!res.ok)return toast("Unable to load receipt.");
   const blob=await res.blob();
-  $("#receiptImage").src=URL.createObjectURL(blob);
+
+  if(receiptObjectUrl) URL.revokeObjectURL(receiptObjectUrl);
+  receiptObjectUrl=URL.createObjectURL(blob);
+  $("#receiptImage").src=receiptObjectUrl;
+  renderReceiptReviewState(sale);
+  resetReceiptViewer();
   $("#receiptModal").showModal();
+}
+
+async function completeUnreadableReceipt(){
+  if(!activeReceiptSale) return;
+  const reference=$("#manualReference").value.trim();
+  if(!reference) return toast("Enter the reference from the receipt, or leave it unreadable.");
+
+  const button=$("#saveManualReference");
+  button.disabled=true;
+  button.textContent="Saving…";
+  try{
+    const result=await api("/api/admin/sales/"+activeReceiptSale.id+"/reference",{
+      method:"PATCH",
+      body:{reference}
+    });
+
+    activeReceiptSale.payment_reference=result.payment_reference;
+    activeReceiptSale.payment_reference_status=result.payment_reference_status;
+    renderReceiptReviewState(activeReceiptSale);
+    await loadSales();
+    toast("Receipt completed manually.");
+  }catch(err){
+    toast(err.message);
+  }finally{
+    button.disabled=false;
+    button.textContent="Save & Mark Complete";
+  }
 }
 
 function reportRange(period){
@@ -311,7 +393,20 @@ $("#applyFilter").addEventListener("click",async()=>{
     await Promise.all([loadSummary(),loadTrend(),loadSales()]);
   }catch(e){toast(e.message);}
 });
-$("#closeReceipt").addEventListener("click",()=>$("#receiptModal").close());
+$("#closeReceipt").addEventListener("click",()=>{
+  $("#receiptModal").close();
+  activeReceiptSale=null;
+});
+$("#zoomOutReceipt").addEventListener("click",()=>setReceiptZoom(receiptZoom-.25));
+$("#resetReceiptZoom").addEventListener("click",resetReceiptViewer);
+$("#zoomInReceipt").addEventListener("click",()=>setReceiptZoom(receiptZoom+.25));
+$("#receiptImage").addEventListener("dblclick",()=>setReceiptZoom(receiptZoom<1.8?2:1));
+$("#receiptViewport").addEventListener("wheel",e=>{
+  if(!e.ctrlKey && !e.metaKey) return;
+  e.preventDefault();
+  setReceiptZoom(receiptZoom+(e.deltaY<0?.15:-.15));
+},{passive:false});
+$("#saveManualReference").addEventListener("click",completeUnreadableReceipt);
 document.querySelectorAll(".print-report-btn").forEach(btn=>{
   btn.addEventListener("click",()=>printSalesReport(btn.dataset.period));
 });
