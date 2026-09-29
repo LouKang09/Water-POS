@@ -189,15 +189,15 @@ async function warmOcr() {
     logger:m=>{
       if (!state.ocrInProgress || m.status !== "recognizing text") return;
       const pct = Math.round((m.progress || 0) * 100);
-      if (state.ocrPhase === "verify") {
-        setOcrStatus(`Verifying the reference number… ${pct}%`);
+      if (state.ocrPhase === "fallback") {
+        setOcrStatus(`Searching the full image for Reference… ${pct}%`);
       } else {
-        setOcrStatus(`Reading GCash receipt… ${pct}%`);
+        setOcrStatus(`Reading the Reference section… ${pct}%`);
       }
     }
   }).then(async worker=>{
     try {
-      await worker.setParameters({ tessedit_pageseg_mode: "6" });
+      await worker.setParameters({ tessedit_pageseg_mode: "11" });
     } catch {}
     return worker;
   }).catch(err=>{
@@ -238,12 +238,13 @@ async function loadImageSource(file) {
   });
 }
 
-function makePreparedCanvas(source,maxWidth=1050,cropTopRatio=0) {
+function makePreparedCanvas(source,maxWidth=1600,cropTopRatio=0,cropBottomRatio=1) {
   const sourceWidth=source.width || source.naturalWidth;
   const sourceHeight=source.height || source.naturalHeight;
   const cropY=Math.max(0,Math.floor(sourceHeight*cropTopRatio));
-  const cropHeight=Math.max(1,sourceHeight-cropY);
-  const scale=Math.min(1,maxWidth/sourceWidth);
+  const cropBottom=Math.min(sourceHeight,Math.ceil(sourceHeight*cropBottomRatio));
+  const cropHeight=Math.max(1,cropBottom-cropY);
+  const scale=Math.min(2.5,Math.max(1,maxWidth/sourceWidth));
   const canvas=document.createElement("canvas");
   canvas.width=Math.max(1,Math.round(sourceWidth*scale));
   canvas.height=Math.max(1,Math.round(cropHeight*scale));
@@ -253,7 +254,7 @@ function makePreparedCanvas(source,maxWidth=1050,cropTopRatio=0) {
   ctx.fillRect(0,0,canvas.width,canvas.height);
   ctx.imageSmoothingEnabled=true;
   ctx.imageSmoothingQuality="high";
-  if ("filter" in ctx) ctx.filter="grayscale(1) contrast(1.28)";
+  if ("filter" in ctx) ctx.filter="grayscale(1) contrast(1.45)";
   ctx.drawImage(source,0,cropY,sourceWidth,cropHeight,0,0,canvas.width,canvas.height);
   if ("filter" in ctx) ctx.filter="none";
   return canvas;
@@ -296,22 +297,21 @@ function readDigitsAfter(text,startIndex) {
   return digits.length>=6 && digits.length<=18 ? digits : "";
 }
 
-function analyzeGcashReceipt(text) {
-  const raw=String(text||"");
-  const cleaned=raw.replaceAll("\t"," ");
+function analyzeReferenceReceipt(text) {
+  const cleaned=String(text||"").replaceAll("\t"," ");
   const lower=cleaned.toLowerCase();
+  const labels=[
+    "reference number",
+    "reference no.",
+    "reference no",
+    "reference #",
+    "ref number",
+    "ref no.",
+    "ref no",
+    "ref #",
+    "reference"
+  ];
 
-  const hasBrand=lower.includes("gcash") || lower.includes("g cash");
-  const hasTransactionDetails=lower.includes("transaction details") || lower.includes("transaction detail");
-  const hasPaymentTo=lower.includes("payment to") || lower.includes("paid to") || lower.includes("sent to");
-  const hasAmount=lower.includes("amount");
-  const hasDateTime=
-    lower.includes("date & time") ||
-    lower.includes("date and time") ||
-    lower.includes("date/time") ||
-    (lower.includes("date") && lower.includes("time"));
-
-  const labels=["reference number","reference no.","reference no","reference #","ref no.","ref no","ref #","reference"];
   let hasReferenceLabel=false;
   let reference="";
 
@@ -327,21 +327,9 @@ function analyzeGcashReceipt(text) {
     }
   }
 
-  let structureScore=0;
-  if(hasTransactionDetails) structureScore+=2;
-  if(hasPaymentTo) structureScore+=1;
-  if(hasAmount) structureScore+=1;
-  if(hasDateTime) structureScore+=1;
-  if(hasReferenceLabel) structureScore+=2;
-
-  const receiptStructureValid=structureScore>=5 && hasReferenceLabel;
-  const brandedReceiptValid=hasBrand && hasReferenceLabel && (hasAmount || hasPaymentTo || hasTransactionDetails);
-
   return {
-    valid:receiptStructureValid || brandedReceiptValid,
-    hasBrand,
+    valid:hasReferenceLabel && Boolean(reference),
     hasReferenceLabel,
-    structureScore,
     reference
   };
 }
@@ -379,16 +367,16 @@ async function scanReceipt(file) {
   state.gcashVerified = false;
   state.gcashDetectedReference = "";
   state.ocrInProgress = true;
-  state.ocrPhase = "read";
+  state.ocrPhase = "reference";
   els.gcashReference.value = "";
   els.gcashReference.readOnly = true;
-  els.gcashRefHelp.textContent = "Scanning the receipt. The reference will unlock only after GCash is verified.";
+  els.gcashRefHelp.textContent = "Looking only for the Reference Number in the uploaded image.";
   updatePaymentButtonState();
 
   if (!file || !String(file.type || "").startsWith("image/")) {
     state.ocrInProgress = false;
     state.receiptFile = null;
-    setOcrStatus("Error: please upload an image of an actual GCash receipt.","error");
+    setOcrStatus("Error: please upload an image.","error");
     updatePaymentButtonState();
     return;
   }
@@ -400,49 +388,45 @@ async function scanReceipt(file) {
   els.receiptDrop.classList.add("has-file");
   const dropTitle=els.receiptDrop.querySelector("strong");
   if(dropTitle) dropTitle.textContent="Replace GCash receipt";
-  setOcrStatus("Preparing receipt scanner…");
+  setOcrStatus("Looking for Reference Number…");
 
   let source=null;
   try {
     const [worker,imageSource]=await Promise.all([warmOcr(),loadImageSource(file)]);
     source=imageSource;
 
-    const fullCanvas=makePreparedCanvas(source,1050,0);
-    state.ocrPhase="read";
-    const first=await worker.recognize(fullCanvas);
-    const analysis=analyzeGcashReceipt(first.data.text || "");
+    // First pass: enlarge the middle/lower transaction area, where GCash usually places Reference Number.
+    state.ocrPhase="reference";
+    const referenceArea=makePreparedCanvas(source,1800,0.22,0.82);
+    const first=await worker.recognize(referenceArea);
+    let analysis=analyzeReferenceReceipt(first.data.text || "");
 
+    // Fallback only when the focused pass did not find both the label and its number.
     if(!analysis.valid){
-      setOcrStatus("Error: this image does not contain enough transaction details to verify a GCash receipt. Make sure Transaction Details, Amount, Date & Time, and Reference Number are visible.","error");
+      state.ocrPhase="fallback";
+      const fullCanvas=makePreparedCanvas(source,1500,0,1);
+      const second=await worker.recognize(fullCanvas);
+      analysis=analyzeReferenceReceipt(second.data.text || "");
+    }
+
+    if(!analysis.hasReferenceLabel){
+      setOcrStatus('Error: no "Reference" or "Reference Number" label was detected in this image. Use a screenshot where the reference section is visible.',"error");
       return;
     }
 
-    let finalReference=analysis.reference;
-
-    state.ocrPhase="verify";
-    const lowerCanvas=makePreparedCanvas(source,1300,0.38);
-    const second=await worker.recognize(lowerCanvas);
-    const secondAnalysis=analyzeGcashReceipt(second.data.text || "");
-    if(secondAnalysis.reference){
-      finalReference=chooseRefinedReference(finalReference,[secondAnalysis.reference]);
-    } else {
-      const candidates=extractLongNumberCandidates(second.data.text || "");
-      finalReference=chooseRefinedReference(finalReference,candidates);
-    }
-
-    if(!finalReference || finalReference.length<6 || finalReference.length>18){
-      setOcrStatus("Error: GCash was detected, but the complete reference number could not be read. Upload a clearer image and try again.","error");
+    if(!analysis.reference || analysis.reference.length<6 || analysis.reference.length>18){
+      setOcrStatus("Reference label found, but the number could not be read clearly. Upload a clearer screenshot showing the Reference Number.","error");
       return;
     }
 
     state.gcashVerified=true;
-    state.gcashDetectedReference=finalReference;
-    els.gcashReference.value=finalReference;
+    state.gcashDetectedReference=analysis.reference;
+    els.gcashReference.value=analysis.reference;
     els.gcashReference.readOnly=false;
-    els.gcashRefHelp.textContent="Verified from the receipt. If OCR missed or misread one digit, you may correct that one digit before saving.";
-    setOcrStatus("GCash transaction verified. Reference checked from the receipt details.","success");
+    els.gcashRefHelp.textContent="Reference was read from the uploaded image. You may correct one missed or misread OCR digit if needed.";
+    setOcrStatus("Reference Number detected successfully.","success");
   } catch {
-    setOcrStatus("Error: the receipt could not be read. Please use a clearer GCash receipt or screenshot.","error");
+    setOcrStatus("Error: the image could not be read. Please try a clearer screenshot.","error");
   } finally {
     if(source && typeof source.close==="function") {
       try { source.close(); } catch {}
@@ -494,7 +478,7 @@ function resetOrder() {
   state.gcashVerified = false;
   state.gcashDetectedReference = "";
   state.ocrInProgress = false;
-  state.ocrPhase = "read";
+  state.ocrPhase = "reference";
   if (state.receiptPreviewUrl) URL.revokeObjectURL(state.receiptPreviewUrl);
   state.receiptPreviewUrl = "";
   els.receiptInput.value = "";
@@ -504,7 +488,7 @@ function resetOrder() {
   els.ocrStatus.classList.remove("success","error");
   els.gcashReference.value = "";
   els.gcashReference.readOnly = true;
-  els.gcashRefHelp.textContent = "The field unlocks only after an actual GCash receipt is verified. You may correct one OCR digit if needed.";
+  els.gcashRefHelp.textContent = 'Select GCash, then upload an image containing "Reference" or "Reference Number".';
   els.receiptDrop.classList.remove("has-file");
   const dropTitle=els.receiptDrop.querySelector("strong");
   if(dropTitle) dropTitle.textContent="Add GCash receipt";
