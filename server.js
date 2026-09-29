@@ -213,10 +213,10 @@ app.post("/api/sales", upload.single("receipt"), async (req,res,next) => {
     if (paymentMethod === "GCash" && (!gcashOcrVerified || !gcashDetectedReference)) {
       return res.status(400).json({error:"GCash receipt could not be verified. Upload a clear GCash receipt with a readable reference number."});
     }
-    if (paymentMethod === "GCash" && (gcashDetectedReference.length < 10 || gcashDetectedReference.length > 18)) {
+    if (paymentMethod === "GCash" && (gcashDetectedReference.length < 6 || gcashDetectedReference.length > 18)) {
       return res.status(400).json({error:"The GCash reference read from the image is not valid. Upload a clearer receipt."});
     }
-    if (paymentMethod === "GCash" && (gcashReference.length < 10 || gcashReference.length > 18)) {
+    if (paymentMethod === "GCash" && (gcashReference.length < 6 || gcashReference.length > 18)) {
       return res.status(400).json({error:"The corrected GCash reference is incomplete."});
     }
     if (paymentMethod === "GCash" && !isSingleDigitCorrection(gcashDetectedReference, gcashReference)) {
