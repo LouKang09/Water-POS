@@ -80,19 +80,64 @@ async function loadTrend(){
   });
 }
 
+function serviceQuantityBreakdown(sales){
+  const buckets={Delivery:{}, "Pick-Up":{}, Overall:{}};
+
+  for(const sale of sales){
+    for(const item of sale.items||[]){
+      if(item.category!=="Delivery" && item.category!=="Pick-Up") continue;
+      const price=Number(item.unitPrice);
+      const qty=Number(item.qty)||0;
+      const key=String(price);
+      buckets[item.category][key]=(buckets[item.category][key]||0)+qty;
+      buckets.Overall[key]=(buckets.Overall[key]||0)+qty;
+    }
+  }
+
+  return buckets;
+}
+
+function breakdownEntries(bucket){
+  return Object.entries(bucket)
+    .map(([price,qty])=>({price:Number(price),qty:Number(qty)}))
+    .sort((x,y)=>x.price-y.price);
+}
+
+function breakdownHtml(bucket){
+  const rows=breakdownEntries(bucket);
+  if(!rows.length) return '<div class="breakdown-empty">No items</div>';
+  return rows.map(row=>`<div class="breakdown-line"><span>₱${row.price.toLocaleString("en-PH")}</span><strong>× ${row.qty}</strong></div>`).join("");
+}
+
+function renderServiceBreakdown(sales){
+  const breakdown=serviceQuantityBreakdown(sales);
+  $("#deliveryBreakdown").innerHTML=breakdownHtml(breakdown.Delivery);
+  $("#pickupBreakdown").innerHTML=breakdownHtml(breakdown["Pick-Up"]);
+  $("#overallBreakdown").innerHTML=breakdownHtml(breakdown.Overall);
+}
+
+function paymentReferenceHtml(row){
+  if(row.payment_reference_status==="unreadable"){
+    return '<span class="badge badge-warning">Unreadable · review receipt</span>';
+  }
+  return escapeHtml(row.payment_reference||"—");
+}
+
 async function loadSales(){
   const rows=await api("/api/admin/sales?"+queryDates());
+  renderServiceBreakdown(rows);
   $("#salesBody").innerHTML=rows.length?rows.map(r=>`
     <tr>
       <td>${fmtDate(r.created_at)}</td>
       <td><strong>${escapeHtml(r.transaction_ref)}</strong></td>
+      <td>${escapeHtml(r.delivery_room_unit||"—")}</td>
       <td>${r.items.map(i=>`${Number(i.qty)}× ${escapeHtml(i.label)}`).join("<br>")}</td>
       <td><span class="badge">${escapeHtml(r.payment_method)}</span></td>
       <td>${escapeHtml(r.payment_provider||"—")}</td>
-      <td>${escapeHtml(r.payment_reference||"—")}</td>
+      <td>${paymentReferenceHtml(r)}</td>
       <td><strong>${money(r.total)}</strong></td>
       <td>${r.has_receipt?`<button class="small-button view-receipt" data-id="${r.id}">View</button>`:"—"}</td>
-    </tr>`).join(""):`<tr><td colspan="8">No sales for this date range.</td></tr>`;
+    </tr>`).join(""):`<tr><td colspan="9">No sales for this date range.</td></tr>`;
   document.querySelectorAll(".view-receipt").forEach(b=>b.addEventListener("click",()=>viewReceipt(b.dataset.id)));
 }
 async function viewReceipt(id){
@@ -134,6 +179,18 @@ async function printSalesReport(period){
       api("/api/admin/sales?"+qs)
     ]);
 
+    const serviceBreakdown=serviceQuantityBreakdown(sales);
+    const serviceBreakdownTable=(title,bucket)=>{
+      const rows=breakdownEntries(bucket);
+      return `
+        <div class="print-service-box">
+          <h3>${title}</h3>
+          ${rows.length
+            ? rows.map(row=>`<div><span>₱${row.price.toLocaleString("en-PH")}</span><strong>× ${row.qty}</strong></div>`).join("")
+            : '<div class="print-no-data">No items</div>'}
+        </div>`;
+    };
+
     const providerTotals={};
     for(const sale of sales){
       const provider=sale.payment_provider||sale.payment_method||"Unknown";
@@ -149,9 +206,10 @@ async function printSalesReport(period){
       <tr>
         <td>${escapeHtml(fmtDate(r.created_at))}</td>
         <td>${escapeHtml(r.transaction_ref)}</td>
+        <td>${escapeHtml(r.delivery_room_unit||"—")}</td>
         <td>${r.items.map(i=>`${Number(i.qty)}× ${escapeHtml(i.label)}`).join("<br>")}</td>
         <td>${escapeHtml(r.payment_provider||r.payment_method)}</td>
-        <td>${escapeHtml(r.payment_reference||"—")}</td>
+        <td>${r.payment_reference_status==="unreadable" ? "Unreadable · review receipt" : escapeHtml(r.payment_reference||"—")}</td>
         <td class="num">${money(r.total)}</td>
       </tr>`).join("");
 
@@ -175,6 +233,13 @@ async function printSalesReport(period){
           <div><span>Net</span><strong>${money(summary.net)}</strong></div>
         </div>
 
+        <h2>Service Quantity Breakdown</h2>
+        <div class="print-service-grid">
+          ${serviceBreakdownTable("Delivery",serviceBreakdown.Delivery)}
+          ${serviceBreakdownTable("Pick-Up",serviceBreakdown["Pick-Up"])}
+          ${serviceBreakdownTable("Overall",serviceBreakdown.Overall)}
+        </div>
+
         <h2>Payment Breakdown</h2>
         <table class="print-table compact">
           <thead><tr><th>Payment Provider</th><th class="num">Sales</th></tr></thead>
@@ -183,8 +248,8 @@ async function printSalesReport(period){
 
         <h2>Transactions</h2>
         <table class="print-table">
-          <thead><tr><th>Date</th><th>Transaction</th><th>Items</th><th>Payment</th><th>Reference</th><th class="num">Total</th></tr></thead>
-          <tbody>${saleRows||'<tr><td colspan="6">No sales for this period.</td></tr>'}</tbody>
+          <thead><tr><th>Date</th><th>Transaction</th><th>Room / Unit</th><th>Items</th><th>Payment</th><th>Reference</th><th class="num">Total</th></tr></thead>
+          <tbody>${saleRows||'<tr><td colspan="7">No sales for this period.</td></tr>'}</tbody>
         </table>
       </div>`;
 
