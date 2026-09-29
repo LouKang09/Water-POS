@@ -17,11 +17,17 @@ app.use(express.json({ limit: "1mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
 const JWT_SECRET = process.env.JWT_SECRET || "development-only-change-me";
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@waterpos.local";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "change-me";
 
 async function initDb() {
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS admin_users (
+      id SERIAL PRIMARY KEY,
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      salt TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
     CREATE TABLE IF NOT EXISTS sales (
       id SERIAL PRIMARY KEY,
       transaction_ref TEXT UNIQUE NOT NULL,
@@ -66,6 +72,15 @@ function safeEqual(a, b) {
   const ab = Buffer.from(String(a));
   const bb = Buffer.from(String(b));
   return ab.length === bb.length && crypto.timingSafeEqual(ab, bb);
+}
+
+function makePasswordHash(password, salt = crypto.randomBytes(16).toString("hex")) {
+  return { salt, hash: crypto.scryptSync(password, salt, 64).toString("hex") };
+}
+
+function verifyPassword(password, salt, storedHash) {
+  const candidate = crypto.scryptSync(password, salt, 64).toString("hex");
+  return safeEqual(candidate, storedHash);
 }
 
 function adminAuth(req, res, next) {
@@ -178,14 +193,57 @@ app.post("/api/sales", upload.single("receipt"), async (req,res,next) => {
   } finally { client.release(); }
 });
 
-app.post("/api/admin/login", (req,res) => {
-  const email = String(req.body.email || "").trim().toLowerCase();
-  const password = String(req.body.password || "");
-  if (!safeEqual(email, ADMIN_EMAIL.toLowerCase()) || !safeEqual(password, ADMIN_PASSWORD)) {
-    return res.status(401).json({error:"Invalid email or password."});
-  }
-  const token = jwt.sign({ role:"admin", email }, JWT_SECRET, { expiresIn:"12h" });
-  res.json({token, email});
+app.get("/api/admin/setup-status", async (req,res,next) => {
+  try {
+    const { rows } = await pool.query("SELECT COUNT(*)::int AS count FROM admin_users");
+    res.json({ needsSetup: rows[0].count === 0 });
+  } catch (e) { next(e); }
+});
+
+app.post("/api/admin/setup", async (req,res,next) => {
+  const client = await pool.connect();
+  try {
+    const email = String(req.body.email || "").trim().toLowerCase();
+    const password = String(req.body.password || "");
+    if (!/^\\S+@\\S+\\.\\S+$/.test(email)) return res.status(400).json({error:"Enter a valid email."});
+    if (password.length < 10) return res.status(400).json({error:"Use at least 10 characters for the admin password."});
+
+    await client.query("BEGIN");
+    await client.query("LOCK TABLE admin_users IN EXCLUSIVE MODE");
+    const count = await client.query("SELECT COUNT(*)::int AS count FROM admin_users");
+    if (count.rows[0].count > 0) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({error:"Admin setup is already complete."});
+    }
+
+    const secure = makePasswordHash(password);
+    await client.query(
+      "INSERT INTO admin_users(email,password_hash,salt) VALUES($1,$2,$3)",
+      [email, secure.hash, secure.salt]
+    );
+    await client.query("COMMIT");
+    const token = jwt.sign({ role:"admin", email }, JWT_SECRET, { expiresIn:"12h" });
+    res.status(201).json({token,email});
+  } catch(e) {
+    await client.query("ROLLBACK").catch(()=>{});
+    next(e);
+  } finally { client.release(); }
+});
+
+app.post("/api/admin/login", async (req,res,next) => {
+  try {
+    const email = String(req.body.email || "").trim().toLowerCase();
+    const password = String(req.body.password || "");
+    const { rows } = await pool.query(
+      "SELECT email,password_hash,salt FROM admin_users WHERE email=$1 LIMIT 1",
+      [email]
+    );
+    if (!rows.length || !verifyPassword(password, rows[0].salt, rows[0].password_hash)) {
+      return res.status(401).json({error:"Invalid email or password."});
+    }
+    const token = jwt.sign({ role:"admin", email }, JWT_SECRET, { expiresIn:"12h" });
+    res.json({token, email});
+  } catch(e) { next(e); }
 });
 
 app.get("/api/admin/summary", adminAuth, async (req,res,next) => {
