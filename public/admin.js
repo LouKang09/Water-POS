@@ -4,14 +4,20 @@ let setupMode=false;
 let salesChart=null;
 const $=s=>document.querySelector(s);
 const money=n=>"₱"+Number(n||0).toLocaleString("en-PH",{minimumFractionDigits:0,maximumFractionDigits:2});
-const fmtDate=d=>new Date(d).toLocaleString("en-PH",{dateStyle:"medium",timeStyle:"short"});
-const today=()=>new Date().toISOString().slice(0,10);
-const dateDaysAgo=days=>{
-  const d=new Date();
-  d.setDate(d.getDate()-days);
-  return d.toISOString().slice(0,10);
+const fmtDate=d=>new Date(d).toLocaleString("en-PH",{dateStyle:"medium",timeStyle:"short",timeZone:"Asia/Manila"});
+const toYmd=d=>[
+  d.getFullYear(),
+  String(d.getMonth()+1).padStart(2,"0"),
+  String(d.getDate()).padStart(2,"0")
+].join("-");
+const today=()=>toYmd(new Date());
+const parseYmd=value=>{
+  const [y,m,d]=String(value).split("-").map(Number);
+  return new Date(y,m-1,d);
 };
-const shortDate=value=>new Date(value+"T00:00:00").toLocaleDateString("en-PH",{month:"short",day:"numeric"});
+const shortDate=value=>parseYmd(value).toLocaleDateString("en-PH",{month:"short",day:"numeric"});
+const displayDate=value=>parseYmd(value).toLocaleDateString("en-PH",{year:"numeric",month:"short",day:"numeric"});
+const escapeHtml=value=>String(value??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[ch]));
 
 function toast(msg){const el=$("#toast");el.textContent=msg;el.classList.add("show");clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.remove("show"),2200);}
 async function api(url,opts={}){
@@ -33,6 +39,7 @@ async function loadSummary(){
   $("#statSales").textContent=money(d.sales);
   $("#statCash").textContent=money(d.cash);
   $("#statGcash").textContent=money(d.gcash);
+  $("#statOther").textContent=money(d.other);
   $("#statExpenses").textContent=money(d.expenses);
   $("#statNet").textContent=money(d.net);
   $("#txCount").textContent=d.transactions+" transaction"+(d.transactions===1?"":"s");
@@ -53,7 +60,8 @@ async function loadTrend(){
       datasets:[
         {label:"Total Sales",data:rows.map(r=>r.sales),borderWidth:3,pointRadius:4,pointHoverRadius:6,tension:.28},
         {label:"Cash",data:rows.map(r=>r.cash),borderWidth:2,pointRadius:3,pointHoverRadius:5,tension:.28},
-        {label:"GCash",data:rows.map(r=>r.gcash),borderWidth:2,pointRadius:3,pointHoverRadius:5,tension:.28}
+        {label:"GCash",data:rows.map(r=>r.gcash),borderWidth:2,pointRadius:3,pointHoverRadius:5,tension:.28},
+        {label:"Other Digital",data:rows.map(r=>r.other),borderWidth:2,pointRadius:3,pointHoverRadius:5,tension:.28}
       ]
     },
     options:{
@@ -77,13 +85,14 @@ async function loadSales(){
   $("#salesBody").innerHTML=rows.length?rows.map(r=>`
     <tr>
       <td>${fmtDate(r.created_at)}</td>
-      <td><strong>${r.transaction_ref}</strong></td>
-      <td>${r.items.map(i=>`${i.qty}× ${i.label}`).join("<br>")}</td>
-      <td><span class="badge">${r.payment_method}</span></td>
-      <td>${r.gcash_reference||"—"}</td>
+      <td><strong>${escapeHtml(r.transaction_ref)}</strong></td>
+      <td>${r.items.map(i=>`${Number(i.qty)}× ${escapeHtml(i.label)}`).join("<br>")}</td>
+      <td><span class="badge">${escapeHtml(r.payment_method)}</span></td>
+      <td>${escapeHtml(r.payment_provider||"—")}</td>
+      <td>${escapeHtml(r.payment_reference||"—")}</td>
       <td><strong>${money(r.total)}</strong></td>
       <td>${r.has_receipt?`<button class="small-button view-receipt" data-id="${r.id}">View</button>`:"—"}</td>
-    </tr>`).join(""):`<tr><td colspan="7">No sales yet.</td></tr>`;
+    </tr>`).join(""):`<tr><td colspan="8">No sales for this date range.</td></tr>`;
   document.querySelectorAll(".view-receipt").forEach(b=>b.addEventListener("click",()=>viewReceipt(b.dataset.id)));
 }
 async function viewReceipt(id){
@@ -92,6 +101,100 @@ async function viewReceipt(id){
   const blob=await res.blob();
   $("#receiptImage").src=URL.createObjectURL(blob);
   $("#receiptModal").showModal();
+}
+
+function reportRange(period){
+  const anchor=parseYmd($("#toDate").value||$("#fromDate").value||today());
+  let from=new Date(anchor);
+  let to=new Date(anchor);
+  let label="Daily";
+
+  if(period==="week"){
+    const mondayOffset=(anchor.getDay()+6)%7;
+    from.setDate(anchor.getDate()-mondayOffset);
+    to=new Date(from);
+    to.setDate(from.getDate()+6);
+    label="Weekly";
+  } else if(period==="month"){
+    from=new Date(anchor.getFullYear(),anchor.getMonth(),1);
+    to=new Date(anchor.getFullYear(),anchor.getMonth()+1,0);
+    label="Monthly";
+  }
+
+  return {from:toYmd(from),to:toYmd(to),label};
+}
+
+async function printSalesReport(period){
+  const range=reportRange(period);
+  const qs="from="+encodeURIComponent(range.from)+"&to="+encodeURIComponent(range.to);
+
+  try{
+    const [summary,sales]=await Promise.all([
+      api("/api/admin/summary?"+qs),
+      api("/api/admin/sales?"+qs)
+    ]);
+
+    const providerTotals={};
+    for(const sale of sales){
+      const provider=sale.payment_provider||sale.payment_method||"Unknown";
+      providerTotals[provider]=(providerTotals[provider]||0)+Number(sale.total||0);
+    }
+
+    const providerRows=Object.entries(providerTotals)
+      .sort((x,y)=>y[1]-x[1])
+      .map(([name,total])=>`<tr><td>${escapeHtml(name)}</td><td class="num">${money(total)}</td></tr>`)
+      .join("");
+
+    const saleRows=sales.map(r=>`
+      <tr>
+        <td>${escapeHtml(fmtDate(r.created_at))}</td>
+        <td>${escapeHtml(r.transaction_ref)}</td>
+        <td>${r.items.map(i=>`${Number(i.qty)}× ${escapeHtml(i.label)}`).join("<br>")}</td>
+        <td>${escapeHtml(r.payment_provider||r.payment_method)}</td>
+        <td>${escapeHtml(r.payment_reference||"—")}</td>
+        <td class="num">${money(r.total)}</td>
+      </tr>`).join("");
+
+    $("#printReport").innerHTML=`
+      <div class="print-report-inner">
+        <div class="print-report-head">
+          <div>
+            <div class="print-kicker">WATER POS</div>
+            <h1>${range.label} Sales Report</h1>
+            <p>${displayDate(range.from)}${range.from===range.to?"":" – "+displayDate(range.to)}</p>
+          </div>
+          <div class="print-generated">Printed ${new Date().toLocaleString("en-PH",{dateStyle:"medium",timeStyle:"short",timeZone:"Asia/Manila"})}</div>
+        </div>
+
+        <div class="print-summary-grid">
+          <div><span>Total Sales</span><strong>${money(summary.sales)}</strong></div>
+          <div><span>Cash</span><strong>${money(summary.cash)}</strong></div>
+          <div><span>GCash</span><strong>${money(summary.gcash)}</strong></div>
+          <div><span>Other Digital</span><strong>${money(summary.other)}</strong></div>
+          <div><span>Expenses</span><strong>${money(summary.expenses)}</strong></div>
+          <div><span>Net</span><strong>${money(summary.net)}</strong></div>
+        </div>
+
+        <h2>Payment Breakdown</h2>
+        <table class="print-table compact">
+          <thead><tr><th>Payment Provider</th><th class="num">Sales</th></tr></thead>
+          <tbody>${providerRows||'<tr><td colspan="2">No sales.</td></tr>'}</tbody>
+        </table>
+
+        <h2>Transactions</h2>
+        <table class="print-table">
+          <thead><tr><th>Date</th><th>Transaction</th><th>Items</th><th>Payment</th><th>Reference</th><th class="num">Total</th></tr></thead>
+          <tbody>${saleRows||'<tr><td colspan="6">No sales for this period.</td></tr>'}</tbody>
+        </table>
+      </div>`;
+
+    document.body.classList.add("printing-report");
+    const cleanup=()=>document.body.classList.remove("printing-report");
+    window.addEventListener("afterprint",cleanup,{once:true});
+    setTimeout(()=>window.print(),80);
+  }catch(err){
+    toast(err.message);
+  }
 }
 async function loadExpenses(){
   const rows=await api("/api/admin/expenses");
@@ -129,6 +232,12 @@ $("#loginForm").addEventListener("submit",async e=>{
   }catch(err){$("#loginError").textContent=err.message;}
 });
 $("#logoutBtn").addEventListener("click",logout);
+$("#todayFilter").addEventListener("click",async()=>{
+  const d=today();
+  $("#fromDate").value=d;
+  $("#toDate").value=d;
+  try{await Promise.all([loadSummary(),loadTrend(),loadSales()]);}catch(e){toast(e.message);}
+});
 $("#applyFilter").addEventListener("click",async()=>{
   try{
     if($("#fromDate").value && $("#toDate").value && $("#fromDate").value>$("#toDate").value){
@@ -138,6 +247,9 @@ $("#applyFilter").addEventListener("click",async()=>{
   }catch(e){toast(e.message);}
 });
 $("#closeReceipt").addEventListener("click",()=>$("#receiptModal").close());
+document.querySelectorAll(".print-report-btn").forEach(btn=>{
+  btn.addEventListener("click",()=>printSalesReport(btn.dataset.period));
+});
 
 document.querySelectorAll(".side-nav button").forEach(btn=>btn.addEventListener("click",()=>{
   document.querySelectorAll(".side-nav button").forEach(b=>b.classList.toggle("active",b===btn));
@@ -167,7 +279,7 @@ $("#usedForm").addEventListener("submit",async e=>{
 
 (async function init(){
   $("#expenseDate").value=today();
-  $("#fromDate").value=dateDaysAgo(13);
+  $("#fromDate").value=today();
   $("#toDate").value=today();
   showApp();
   if(token){refreshAll().catch(()=>logout());return;}
