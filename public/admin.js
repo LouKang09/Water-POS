@@ -1,5 +1,6 @@
 const tokenKey="waterpos_admin_token";
 let token=sessionStorage.getItem(tokenKey)||"";
+let setupMode=false;
 const $=s=>document.querySelector(s);
 const money=n=>"₱"+Number(n||0).toLocaleString("en-PH",{minimumFractionDigits:0,maximumFractionDigits:2});
 const fmtDate=d=>new Date(d).toLocaleString("en-PH",{dateStyle:"medium",timeStyle:"short"});
@@ -78,10 +79,11 @@ async function refreshAll(){await Promise.all([loadSummary(),loadSales(),loadExp
 $("#loginForm").addEventListener("submit",async e=>{
   e.preventDefault();$("#loginError").textContent="";
   try{
-    const res=await fetch("/api/admin/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:$("#loginEmail").value,password:$("#loginPassword").value})});
+    const endpoint=setupMode?"/api/admin/setup":"/api/admin/login";
+    const res=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:$("#loginEmail").value,password:$("#loginPassword").value})});
     const data=await res.json();
-    if(!res.ok)throw new Error(data.error||"Sign in failed.");
-    token=data.token;sessionStorage.setItem(tokenKey,token);showApp();await refreshAll();
+    if(!res.ok)throw new Error(data.error||(setupMode?"Setup failed.":"Sign in failed."));
+    token=data.token;sessionStorage.setItem(tokenKey,token);setupMode=false;showApp();await refreshAll();
   }catch(err){$("#loginError").textContent=err.message;}
 });
 $("#logoutBtn").addEventListener("click",logout);
@@ -114,8 +116,18 @@ $("#usedForm").addEventListener("submit",async e=>{
   }catch(err){toast(err.message);}
 });
 
-(function init(){
+(async function init(){
   $("#expenseDate").value=today();
   showApp();
-  if(token)refreshAll().catch(()=>logout());
+  if(token){refreshAll().catch(()=>logout());return;}
+  try{
+    const res=await fetch("/api/admin/setup-status");
+    const data=await res.json();
+    setupMode=Boolean(data.needsSetup);
+    if(setupMode){
+      document.querySelector("#loginScreen h1").textContent="Create Admin Account";
+      document.querySelector("#loginForm .primary-button").textContent="Create Admin Account";
+      $("#loginPassword").setAttribute("autocomplete","new-password");
+    }
+  }catch{}
 })();
