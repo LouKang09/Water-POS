@@ -38,7 +38,9 @@ async function initDb() {
     CREATE TABLE IF NOT EXISTS sales (
       id SERIAL PRIMARY KEY,
       transaction_ref TEXT UNIQUE NOT NULL,
-      payment_method TEXT NOT NULL CHECK (payment_method IN ('Cash','GCash')),
+      payment_method TEXT NOT NULL CHECK (payment_method IN ('Cash','GCash','Other')),
+      payment_provider TEXT,
+      payment_reference TEXT,
       gcash_reference TEXT,
       total NUMERIC(12,2) NOT NULL,
       receipt_mime TEXT,
@@ -72,6 +74,19 @@ async function initDb() {
       active BOOLEAN NOT NULL DEFAULT TRUE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    ALTER TABLE sales ADD COLUMN IF NOT EXISTS payment_provider TEXT;
+    ALTER TABLE sales ADD COLUMN IF NOT EXISTS payment_reference TEXT;
+
+    UPDATE sales
+    SET payment_provider = COALESCE(payment_provider, 'GCash'),
+        payment_reference = COALESCE(payment_reference, gcash_reference)
+    WHERE payment_method = 'GCash';
+
+    ALTER TABLE sales DROP CONSTRAINT IF EXISTS sales_payment_method_check;
+    ALTER TABLE sales
+      ADD CONSTRAINT sales_payment_method_check
+      CHECK (payment_method IN ('Cash','GCash','Other'));
   `);
 }
 
@@ -197,38 +212,75 @@ app.get("/api/used-products", async (req,res,next) => {
 app.post("/api/sales", upload.single("receipt"), async (req,res,next) => {
   const client = await pool.connect();
   try {
-    const paymentMethod = req.body.paymentMethod;
-    if (!["Cash","GCash"].includes(paymentMethod)) return res.status(400).json({error:"Invalid payment method."});
-    const items = await validatedItems(JSON.parse(req.body.items || "[]"));
-    const total = items.reduce((s,i)=>s+i.lineTotal,0);
-    const reference = txRef();
-    const gcashReference = paymentMethod === "GCash" ? digitsOnly(req.body.gcashReference) : null;
-    const gcashDetectedReference = paymentMethod === "GCash" ? digitsOnly(req.body.gcashDetectedReference) : null;
-    const gcashOcrVerified = req.body.gcashOcrVerified === "true";
+    const paymentMethod = String(req.body.paymentMethod || "");
+    const allowedOtherProviders = ["Maya","MariBank","GoTyme","VYBE by BPI"];
+    if (!["Cash","GCash","Other"].includes(paymentMethod)) {
+      return res.status(400).json({error:"Invalid payment method."});
+    }
 
-    if (paymentMethod === "GCash" && !req.file) return res.status(400).json({error:"GCash receipt image is required."});
-    if (paymentMethod === "GCash" && !String(req.file.mimetype || "").startsWith("image/")) {
-      return res.status(400).json({error:"The GCash receipt must be an image."});
+    const paymentProvider =
+      paymentMethod === "GCash"
+        ? "GCash"
+        : paymentMethod === "Other"
+          ? String(req.body.paymentProvider || "").trim()
+          : null;
+
+    if (paymentMethod === "Other" && !allowedOtherProviders.includes(paymentProvider)) {
+      return res.status(400).json({error:"Choose Maya, MariBank, GoTyme, or VYBE by BPI."});
     }
-    if (paymentMethod === "GCash" && (!gcashOcrVerified || !gcashDetectedReference)) {
-      return res.status(400).json({error:"GCash receipt could not be verified. Upload a clear GCash receipt with a readable reference number."});
+
+    const items = await validatedItems(JSON.parse(req.body.items || "[]"));
+    const total = items.reduce((sum,item)=>sum+item.lineTotal,0);
+    const reference = txRef();
+
+    const isDigital = paymentMethod !== "Cash";
+    const paymentReference = isDigital
+      ? digitsOnly(req.body.paymentReference || req.body.gcashReference)
+      : null;
+    const detectedReference = isDigital
+      ? digitsOnly(req.body.detectedReference || req.body.gcashDetectedReference)
+      : null;
+    const ocrVerified = req.body.ocrVerified === "true" || req.body.gcashOcrVerified === "true";
+
+    if (isDigital && !req.file) {
+      return res.status(400).json({error: paymentProvider + " receipt image is required."});
     }
-    if (paymentMethod === "GCash" && (gcashDetectedReference.length < 6 || gcashDetectedReference.length > 18)) {
-      return res.status(400).json({error:"The GCash reference read from the image is not valid. Upload a clearer receipt."});
+    if (isDigital && !String(req.file.mimetype || "").startsWith("image/")) {
+      return res.status(400).json({error:"The payment receipt must be an image."});
     }
-    if (paymentMethod === "GCash" && (gcashReference.length < 6 || gcashReference.length > 18)) {
-      return res.status(400).json({error:"The corrected GCash reference is incomplete."});
+    if (isDigital && (!ocrVerified || !detectedReference)) {
+      return res.status(400).json({error:"The receipt reference could not be verified. Upload an image with a visible Reference Number."});
     }
-    if (paymentMethod === "GCash" && !isSingleDigitCorrection(gcashDetectedReference, gcashReference)) {
-      return res.status(400).json({error:"The GCash reference differs too much from what was read in the receipt. Re-scan a clearer image."});
+    if (isDigital && (detectedReference.length < 6 || detectedReference.length > 18)) {
+      return res.status(400).json({error:"The reference read from the image is not valid. Upload a clearer receipt."});
+    }
+    if (isDigital && (paymentReference.length < 6 || paymentReference.length > 18)) {
+      return res.status(400).json({error:"The corrected payment reference is incomplete."});
+    }
+    if (isDigital && !isSingleDigitCorrection(detectedReference, paymentReference)) {
+      return res.status(400).json({error:"The payment reference differs too much from what was read in the receipt. Re-scan a clearer image."});
     }
 
     await client.query("BEGIN");
     const sale = await client.query(
-      `INSERT INTO sales (transaction_ref,payment_method,gcash_reference,total,receipt_mime,receipt_image)
-       VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, transaction_ref, created_at`,
-      [reference,paymentMethod,gcashReference,total,req.file?.mimetype || null,req.file?.buffer || null]
+      `INSERT INTO sales (
+         transaction_ref,payment_method,payment_provider,payment_reference,gcash_reference,
+         total,receipt_mime,receipt_image
+       )
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       RETURNING id, transaction_ref, created_at`,
+      [
+        reference,
+        paymentMethod,
+        paymentProvider,
+        paymentReference,
+        paymentMethod === "GCash" ? paymentReference : null,
+        total,
+        req.file?.mimetype || null,
+        req.file?.buffer || null
+      ]
     );
+
     for (const item of items) {
       await client.query(
         `INSERT INTO sale_items (sale_id,category,label,unit_price,qty,line_total)
@@ -236,6 +288,7 @@ app.post("/api/sales", upload.single("receipt"), async (req,res,next) => {
         [sale.rows[0].id,item.category,item.label,item.unitPrice,item.qty,item.lineTotal]
       );
     }
+
     await client.query("COMMIT");
     res.status(201).json({
       id:sale.rows[0].id,
@@ -249,7 +302,9 @@ app.post("/api/sales", upload.single("receipt"), async (req,res,next) => {
       return res.status(400).json({error:e.message});
     }
     next(e);
-  } finally { client.release(); }
+  } finally {
+    client.release();
+  }
 });
 
 app.get("/api/admin/setup-status", async (req,res,next) => {
@@ -313,8 +368,10 @@ app.get("/api/admin/summary", adminAuth, async (req,res,next) => {
       `SELECT COUNT(*)::int AS transactions,
               COALESCE(SUM(total),0)::numeric AS sales,
               COALESCE(SUM(total) FILTER (WHERE payment_method='Cash'),0)::numeric AS cash,
-              COALESCE(SUM(total) FILTER (WHERE payment_method='GCash'),0)::numeric AS gcash
-       FROM sales WHERE created_at::date BETWEEN $1::date AND $2::date`, [from,to]);
+              COALESCE(SUM(total) FILTER (WHERE payment_method='GCash'),0)::numeric AS gcash,
+              COALESCE(SUM(total) FILTER (WHERE payment_method='Other'),0)::numeric AS other
+       FROM sales
+       WHERE (created_at AT TIME ZONE 'Asia/Manila')::date BETWEEN $1::date AND $2::date`, [from,to]);
     const expenses = await pool.query(
       `SELECT COALESCE(SUM(amount),0)::numeric AS expenses
        FROM expenses WHERE expense_date BETWEEN $1::date AND $2::date`, [from,to]);
@@ -324,6 +381,7 @@ app.get("/api/admin/summary", adminAuth, async (req,res,next) => {
       sales:Number(s.sales),
       cash:Number(s.cash),
       gcash:Number(s.gcash),
+      other:Number(s.other),
       expenses:ex,
       net:Number(s.sales)-ex
     });
@@ -332,32 +390,31 @@ app.get("/api/admin/summary", adminAuth, async (req,res,next) => {
 
 app.get("/api/admin/sales-trend", adminAuth, async (req,res,next) => {
   try {
-    const today = new Date();
-    const defaultTo = today.toISOString().slice(0,10);
-    const start = new Date(today);
-    start.setUTCDate(start.getUTCDate() - 13);
-    const defaultFrom = start.toISOString().slice(0,10);
-    const from = req.query.from || defaultFrom;
-    const to = req.query.to || defaultTo;
+    const localToday = await pool.query("SELECT to_char((NOW() AT TIME ZONE 'Asia/Manila')::date,'YYYY-MM-DD') AS day");
+    const defaultDay = localToday.rows[0].day;
+    const from = req.query.from || defaultDay;
+    const to = req.query.to || defaultDay;
 
     const { rows } = await pool.query(`
       WITH days AS (
         SELECT generate_series($1::date, $2::date, interval '1 day')::date AS day
       ),
       daily AS (
-        SELECT created_at::date AS day,
+        SELECT (created_at AT TIME ZONE 'Asia/Manila')::date AS day,
                COALESCE(SUM(total),0)::numeric AS sales,
                COALESCE(SUM(total) FILTER (WHERE payment_method='Cash'),0)::numeric AS cash,
                COALESCE(SUM(total) FILTER (WHERE payment_method='GCash'),0)::numeric AS gcash,
+               COALESCE(SUM(total) FILTER (WHERE payment_method='Other'),0)::numeric AS other,
                COUNT(*)::int AS transactions
         FROM sales
-        WHERE created_at::date BETWEEN $1::date AND $2::date
-        GROUP BY created_at::date
+        WHERE (created_at AT TIME ZONE 'Asia/Manila')::date BETWEEN $1::date AND $2::date
+        GROUP BY (created_at AT TIME ZONE 'Asia/Manila')::date
       )
       SELECT to_char(days.day,'YYYY-MM-DD') AS date,
              COALESCE(daily.sales,0)::numeric AS sales,
              COALESCE(daily.cash,0)::numeric AS cash,
              COALESCE(daily.gcash,0)::numeric AS gcash,
+             COALESCE(daily.other,0)::numeric AS other,
              COALESCE(daily.transactions,0)::int AS transactions
       FROM days
       LEFT JOIN daily ON daily.day = days.day
@@ -369,6 +426,7 @@ app.get("/api/admin/sales-trend", adminAuth, async (req,res,next) => {
       sales:Number(r.sales),
       cash:Number(r.cash),
       gcash:Number(r.gcash),
+      other:Number(r.other),
       transactions:Number(r.transactions)
     })));
   } catch(e){ next(e); }
@@ -379,13 +437,16 @@ app.get("/api/admin/sales", adminAuth, async (req,res,next) => {
     const from = req.query.from || "2000-01-01";
     const to = req.query.to || "2999-12-31";
     const { rows } = await pool.query(`
-      SELECT s.id,s.transaction_ref,s.payment_method,s.gcash_reference,s.total,s.created_at,
+      SELECT s.id,s.transaction_ref,s.payment_method,
+             COALESCE(s.payment_provider, CASE WHEN s.payment_method='GCash' THEN 'GCash' ELSE NULL END) AS payment_provider,
+             COALESCE(s.payment_reference,s.gcash_reference) AS payment_reference,
+             s.total,s.created_at,
              (s.receipt_image IS NOT NULL) AS has_receipt,
              COALESCE(json_agg(json_build_object(
                'category',i.category,'label',i.label,'unitPrice',i.unit_price,'qty',i.qty,'lineTotal',i.line_total
              ) ORDER BY i.id) FILTER (WHERE i.id IS NOT NULL), '[]') AS items
       FROM sales s LEFT JOIN sale_items i ON i.sale_id=s.id
-      WHERE s.created_at::date BETWEEN $1::date AND $2::date
+      WHERE (s.created_at AT TIME ZONE 'Asia/Manila')::date BETWEEN $1::date AND $2::date
       GROUP BY s.id ORDER BY s.created_at DESC LIMIT 500
     `, [from,to]);
     res.json(rows.map(r => ({...r,total:Number(r.total)})));
