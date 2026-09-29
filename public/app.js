@@ -127,6 +127,48 @@ function digitsOnly(value) {
   return String(value || "").split("").filter(ch => ch >= "0" && ch <= "9").join("");
 }
 
+function normalizeReference(value,provider=selectedProvider()) {
+  const raw=String(value||"").toUpperCase();
+  const cleaned=raw
+    .split("")
+    .filter(ch=>(ch>="A"&&ch<="Z")||(ch>="0"&&ch<="9")||ch==="-")
+    .join("")
+    .replace(/-+/g,"-")
+    .replace(/^-|-$/g,"");
+  return provider==="GCash" ? digitsOnly(cleaned) : cleaned;
+}
+
+function validReferenceLength(value,provider=selectedProvider()) {
+  const ref=normalizeReference(value,provider);
+  if(provider==="GCash") return ref.length>=6 && ref.length<=18;
+  return ref.length>=6 && ref.length<=40 && /\d{4}/.test(ref);
+}
+
+function providerReferenceLabels(provider=selectedProvider()) {
+  const shared=["reference number","reference no.","reference no","reference #","ref no.","ref no","ref #","reference"];
+  if(provider==="Maya") {
+    return ["reference id","ref id","reference id no.","receipt no.","receipt number",...shared];
+  }
+  if(provider==="MariBank") {
+    return ["transaction reference number","transaction reference no.","transaction ref no.","transaction id",...shared];
+  }
+  if(provider==="GoTyme") {
+    return ["transfer reference number","transfer reference no.","transaction reference number","transaction reference no.",...shared];
+  }
+  if(provider==="VYBE by BPI") {
+    return ["trace id","trace id/reference number","transaction reference","confirmation number","acknowledgment number","acknowledgement number",...shared];
+  }
+  return shared;
+}
+
+function providerReferenceHint(provider=selectedProvider()) {
+  if(provider==="Maya") return "Reference ID";
+  if(provider==="MariBank") return "Transaction Reference Number";
+  if(provider==="GoTyme") return "Transfer Reference Number";
+  if(provider==="VYBE by BPI") return "Reference Number / Trace ID";
+  return "Reference Number";
+}
+
 function isSingleDigitCorrection(detected, submitted) {
   if (!detected || !submitted) return false;
   if (detected === submitted) return true;
@@ -175,12 +217,14 @@ function updateDigitalCopy() {
   els.receiptTitle.textContent=waitingForProvider
     ? "Choose a payment app first"
     : (state.receiptFile ? "Replace "+provider+" receipt" : "Add "+provider+" receipt");
-  els.referenceLabel.textContent=provider ? provider+" reference" : "Payment reference";
+  els.referenceLabel.textContent=provider ? provider+" · "+providerReferenceHint(provider) : "Payment reference";
 
   if(waitingForProvider){
     els.gcashRefHelp.textContent="Choose Maya, MariBank, GoTyme, or VYBE / BPI before uploading the receipt.";
   } else if(!state.receiptFile){
-    els.gcashRefHelp.textContent='The scanner finds "Reference" or "Reference Number", then reads only the number beside it.';
+    els.gcashRefHelp.textContent=provider
+      ? 'The scanner looks for '+providerReferenceHint(provider)+' on the receipt.'
+      : 'Choose a payment provider first.';
   }
 
   document.querySelectorAll(".provider-option").forEach(btn=>{
@@ -199,10 +243,9 @@ function updatePaymentButtonState() {
     return;
   }
 
-  const submitted = digitsOnly(els.gcashReference.value);
+  const submitted = normalizeReference(els.gcashReference.value);
   const correctionOk =
-    submitted.length >= 6 &&
-    submitted.length <= 18 &&
+    validReferenceLength(submitted) &&
     isSingleDigitCorrection(state.gcashDetectedReference, submitted);
   els.confirmPayment.disabled =
     state.ocrInProgress ||
@@ -410,22 +453,63 @@ function editDistance(a,b) {
   return row[right.length];
 }
 
-function containsReferenceLabel(text) {
-  const normalized=String(text||"")
+function normalizeOcrText(value) {
+  return String(value||"")
     .toLowerCase()
     .replaceAll("0","o")
     .replaceAll("1","l")
-    .replace(/[^a-z\s]/g," ");
-  const tokens=normalized.split(/\s+/).filter(Boolean);
+    .replace(/[^a-z0-9#&/\-.\s]/g," ");
+}
 
-  if(normalized.includes("reference") || normalized.includes("ref no") || normalized.includes("ref number")) {
-    return true;
+function labelMatchesText(text,provider=selectedProvider()) {
+  const normalized=normalizeOcrText(text);
+  const labels=providerReferenceLabels(provider);
+
+  for(const label of labels){
+    const target=normalizeOcrText(label).trim();
+    if(normalized.includes(target)) return true;
   }
 
+  const tokens=normalized.split(/\s+/).filter(Boolean);
   return tokens.some(token=>{
-    if(token.length<6 || token.length>11) return false;
+    if(token.length<6 || token.length>12) return false;
     return editDistance(token,"reference")<=2;
   });
+}
+
+function referenceCandidateFromContext(text,provider=selectedProvider()) {
+  const lines=String(text||"").split(/\n|\r/).map(line=>line.trim()).filter(Boolean);
+  const labels=providerReferenceLabels(provider);
+
+  for(let i=0;i<lines.length;i++){
+    const line=lines[i];
+    const lower=line.toLowerCase();
+
+    for(const label of labels){
+      const pos=lower.indexOf(label.toLowerCase());
+      if(pos<0) continue;
+
+      const contexts=[
+        line.slice(pos+label.length),
+        lines[i+1]||"",
+        lines[i+2]||""
+      ];
+
+      for(const context of contexts){
+        const pieces=String(context).toUpperCase().match(/[A-Z0-9][A-Z0-9-]{5,39}/g)||[];
+        for(const piece of pieces){
+          const candidate=normalizeReference(piece,provider);
+          if(validReferenceLength(candidate,provider)) return candidate;
+        }
+      }
+    }
+  }
+
+  return "";
+}
+
+function containsReferenceLabel(text,provider=selectedProvider()) {
+  return labelMatchesText(text,provider);
 }
 
 function extractDigitCandidates(text) {
@@ -437,13 +521,28 @@ function extractDigitCandidates(text) {
   return [...new Set(candidates)].sort((x,y)=>y.length-x.length);
 }
 
+function extractReferenceCandidates(text,provider=selectedProvider()) {
+  if(provider==="GCash") return extractDigitCandidates(text);
+  const found=[];
+  const tokens=String(text||"").toUpperCase().match(/[A-Z0-9][A-Z0-9-]{5,39}/g)||[];
+  for(const token of tokens){
+    const ref=normalizeReference(token,provider);
+    if(validReferenceLength(ref,provider)) found.push(ref);
+  }
+  return [...new Set(found)].sort((x,y)=>{
+    const yd=(y.match(/\d/g)||[]).length;
+    const xd=(x.match(/\d/g)||[]).length;
+    return yd-xd || y.length-x.length;
+  });
+}
+
 async function setOcrMode(worker,{digitsOnlyMode=false,singleLine=false}={}) {
   const params={
     tessedit_pageseg_mode: singleLine ? "7" : "11",
     preserve_interword_spaces: "1"
   };
   params.tessedit_char_whitelist=digitsOnlyMode
-    ? "0123456789"
+    ? "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-"
     : "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .:#&/-";
   await worker.setParameters(params);
 }
@@ -484,7 +583,8 @@ async function scanReceipt(file) {
   state.ocrPhase = "reference";
   els.gcashReference.value = "";
   els.gcashReference.readOnly = true;
-  els.gcashRefHelp.textContent = 'Looking for the word "Reference", then reading the number beside it.';
+  const provider=selectedProvider();
+  els.gcashRefHelp.textContent = "Looking for "+providerReferenceHint(provider)+" on the receipt.";
   updatePaymentButtonState();
 
   if (!file || !String(file.type || "").startsWith("image/")) {
@@ -501,7 +601,7 @@ async function scanReceipt(file) {
   els.receiptPreview.classList.remove("hidden");
   els.receiptDrop.classList.add("has-file");
   updateDigitalCopy();
-  setOcrStatus('Finding "Reference"…');
+  setOcrStatus("Finding "+providerReferenceHint(provider)+"…");
 
   let source=null;
   try {
@@ -510,61 +610,72 @@ async function scanReceipt(file) {
 
     // The label can be very pale blue, so use a binary pass that preserves light text.
     await setOcrMode(worker,{digitsOnlyMode:false,singleLine:false});
-    const labelArea=makePreparedCanvas(source,1900,0.38,0.70,0.05,0.95,true);
+    const primaryTop=provider==="GCash" ? 0.38 : 0.18;
+    const primaryBottom=provider==="GCash" ? 0.70 : 0.88;
+    const labelArea=makePreparedCanvas(source,1900,primaryTop,primaryBottom,0.03,0.97,true);
     const labelResult=await worker.recognize(labelArea);
-    let labelFound=containsReferenceLabel(labelResult.data.text || "");
+    let labelText=labelResult.data.text || "";
+    let labelFound=containsReferenceLabel(labelText,provider);
+    let preferred=referenceCandidateFromContext(labelText,provider);
 
-    // Only fall back to a broader binary scan if the focused lower area missed the label.
-    if(!labelFound){
+    // Broader fallback handles providers whose receipt reference appears higher or lower on screen.
+    if(!labelFound || !preferred){
       state.ocrPhase="fallback";
-      setOcrStatus('Searching the full image for "Reference"…');
-      const widerArea=makePreparedCanvas(source,1700,0.18,0.82,0.03,0.97,true);
+      setOcrStatus("Searching the full image for "+providerReferenceHint(provider)+"…");
+      const widerArea=makePreparedCanvas(source,1800,0.05,0.95,0.02,0.98,true);
       const widerResult=await worker.recognize(widerArea);
-      labelFound=containsReferenceLabel(widerResult.data.text || "");
+      const widerText=widerResult.data.text || "";
+      labelFound=labelFound || containsReferenceLabel(widerText,provider);
+      preferred=preferred || referenceCandidateFromContext(widerText,provider);
+      labelText += "\n"+widerText;
     }
 
     if(!labelFound){
-      setOcrStatus('Error: the word "Reference" or "Reference Number" could not be detected. Make sure that label is visible in the image.',"error");
+      setOcrStatus("Error: "+providerReferenceHint(provider)+" could not be detected. Make sure that reference label is visible in the image.","error");
       return;
     }
 
-    // Once Reference is confirmed, ignore all other receipt text and OCR digits only.
-    state.ocrPhase="reference";
-    setOcrStatus("Reference found. Reading the number…");
-    await setOcrMode(worker,{digitsOnlyMode:true,singleLine:false});
+    // If text-order parsing did not capture it, run a second reference-focused pass.
+    if(!preferred){
+      state.ocrPhase="reference";
+      setOcrStatus(providerReferenceHint(provider)+" found. Reading its value…");
+      await setOcrMode(worker,{digitsOnlyMode:true,singleLine:false});
 
-    const numberAreas=[
-      makePreparedCanvas(source,1800,0.46,0.60,0.48,0.94,true),
-      makePreparedCanvas(source,1800,0.52,0.67,0.48,0.94,true),
-      makePreparedCanvas(source,1800,0.40,0.68,0.46,0.95,true)
-    ];
+      const numberAreas=provider==="GCash"
+        ? [
+            makePreparedCanvas(source,1800,0.46,0.60,0.48,0.94,true),
+            makePreparedCanvas(source,1800,0.52,0.67,0.48,0.94,true),
+            makePreparedCanvas(source,1800,0.40,0.68,0.46,0.95,true)
+          ]
+        : [
+            makePreparedCanvas(source,1800,0.18,0.90,0.35,0.98,true),
+            makePreparedCanvas(source,1800,0.05,0.95,0.25,0.98,true)
+          ];
 
-    let candidates=[];
-    for(const area of numberAreas){
-      const result=await worker.recognize(area);
-      candidates=candidates.concat(extractDigitCandidates(result.data.text || ""));
-      const exactNine=candidates.find(value=>value.length===9);
-      if(exactNine){
-        candidates=[exactNine,...candidates.filter(v=>v!==exactNine)];
-        break;
+      let candidates=[];
+      for(const area of numberAreas){
+        const result=await worker.recognize(area);
+        candidates=candidates.concat(extractReferenceCandidates(result.data.text || "",provider));
+      }
+      candidates=[...new Set(candidates)].filter(value=>validReferenceLength(value,provider));
+      if(provider==="GCash"){
+        preferred=candidates.find(value=>value.length===9) || candidates.sort((x,y)=>y.length-x.length)[0] || "";
+      } else {
+        preferred=candidates[0] || "";
       }
     }
 
-    candidates=[...new Set(candidates)].filter(value=>value.length>=6 && value.length<=18);
-
-    if(!candidates.length){
-      setOcrStatus("Reference label found, but the number could not be read. Keep the Reference Number visible and try a clearer screenshot.","error");
+    if(!preferred || !validReferenceLength(preferred,provider)){
+      setOcrStatus(providerReferenceHint(provider)+" was found, but its value could not be read clearly. Try a clearer screenshot.","error");
       return;
     }
 
-    const preferred=candidates.find(value=>value.length===9) || candidates.sort((x,y)=>y.length-x.length)[0];
-
     state.gcashVerified=true;
-    state.gcashDetectedReference=preferred;
-    els.gcashReference.value=preferred;
+    state.gcashDetectedReference=normalizeReference(preferred,provider);
+    els.gcashReference.value=state.gcashDetectedReference;
     els.gcashReference.readOnly=false;
-    els.gcashRefHelp.textContent="Reference was read from the image. If OCR misses or misreads one digit, you may correct that one digit.";
-    setOcrStatus("Reference Number detected successfully.","success");
+    els.gcashRefHelp.textContent=providerReferenceHint(provider)+" was read from the image. You may correct one OCR character if needed.";
+    setOcrStatus(providerReferenceHint(provider)+" detected successfully.","success");
   } catch {
     setOcrStatus("Error: the image could not be read. Please try a clearer screenshot.","error");
   } finally {
@@ -592,7 +703,7 @@ async function submitSale() {
   if(isDigital && !state.receiptFile) return toast("Add the "+provider+" receipt image first.");
   if(isDigital && state.ocrInProgress) return toast("Wait for the receipt scan to finish.");
   if(isDigital && !state.gcashVerified) return toast("Reference not verified. Upload a receipt with a readable Reference Number.");
-  if(isDigital && !isSingleDigitCorrection(state.gcashDetectedReference,digitsOnly(els.gcashReference.value))) {
+  if(isDigital && !isSingleDigitCorrection(state.gcashDetectedReference,normalizeReference(els.gcashReference.value))) {
     return toast("The edited reference differs too much from the scanned receipt. Re-scan a clearer image.");
   }
 
@@ -604,7 +715,7 @@ async function submitSale() {
 
   if(isDigital) {
     fd.append("paymentProvider",provider);
-    fd.append("paymentReference",digitsOnly(els.gcashReference.value));
+    fd.append("paymentReference",normalizeReference(els.gcashReference.value));
     fd.append("detectedReference",state.gcashDetectedReference);
     fd.append("ocrVerified","true");
     fd.append("receipt",state.receiptFile);
@@ -664,12 +775,12 @@ els.checkoutBtn.addEventListener("click",()=>{
 els.closePayment.addEventListener("click",()=>els.paymentDialog.close());
 els.receiptInput.addEventListener("change",()=>{if(els.receiptInput.files[0])scanReceipt(els.receiptInput.files[0]);});
 els.gcashReference.addEventListener("input",()=>{
-  const cleaned=digitsOnly(els.gcashReference.value);
+  const cleaned=normalizeReference(els.gcashReference.value);
   if(els.gcashReference.value!==cleaned) els.gcashReference.value=cleaned;
-  const ok=isSingleDigitCorrection(state.gcashDetectedReference,cleaned);
+  const ok=validReferenceLength(cleaned) && isSingleDigitCorrection(state.gcashDetectedReference,cleaned);
   els.gcashRefHelp.textContent=ok
-    ? "Reference verified from the receipt. One OCR digit may be corrected if needed."
-    : "Only one missed or misread OCR digit can be corrected. For larger differences, upload a clearer receipt.";
+    ? providerReferenceHint()+" verified from the receipt. One OCR character may be corrected if needed."
+    : "Only one missed or misread OCR character can be corrected. For larger differences, upload a clearer receipt.";
   updatePaymentButtonState();
 });
 els.confirmPayment.addEventListener("click",submitSale);
