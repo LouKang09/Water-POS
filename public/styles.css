@@ -508,3 +508,220 @@ th{color:var(--muted);font-size:.68rem;text-transform:uppercase;letter-spacing:.
   font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
   word-break:break-all;
 }
+
+.pos-header-actions{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.queue-header-button{
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  border:1px solid var(--line);
+  border-radius:11px;
+  background:#fff;
+  color:var(--brand);
+  padding:8px 10px;
+  font-size:.7rem;
+  font-weight:850;
+  box-shadow:0 4px 12px rgba(24,67,64,.05);
+}
+.queue-header-button span{
+  display:grid;
+  place-items:center;
+  min-width:20px;
+  height:20px;
+  padding:0 5px;
+  border-radius:999px;
+  background:var(--surface-2);
+  font-size:.62rem;
+}
+.queue-header-button span.has-items{
+  background:#fff1cf;
+  color:#765400;
+}
+
+.queue-dialog{
+  width:min(100%,700px);
+  max-height:92dvh;
+  margin:auto auto 0;
+  border:0;
+  padding:0;
+  background:transparent;
+}
+.queue-sheet{
+  max-height:92dvh;
+  overflow:auto;
+  background:var(--surface);
+  border-radius:28px 28px 0 0;
+  padding:20px 18px calc(20px + env(safe-area-inset-bottom));
+}
+.queue-dialog-header{
+  margin-bottom:8px;
+}
+.queue-dialog-copy{
+  margin:4px 0 0;
+  color:var(--muted);
+  font-size:.72rem;
+}
+.queue-dialog-tools{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  margin-bottom:10px;
+  padding:9px 10px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:#f8fbfb;
+}
+.queue-dialog-tools span{
+  color:var(--muted);
+  font-size:.67rem;
+}
+.online-queue-list{
+  display:grid;
+  gap:10px;
+}
+.online-queue-card{
+  border:1px solid var(--line);
+  border-radius:17px;
+  background:#fff;
+  padding:13px;
+  box-shadow:0 6px 18px rgba(24,67,64,.05);
+}
+.queue-card-top{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:12px;
+}
+.queue-card-top h3{
+  margin:4px 0 2px;
+  font-size:1rem;
+}
+.queue-card-top a{
+  color:var(--brand);
+  text-decoration:none;
+  font-size:.7rem;
+  font-weight:750;
+}
+.queue-unit{
+  display:inline-flex;
+  padding:4px 7px;
+  border-radius:999px;
+  background:var(--surface-2);
+  color:var(--brand);
+  font-size:.62rem;
+  font-weight:900;
+}
+.queue-payment-status{
+  display:inline-flex;
+  padding:6px 8px;
+  border-radius:999px;
+  font-size:.62rem;
+  font-weight:900;
+  white-space:nowrap;
+}
+.queue-payment-status.paid{
+  background:#e8f7ef;
+  color:#0b704d;
+}
+.queue-payment-status.pending{
+  background:#fff4d6;
+  color:#795700;
+}
+.queue-order-line{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  margin-top:12px;
+  padding:11px 0;
+  border-top:1px solid var(--line);
+  border-bottom:1px solid var(--line);
+}
+.queue-order-line strong{
+  color:var(--brand);
+  font-size:1rem;
+}
+.queue-order-line span{
+  font-weight:900;
+}
+.queue-meta-line{
+  display:grid;
+  gap:3px;
+  padding:9px 0 0;
+}
+.queue-meta-line span{
+  font-size:.7rem;
+  font-weight:750;
+}
+.queue-meta-line small{
+  color:var(--muted);
+  font-size:.62rem;
+}
+.queue-card-actions{
+  display:flex;
+  justify-content:flex-end;
+  gap:8px;
+  margin-top:11px;
+}
+.queue-card-actions .primary-button{
+  padding:9px 12px;
+  border-radius:10px;
+  font-size:.7rem;
+}
+.queue-card-actions .small-button{
+  padding:8px 10px;
+}
+
+@media(max-width:767px){
+  .pos-header-actions{
+    gap:6px;
+  }
+  .queue-header-button{
+    padding:7px 8px;
+    font-size:.64rem;
+  }
+  .admin-link{
+    font-size:.64rem;
+  }
+  .queue-dialog{
+    width:100%;
+    max-width:none;
+    height:100dvh;
+    max-height:100dvh;
+    margin:0;
+  }
+  .queue-sheet{
+    height:100%;
+    max-height:none;
+    border-radius:0;
+    padding:0 14px calc(14px + env(safe-area-inset-bottom));
+  }
+  .queue-dialog-header{
+    position:sticky;
+    top:0;
+    z-index:4;
+    margin:0;
+    padding:14px 0 10px;
+    background:var(--surface);
+    border-bottom:1px solid var(--line);
+  }
+  .queue-dialog-tools{
+    position:sticky;
+    top:81px;
+    z-index:3;
+    margin-top:9px;
+    background:rgba(248,251,251,.97);
+    backdrop-filter:blur(10px);
+  }
+  .queue-card-actions{
+    flex-direction:column;
+  }
+  .queue-card-actions button{
+    width:100%;
+  }
+}
