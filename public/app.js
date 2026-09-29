@@ -238,25 +238,49 @@ async function loadImageSource(file) {
   });
 }
 
-function makePreparedCanvas(source,maxWidth=1600,cropTopRatio=0,cropBottomRatio=1) {
+function makePreparedCanvas(
+  source,
+  maxWidth=1600,
+  cropTopRatio=0,
+  cropBottomRatio=1,
+  cropLeftRatio=0,
+  cropRightRatio=1,
+  binary=false
+) {
   const sourceWidth=source.width || source.naturalWidth;
   const sourceHeight=source.height || source.naturalHeight;
+  const cropX=Math.max(0,Math.floor(sourceWidth*cropLeftRatio));
+  const cropRight=Math.min(sourceWidth,Math.ceil(sourceWidth*cropRightRatio));
   const cropY=Math.max(0,Math.floor(sourceHeight*cropTopRatio));
   const cropBottom=Math.min(sourceHeight,Math.ceil(sourceHeight*cropBottomRatio));
+  const cropWidth=Math.max(1,cropRight-cropX);
   const cropHeight=Math.max(1,cropBottom-cropY);
-  const scale=Math.min(2.5,Math.max(1,maxWidth/sourceWidth));
+  const scale=Math.min(3,Math.max(1,maxWidth/cropWidth));
   const canvas=document.createElement("canvas");
-  canvas.width=Math.max(1,Math.round(sourceWidth*scale));
+  canvas.width=Math.max(1,Math.round(cropWidth*scale));
   canvas.height=Math.max(1,Math.round(cropHeight*scale));
 
-  const ctx=canvas.getContext("2d",{alpha:false});
+  const ctx=canvas.getContext("2d",{alpha:false,willReadFrequently:binary});
   ctx.fillStyle="#fff";
   ctx.fillRect(0,0,canvas.width,canvas.height);
   ctx.imageSmoothingEnabled=true;
   ctx.imageSmoothingQuality="high";
-  if ("filter" in ctx) ctx.filter="grayscale(1) contrast(1.45)";
-  ctx.drawImage(source,0,cropY,sourceWidth,cropHeight,0,0,canvas.width,canvas.height);
-  if ("filter" in ctx) ctx.filter="none";
+  ctx.drawImage(source,cropX,cropY,cropWidth,cropHeight,0,0,canvas.width,canvas.height);
+
+  if(binary){
+    const image=ctx.getImageData(0,0,canvas.width,canvas.height);
+    const data=image.data;
+    for(let i=0;i<data.length;i+=4){
+      const gray=Math.round(data[i]*0.299+data[i+1]*0.587+data[i+2]*0.114);
+      const value=gray<225?0:255;
+      data[i]=value;
+      data[i+1]=value;
+      data[i+2]=value;
+      data[i+3]=255;
+    }
+    ctx.putImageData(image,0,0);
+  }
+
   return canvas;
 }
 
@@ -297,41 +321,60 @@ function readDigitsAfter(text,startIndex) {
   return digits.length>=6 && digits.length<=18 ? digits : "";
 }
 
-function analyzeReferenceReceipt(text) {
-  const cleaned=String(text||"").replaceAll("\t"," ");
-  const lower=cleaned.toLowerCase();
-  const labels=[
-    "reference number",
-    "reference no.",
-    "reference no",
-    "reference #",
-    "ref number",
-    "ref no.",
-    "ref no",
-    "ref #",
-    "reference"
-  ];
+function editDistance(a,b) {
+  const left=String(a||"");
+  const right=String(b||"");
+  const row=Array.from({length:right.length+1},(_,i)=>i);
 
-  let hasReferenceLabel=false;
-  let reference="";
-
-  for(const label of labels){
-    let searchFrom=0;
-    while(searchFrom<lower.length){
-      const index=lower.indexOf(label,searchFrom);
-      if(index<0) break;
-      hasReferenceLabel=true;
-      const candidate=readDigitsAfter(cleaned,index+label.length);
-      if(candidate && candidate.length>reference.length) reference=candidate;
-      searchFrom=index+label.length;
+  for(let i=1;i<=left.length;i++){
+    let previous=row[0];
+    row[0]=i;
+    for(let j=1;j<=right.length;j++){
+      const saved=row[j];
+      const cost=left[i-1]===right[j-1]?0:1;
+      row[j]=Math.min(row[j]+1,row[j-1]+1,previous+cost);
+      previous=saved;
     }
   }
+  return row[right.length];
+}
 
-  return {
-    valid:hasReferenceLabel && Boolean(reference),
-    hasReferenceLabel,
-    reference
+function containsReferenceLabel(text) {
+  const normalized=String(text||"")
+    .toLowerCase()
+    .replaceAll("0","o")
+    .replaceAll("1","l")
+    .replace(/[^a-z\s]/g," ");
+  const tokens=normalized.split(/\s+/).filter(Boolean);
+
+  if(normalized.includes("reference") || normalized.includes("ref no") || normalized.includes("ref number")) {
+    return true;
+  }
+
+  return tokens.some(token=>{
+    if(token.length<6 || token.length>11) return false;
+    return editDistance(token,"reference")<=2;
+  });
+}
+
+function extractDigitCandidates(text) {
+  const candidates=[];
+  for(const line of String(text||"").split(/\n|\r/)){
+    const digits=digitsOnly(line);
+    if(digits.length>=6 && digits.length<=18) candidates.push(digits);
+  }
+  return [...new Set(candidates)].sort((x,y)=>y.length-x.length);
+}
+
+async function setOcrMode(worker,{digitsOnlyMode=false,singleLine=false}={}) {
+  const params={
+    tessedit_pageseg_mode: singleLine ? "7" : "11",
+    preserve_interword_spaces: "1"
   };
+  params.tessedit_char_whitelist=digitsOnlyMode
+    ? "0123456789"
+    : "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .:#&/-";
+  await worker.setParameters(params);
 }
 
 function extractLongNumberCandidates(text) {
@@ -370,7 +413,7 @@ async function scanReceipt(file) {
   state.ocrPhase = "reference";
   els.gcashReference.value = "";
   els.gcashReference.readOnly = true;
-  els.gcashRefHelp.textContent = "Looking only for the Reference Number in the uploaded image.";
+  els.gcashRefHelp.textContent = 'Looking for the word "Reference", then reading the number beside it.';
   updatePaymentButtonState();
 
   if (!file || !String(file.type || "").startsWith("image/")) {
@@ -388,42 +431,69 @@ async function scanReceipt(file) {
   els.receiptDrop.classList.add("has-file");
   const dropTitle=els.receiptDrop.querySelector("strong");
   if(dropTitle) dropTitle.textContent="Replace GCash receipt";
-  setOcrStatus("Looking for Reference Number…");
+  setOcrStatus('Finding "Reference"…');
 
   let source=null;
   try {
     const [worker,imageSource]=await Promise.all([warmOcr(),loadImageSource(file)]);
     source=imageSource;
 
-    // First pass: enlarge the middle/lower transaction area, where GCash usually places Reference Number.
-    state.ocrPhase="reference";
-    const referenceArea=makePreparedCanvas(source,1800,0.22,0.82);
-    const first=await worker.recognize(referenceArea);
-    let analysis=analyzeReferenceReceipt(first.data.text || "");
+    // The label can be very pale blue, so use a binary pass that preserves light text.
+    await setOcrMode(worker,{digitsOnlyMode:false,singleLine:false});
+    const labelArea=makePreparedCanvas(source,1900,0.38,0.70,0.05,0.95,true);
+    const labelResult=await worker.recognize(labelArea);
+    let labelFound=containsReferenceLabel(labelResult.data.text || "");
 
-    // Fallback only when the focused pass did not find both the label and its number.
-    if(!analysis.valid){
+    // Only fall back to a broader binary scan if the focused lower area missed the label.
+    if(!labelFound){
       state.ocrPhase="fallback";
-      const fullCanvas=makePreparedCanvas(source,1500,0,1);
-      const second=await worker.recognize(fullCanvas);
-      analysis=analyzeReferenceReceipt(second.data.text || "");
+      setOcrStatus('Searching the full image for "Reference"…');
+      const widerArea=makePreparedCanvas(source,1700,0.18,0.82,0.03,0.97,true);
+      const widerResult=await worker.recognize(widerArea);
+      labelFound=containsReferenceLabel(widerResult.data.text || "");
     }
 
-    if(!analysis.hasReferenceLabel){
-      setOcrStatus('Error: no "Reference" or "Reference Number" label was detected in this image. Use a screenshot where the reference section is visible.',"error");
+    if(!labelFound){
+      setOcrStatus('Error: the word "Reference" or "Reference Number" could not be detected. Make sure that label is visible in the image.',"error");
       return;
     }
 
-    if(!analysis.reference || analysis.reference.length<6 || analysis.reference.length>18){
-      setOcrStatus("Reference label found, but the number could not be read clearly. Upload a clearer screenshot showing the Reference Number.","error");
+    // Once Reference is confirmed, ignore all other receipt text and OCR digits only.
+    state.ocrPhase="reference";
+    setOcrStatus("Reference found. Reading the number…");
+    await setOcrMode(worker,{digitsOnlyMode:true,singleLine:false});
+
+    const numberAreas=[
+      makePreparedCanvas(source,1800,0.46,0.60,0.48,0.94,true),
+      makePreparedCanvas(source,1800,0.52,0.67,0.48,0.94,true),
+      makePreparedCanvas(source,1800,0.40,0.68,0.46,0.95,true)
+    ];
+
+    let candidates=[];
+    for(const area of numberAreas){
+      const result=await worker.recognize(area);
+      candidates=candidates.concat(extractDigitCandidates(result.data.text || ""));
+      const exactNine=candidates.find(value=>value.length===9);
+      if(exactNine){
+        candidates=[exactNine,...candidates.filter(v=>v!==exactNine)];
+        break;
+      }
+    }
+
+    candidates=[...new Set(candidates)].filter(value=>value.length>=6 && value.length<=18);
+
+    if(!candidates.length){
+      setOcrStatus("Reference label found, but the number could not be read. Keep the Reference Number visible and try a clearer screenshot.","error");
       return;
     }
+
+    const preferred=candidates.find(value=>value.length===9) || candidates.sort((x,y)=>y.length-x.length)[0];
 
     state.gcashVerified=true;
-    state.gcashDetectedReference=analysis.reference;
-    els.gcashReference.value=analysis.reference;
+    state.gcashDetectedReference=preferred;
+    els.gcashReference.value=preferred;
     els.gcashReference.readOnly=false;
-    els.gcashRefHelp.textContent="Reference was read from the uploaded image. You may correct one missed or misread OCR digit if needed.";
+    els.gcashRefHelp.textContent="Reference was read from the image. If OCR misses or misreads one digit, you may correct that one digit.";
     setOcrStatus("Reference Number detected successfully.","success");
   } catch {
     setOcrStatus("Error: the image could not be read. Please try a clearer screenshot.","error");
@@ -431,6 +501,12 @@ async function scanReceipt(file) {
     if(source && typeof source.close==="function") {
       try { source.close(); } catch {}
     }
+    try {
+      if(ocrWorkerPromise){
+        const worker=await ocrWorkerPromise;
+        await setOcrMode(worker,{digitsOnlyMode:false,singleLine:false});
+      }
+    } catch {}
     state.ocrInProgress=false;
     updatePaymentButtonState();
   }
