@@ -164,7 +164,7 @@ function updatePaymentButtonState() {
 
   const submitted = digitsOnly(els.gcashReference.value);
   const correctionOk =
-    submitted.length >= 10 &&
+    submitted.length >= 6 &&
     submitted.length <= 18 &&
     isSingleDigitCorrection(state.gcashDetectedReference, submitted);
   els.confirmPayment.disabled =
@@ -293,38 +293,64 @@ function readDigitsAfter(text,startIndex) {
     break;
   }
 
-  return digits.length>=10 && digits.length<=18 ? digits : "";
+  return digits.length>=6 && digits.length<=18 ? digits : "";
 }
 
 function analyzeGcashReceipt(text) {
   const raw=String(text||"");
   const cleaned=raw.replaceAll("\t"," ");
   const lower=cleaned.toLowerCase();
-  const looksLikeGcash=
-    lower.includes("gcash") ||
-    lower.includes("g cash") ||
-    (lower.includes("amount sent") && (lower.includes("ref no") || lower.includes("reference")));
+
+  const hasBrand=lower.includes("gcash") || lower.includes("g cash");
+  const hasTransactionDetails=lower.includes("transaction details") || lower.includes("transaction detail");
+  const hasPaymentTo=lower.includes("payment to") || lower.includes("paid to") || lower.includes("sent to");
+  const hasAmount=lower.includes("amount");
+  const hasDateTime=
+    lower.includes("date & time") ||
+    lower.includes("date and time") ||
+    lower.includes("date/time") ||
+    (lower.includes("date") && lower.includes("time"));
 
   const labels=["reference number","reference no.","reference no","reference #","ref no.","ref no","ref #","reference"];
   let hasReferenceLabel=false;
   let reference="";
 
   for(const label of labels){
-    const index=lower.indexOf(label);
-    if(index<0) continue;
-    hasReferenceLabel=true;
-    const candidate=readDigitsAfter(cleaned,index+label.length);
-    if(candidate && candidate.length>reference.length) reference=candidate;
+    let searchFrom=0;
+    while(searchFrom<lower.length){
+      const index=lower.indexOf(label,searchFrom);
+      if(index<0) break;
+      hasReferenceLabel=true;
+      const candidate=readDigitsAfter(cleaned,index+label.length);
+      if(candidate && candidate.length>reference.length) reference=candidate;
+      searchFrom=index+label.length;
+    }
   }
 
-  return {valid:looksLikeGcash && hasReferenceLabel,looksLikeGcash,hasReferenceLabel,reference};
+  let structureScore=0;
+  if(hasTransactionDetails) structureScore+=2;
+  if(hasPaymentTo) structureScore+=1;
+  if(hasAmount) structureScore+=1;
+  if(hasDateTime) structureScore+=1;
+  if(hasReferenceLabel) structureScore+=2;
+
+  const receiptStructureValid=structureScore>=5 && hasReferenceLabel;
+  const brandedReceiptValid=hasBrand && hasReferenceLabel && (hasAmount || hasPaymentTo || hasTransactionDetails);
+
+  return {
+    valid:receiptStructureValid || brandedReceiptValid,
+    hasBrand,
+    hasReferenceLabel,
+    structureScore,
+    reference
+  };
 }
 
 function extractLongNumberCandidates(text) {
   return String(text||"")
     .split(/\n|\r/)
     .map(line=>digitsOnly(line))
-    .filter(value=>value.length>=10 && value.length<=18)
+    .filter(value=>value.length>=6 && value.length<=18)
     .sort((a,b)=>b.length-a.length);
 }
 
@@ -387,7 +413,7 @@ async function scanReceipt(file) {
     const analysis=analyzeGcashReceipt(first.data.text || "");
 
     if(!analysis.valid){
-      setOcrStatus("Error: this does not appear to be a readable GCash receipt with a reference number. Upload a clearer GCash receipt or screenshot.","error");
+      setOcrStatus("Error: this image does not contain enough transaction details to verify a GCash receipt. Make sure Transaction Details, Amount, Date & Time, and Reference Number are visible.","error");
       return;
     }
 
@@ -396,10 +422,15 @@ async function scanReceipt(file) {
     state.ocrPhase="verify";
     const lowerCanvas=makePreparedCanvas(source,1300,0.38);
     const second=await worker.recognize(lowerCanvas);
-    const candidates=extractLongNumberCandidates(second.data.text || "");
-    finalReference=chooseRefinedReference(finalReference,candidates);
+    const secondAnalysis=analyzeGcashReceipt(second.data.text || "");
+    if(secondAnalysis.reference){
+      finalReference=chooseRefinedReference(finalReference,[secondAnalysis.reference]);
+    } else {
+      const candidates=extractLongNumberCandidates(second.data.text || "");
+      finalReference=chooseRefinedReference(finalReference,candidates);
+    }
 
-    if(!finalReference || finalReference.length<10 || finalReference.length>18){
+    if(!finalReference || finalReference.length<6 || finalReference.length>18){
       setOcrStatus("Error: GCash was detected, but the complete reference number could not be read. Upload a clearer image and try again.","error");
       return;
     }
@@ -409,7 +440,7 @@ async function scanReceipt(file) {
     els.gcashReference.value=finalReference;
     els.gcashReference.readOnly=false;
     els.gcashRefHelp.textContent="Verified from the receipt. If OCR missed or misread one digit, you may correct that one digit before saving.";
-    setOcrStatus("GCash receipt verified. Reference checked with a second focused scan.","success");
+    setOcrStatus("GCash transaction verified. Reference checked from the receipt details.","success");
   } catch {
     setOcrStatus("Error: the receipt could not be read. Please use a clearer GCash receipt or screenshot.","error");
   } finally {
