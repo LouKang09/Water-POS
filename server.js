@@ -14,7 +14,14 @@ const pool = new Pool({
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
 
 app.use(express.json({ limit: "1mb" }));
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static(path.join(__dirname, "public"), {
+  etag: false,
+  setHeaders(res, filePath) {
+    if (filePath.endsWith(".html") || filePath.endsWith(".js") || filePath.endsWith(".css")) {
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    }
+  }
+}));
 
 const JWT_SECRET = process.env.JWT_SECRET || "development-only-change-me";
 
@@ -98,6 +105,38 @@ function digitsOnly(value) {
   return String(value || "").split("").filter(ch => ch >= "0" && ch <= "9").join("");
 }
 
+function isSingleDigitCorrection(detected, submitted) {
+  if (!detected || !submitted) return false;
+  if (detected === submitted) return true;
+  if (Math.abs(detected.length - submitted.length) > 1) return false;
+
+  if (detected.length === submitted.length) {
+    let differences = 0;
+    for (let i = 0; i < detected.length; i++) {
+      if (detected[i] !== submitted[i]) differences += 1;
+      if (differences > 1) return false;
+    }
+    return true;
+  }
+
+  const shorter = detected.length < submitted.length ? detected : submitted;
+  const longer = detected.length < submitted.length ? submitted : detected;
+  let i = 0;
+  let j = 0;
+  let skipped = 0;
+  while (i < shorter.length && j < longer.length) {
+    if (shorter[i] === longer[j]) {
+      i += 1;
+      j += 1;
+    } else {
+      skipped += 1;
+      j += 1;
+      if (skipped > 1) return false;
+    }
+  }
+  return true;
+}
+
 function txRef() {
   const d = new Date();
   const stamp = [
@@ -177,8 +216,8 @@ app.post("/api/sales", upload.single("receipt"), async (req,res,next) => {
     if (paymentMethod === "GCash" && (gcashDetectedReference.length < 10 || gcashDetectedReference.length > 18)) {
       return res.status(400).json({error:"The GCash reference read from the image is not valid. Upload a clearer receipt."});
     }
-    if (paymentMethod === "GCash" && gcashReference !== gcashDetectedReference) {
-      return res.status(400).json({error:"GCash reference must come from the uploaded receipt image."});
+    if (paymentMethod === "GCash" && !isSingleDigitCorrection(gcashDetectedReference, gcashReference)) {
+      return res.status(400).json({error:"The GCash reference differs too much from what was read in the receipt. Re-scan a clearer image."});
     }
 
     await client.query("BEGIN");
