@@ -3,6 +3,7 @@ let ocrWorkerPromise = null;
 const state = {
   category: "Delivery",
   payment: "Cash",
+  paymentProvider: null,
   cart: [],
   usedProducts: [],
   receiptFile: null,
@@ -27,6 +28,9 @@ const els = {
   closePayment: document.querySelector("#closePayment"),
   cashPanel: document.querySelector("#cashPanel"),
   gcashPanel: document.querySelector("#gcashPanel"),
+  otherProviderPanel: document.querySelector("#otherProviderPanel"),
+  receiptTitle: document.querySelector("#receiptTitle"),
+  referenceLabel: document.querySelector("#referenceLabel"),
   confirmPayment: document.querySelector("#confirmPayment"),
   receiptInput: document.querySelector("#receiptInput"),
   receiptPreview: document.querySelector("#receiptPreview"),
@@ -156,9 +160,42 @@ function isSingleDigitCorrection(detected, submitted) {
   return true;
 }
 
+function selectedProvider() {
+  if (state.payment === "GCash") return "GCash";
+  if (state.payment === "Other") return state.paymentProvider || "";
+  return "";
+}
+
+function updateDigitalCopy() {
+  const provider=selectedProvider();
+  const waitingForProvider=state.payment==="Other" && !provider;
+
+  els.receiptInput.disabled=waitingForProvider;
+  els.receiptDrop.classList.toggle("disabled",waitingForProvider);
+  els.receiptTitle.textContent=waitingForProvider
+    ? "Choose a payment app first"
+    : (state.receiptFile ? "Replace "+provider+" receipt" : "Add "+provider+" receipt");
+  els.referenceLabel.textContent=provider ? provider+" reference" : "Payment reference";
+
+  if(waitingForProvider){
+    els.gcashRefHelp.textContent="Choose Maya, MariBank, GoTyme, or VYBE / BPI before uploading the receipt.";
+  } else if(!state.receiptFile){
+    els.gcashRefHelp.textContent='The scanner finds "Reference" or "Reference Number", then reads only the number beside it.';
+  }
+
+  document.querySelectorAll(".provider-option").forEach(btn=>{
+    btn.classList.toggle("active",btn.dataset.provider===state.paymentProvider);
+  });
+}
+
 function updatePaymentButtonState() {
   if (state.payment === "Cash") {
     els.confirmPayment.disabled = false;
+    return;
+  }
+
+  if(state.payment==="Other" && !state.paymentProvider){
+    els.confirmPayment.disabled=true;
     return;
   }
 
@@ -208,13 +245,47 @@ async function warmOcr() {
   return ocrWorkerPromise;
 }
 
+function clearReceiptScan() {
+  state.receiptFile=null;
+  state.gcashVerified=false;
+  state.gcashDetectedReference="";
+  state.ocrInProgress=false;
+  state.ocrPhase="reference";
+  if(state.receiptPreviewUrl) URL.revokeObjectURL(state.receiptPreviewUrl);
+  state.receiptPreviewUrl="";
+  els.receiptInput.value="";
+  els.receiptPreview.src="";
+  els.receiptPreview.classList.add("hidden");
+  els.ocrStatus.classList.add("hidden");
+  els.ocrStatus.classList.remove("success","error");
+  els.gcashReference.value="";
+  els.gcashReference.readOnly=true;
+  els.receiptDrop.classList.remove("has-file");
+}
+
 function setPayment(method) {
+  const changed=state.payment!==method;
+  if(changed) clearReceiptScan();
+
   state.payment = method;
+  if(method==="Cash") state.paymentProvider=null;
+  if(method==="GCash") state.paymentProvider="GCash";
+  if(method==="Other" && state.paymentProvider==="GCash") state.paymentProvider=null;
+
   document.querySelectorAll(".payment-method").forEach(b=>b.classList.toggle("active",b.dataset.payment===method));
   els.cashPanel.classList.toggle("hidden",method!=="Cash");
-  els.gcashPanel.classList.toggle("hidden",method!=="GCash");
-  els.confirmPayment.textContent = method === "Cash" ? "Confirm Cash Payment" : "Confirm GCash Payment";
-  if (method === "GCash") warmOcr().catch(()=>{});
+  els.gcashPanel.classList.toggle("hidden",method==="Cash");
+  els.otherProviderPanel.classList.toggle("hidden",method!=="Other");
+
+  const provider=selectedProvider();
+  els.confirmPayment.textContent=method==="Cash"
+    ? "Confirm Cash Payment"
+    : provider
+      ? "Confirm "+provider+" Payment"
+      : "Choose Payment App";
+
+  updateDigitalCopy();
+  if(method!=="Cash") warmOcr().catch(()=>{});
   updatePaymentButtonState();
 }
 
@@ -429,8 +500,7 @@ async function scanReceipt(file) {
   els.receiptPreview.src=state.receiptPreviewUrl;
   els.receiptPreview.classList.remove("hidden");
   els.receiptDrop.classList.add("has-file");
-  const dropTitle=els.receiptDrop.querySelector("strong");
-  if(dropTitle) dropTitle.textContent="Replace GCash receipt";
+  updateDigitalCopy();
   setOcrStatus('Finding "Reference"…');
 
   let source=null;
@@ -514,11 +584,16 @@ async function scanReceipt(file) {
 
 async function submitSale() {
   if (!state.cart.length) return;
-  if (state.payment==="GCash" && !state.receiptFile) return toast("Add the GCash receipt image first.");
-  if (state.payment==="GCash" && state.ocrInProgress) return toast("Wait for the GCash receipt scan to finish.");
-  if (state.payment==="GCash" && !state.gcashVerified) return toast("GCash receipt not verified. Upload a clear receipt with a readable reference number.");
-  if (state.payment==="GCash" && !isSingleDigitCorrection(state.gcashDetectedReference,digitsOnly(els.gcashReference.value))) {
-    return toast("The edited GCash reference differs too much from the scanned receipt. Re-scan a clearer image.");
+
+  const isDigital=state.payment!=="Cash";
+  const provider=selectedProvider();
+
+  if(state.payment==="Other" && !provider) return toast("Choose a payment app first.");
+  if(isDigital && !state.receiptFile) return toast("Add the "+provider+" receipt image first.");
+  if(isDigital && state.ocrInProgress) return toast("Wait for the receipt scan to finish.");
+  if(isDigital && !state.gcashVerified) return toast("Reference not verified. Upload a receipt with a readable Reference Number.");
+  if(isDigital && !isSingleDigitCorrection(state.gcashDetectedReference,digitsOnly(els.gcashReference.value))) {
+    return toast("The edited reference differs too much from the scanned receipt. Re-scan a clearer image.");
   }
 
   els.confirmPayment.disabled = true;
@@ -526,12 +601,15 @@ async function submitSale() {
   const fd = new FormData();
   fd.append("paymentMethod",state.payment);
   fd.append("items",JSON.stringify(state.cart));
-  if (state.payment==="GCash") {
-    fd.append("gcashReference",digitsOnly(els.gcashReference.value));
-    fd.append("gcashDetectedReference",state.gcashDetectedReference);
-    fd.append("gcashOcrVerified","true");
+
+  if(isDigital) {
+    fd.append("paymentProvider",provider);
+    fd.append("paymentReference",digitsOnly(els.gcashReference.value));
+    fd.append("detectedReference",state.gcashDetectedReference);
+    fd.append("ocrVerified","true");
     fd.append("receipt",state.receiptFile);
   }
+
   try {
     const res = await fetch("/api/sales",{method:"POST",body:fd});
     const data = await res.json();
@@ -543,31 +621,20 @@ async function submitSale() {
   } catch(e) {
     toast(e.message);
   } finally {
-    els.confirmPayment.textContent = state.payment === "Cash" ? "Confirm Cash Payment" : "Confirm GCash Payment";
+    const currentProvider=selectedProvider();
+    els.confirmPayment.textContent=state.payment==="Cash"
+      ? "Confirm Cash Payment"
+      : currentProvider
+        ? "Confirm "+currentProvider+" Payment"
+        : "Choose Payment App";
     updatePaymentButtonState();
   }
 }
 
 function resetOrder() {
   state.cart = [];
-  state.receiptFile = null;
-  state.gcashVerified = false;
-  state.gcashDetectedReference = "";
-  state.ocrInProgress = false;
-  state.ocrPhase = "reference";
-  if (state.receiptPreviewUrl) URL.revokeObjectURL(state.receiptPreviewUrl);
-  state.receiptPreviewUrl = "";
-  els.receiptInput.value = "";
-  els.receiptPreview.src = "";
-  els.receiptPreview.classList.add("hidden");
-  els.ocrStatus.classList.add("hidden");
-  els.ocrStatus.classList.remove("success","error");
-  els.gcashReference.value = "";
-  els.gcashReference.readOnly = true;
-  els.gcashRefHelp.textContent = 'Select GCash, then upload an image containing "Reference" or "Reference Number".';
-  els.receiptDrop.classList.remove("has-file");
-  const dropTitle=els.receiptDrop.querySelector("strong");
-  if(dropTitle) dropTitle.textContent="Add GCash receipt";
+  clearReceiptScan();
+  state.paymentProvider=null;
   setPayment("Cash");
   renderCart();
 }
@@ -580,6 +647,15 @@ document.querySelectorAll(".category-tab").forEach(btn=>{
   });
 });
 document.querySelectorAll(".payment-method").forEach(btn=>btn.addEventListener("click",()=>setPayment(btn.dataset.payment)));
+document.querySelectorAll(".provider-option").forEach(btn=>btn.addEventListener("click",()=>{
+  if(state.payment!=="Other") return;
+  if(state.paymentProvider!==btn.dataset.provider) clearReceiptScan();
+  state.paymentProvider=btn.dataset.provider;
+  updateDigitalCopy();
+  els.confirmPayment.textContent="Confirm "+state.paymentProvider+" Payment";
+  warmOcr().catch(()=>{});
+  updatePaymentButtonState();
+}));
 els.clearCart.addEventListener("click",()=>{state.cart=[];renderCart();});
 els.checkoutBtn.addEventListener("click",()=>{
   warmOcr().catch(()=>{});
@@ -592,7 +668,7 @@ els.gcashReference.addEventListener("input",()=>{
   if(els.gcashReference.value!==cleaned) els.gcashReference.value=cleaned;
   const ok=isSingleDigitCorrection(state.gcashDetectedReference,cleaned);
   els.gcashRefHelp.textContent=ok
-    ? "Verified from the receipt. One OCR digit may be corrected if needed."
+    ? "Reference verified from the receipt. One OCR digit may be corrected if needed."
     : "Only one missed or misread OCR digit can be corrected. For larger differences, upload a clearer receipt.";
   updatePaymentButtonState();
 });
