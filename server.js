@@ -14,7 +14,9 @@ const pool = new Pool({
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
 
 app.use(express.json({ limit: "1mb" }));
+const SITE_MODE = process.env.SITE_MODE || "pos";
 app.use(express.static(path.join(__dirname, "public"), {
+  index: SITE_MODE === "queue" ? false : "index.html",
   etag: false,
   setHeaders(res, filePath) {
     if (filePath.endsWith(".html") || filePath.endsWith(".js") || filePath.endsWith(".css")) {
@@ -22,6 +24,9 @@ app.use(express.static(path.join(__dirname, "public"), {
     }
   }
 }));
+if (SITE_MODE === "queue") {
+  app.get("/", (req,res) => res.sendFile(path.join(__dirname, "public", "queue.html")));
+}
 
 const JWT_SECRET = process.env.JWT_SECRET || "development-only-change-me";
 
@@ -75,6 +80,38 @@ async function initDb() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
+    CREATE TABLE IF NOT EXISTS tenant_accounts (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      phone TEXT UNIQUE NOT NULL,
+      unit_no TEXT NOT NULL,
+      access_token_hash TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS delivery_queue (
+      id SERIAL PRIMARY KEY,
+      tenant_id INTEGER NOT NULL REFERENCES tenant_accounts(id) ON DELETE CASCADE,
+      unit_no TEXT NOT NULL,
+      unit_price NUMERIC(12,2) NOT NULL CHECK (unit_price IN (25,35,45)),
+      qty INTEGER NOT NULL CHECK (qty > 0 AND qty <= 100),
+      total NUMERIC(12,2) NOT NULL,
+      payment_method TEXT NOT NULL CHECK (payment_method IN ('Cash','GCash','Other')),
+      payment_provider TEXT,
+      payment_reference TEXT,
+      payment_reference_status TEXT,
+      receipt_mime TEXT,
+      receipt_image BYTEA,
+      status TEXT NOT NULL DEFAULT 'requested' CHECK (status IN ('requested','completed','cancelled')),
+      sale_id INTEGER REFERENCES sales(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      completed_at TIMESTAMPTZ
+    );
+
+    CREATE INDEX IF NOT EXISTS delivery_queue_status_created_idx
+      ON delivery_queue(status, created_at);
+
     ALTER TABLE sales ADD COLUMN IF NOT EXISTS payment_provider TEXT;
     ALTER TABLE sales ADD COLUMN IF NOT EXISTS payment_reference TEXT;
     ALTER TABLE sales ADD COLUMN IF NOT EXISTS payment_reference_status TEXT;
@@ -126,6 +163,30 @@ function adminAuth(req, res, next) {
   } catch {
     res.status(401).json({ error: "Admin authentication required." });
   }
+}
+
+function tokenHash(value) {
+  return crypto.createHash("sha256").update(String(value || "")).digest("hex");
+}
+
+async function tenantAuth(req,res,next) {
+  try {
+    const auth=req.headers.authorization || "";
+    const token=auth.startsWith("Bearer ") ? auth.slice(7) : "";
+    if (!token) return res.status(401).json({error:"Tenant account required."});
+    const hash=tokenHash(token);
+    const { rows }=await pool.query(
+      "SELECT id,name,phone,unit_no FROM tenant_accounts WHERE access_token_hash=$1 LIMIT 1",
+      [hash]
+    );
+    if (!rows.length) return res.status(401).json({error:"Tenant account required."});
+    req.tenant=rows[0];
+    next();
+  } catch(e){ next(e); }
+}
+
+function cleanPhone(value) {
+  return String(value || "").replace(/[^0-9+]/g,"").slice(0,20);
 }
 
 function digitsOnly(value) {
@@ -348,6 +409,241 @@ app.post("/api/sales", upload.single("receipt"), async (req,res,next) => {
     if (e instanceof SyntaxError || /Add at least|Invalid price|Used item/.test(e.message)) {
       return res.status(400).json({error:e.message});
     }
+    next(e);
+  } finally {
+    client.release();
+  }
+});
+
+app.post("/api/queue/account", async (req,res,next) => {
+  try {
+    const name=String(req.body.name || "").trim().slice(0,120);
+    const phone=cleanPhone(req.body.phone);
+    const unitNo=String(req.body.unitNo || "").trim().slice(0,80);
+
+    if (name.length < 2) return res.status(400).json({error:"Enter your name."});
+    if (phone.replace(/\D/g,"").length < 7) return res.status(400).json({error:"Enter a valid phone number."});
+    if (!unitNo) return res.status(400).json({error:"Unit number is required."});
+
+    const existing=await pool.query("SELECT id,unit_no FROM tenant_accounts WHERE phone=$1 LIMIT 1",[phone]);
+    if (existing.rows.length && existing.rows[0].unit_no.trim().toLowerCase() !== unitNo.toLowerCase()) {
+      return res.status(409).json({error:"This phone number is already registered to a different unit."});
+    }
+
+    const rawToken=crypto.randomBytes(32).toString("hex");
+    const hash=tokenHash(rawToken);
+    let row;
+
+    if (existing.rows.length) {
+      const result=await pool.query(
+        `UPDATE tenant_accounts
+         SET name=$1,unit_no=$2,access_token_hash=$3,updated_at=NOW()
+         WHERE id=$4
+         RETURNING id,name,phone,unit_no`,
+        [name,unitNo,hash,existing.rows[0].id]
+      );
+      row=result.rows[0];
+    } else {
+      const result=await pool.query(
+        `INSERT INTO tenant_accounts(name,phone,unit_no,access_token_hash)
+         VALUES($1,$2,$3,$4)
+         RETURNING id,name,phone,unit_no`,
+        [name,phone,unitNo,hash]
+      );
+      row=result.rows[0];
+    }
+
+    res.status(existing.rows.length ? 200 : 201).json({token:rawToken,account:row});
+  } catch(e){ next(e); }
+});
+
+app.get("/api/queue/me", tenantAuth, async (req,res) => {
+  res.json(req.tenant);
+});
+
+app.get("/api/queue/requests", tenantAuth, async (req,res,next) => {
+  try {
+    const { rows }=await pool.query(
+      `SELECT id,unit_no,unit_price,qty,total,payment_method,payment_provider,
+              payment_reference,payment_reference_status,status,created_at,completed_at,
+              (receipt_image IS NOT NULL) AS has_receipt
+       FROM delivery_queue
+       WHERE tenant_id=$1
+       ORDER BY created_at DESC
+       LIMIT 30`,
+      [req.tenant.id]
+    );
+    res.json(rows.map(r=>({
+      ...r,
+      unit_price:Number(r.unit_price),
+      total:Number(r.total),
+      qty:Number(r.qty)
+    })));
+  } catch(e){ next(e); }
+});
+
+app.post("/api/queue/requests", tenantAuth, upload.single("receipt"), async (req,res,next) => {
+  try {
+    const unitPrice=Number(req.body.unitPrice);
+    const qty=Math.max(1,Math.min(100,parseInt(req.body.qty,10)||1));
+    if (![25,35,45].includes(unitPrice)) {
+      return res.status(400).json({error:"Choose a valid Delivery price."});
+    }
+
+    const paymentMethod=String(req.body.paymentMethod || "");
+    if (!["Cash","GCash","Other"].includes(paymentMethod)) {
+      return res.status(400).json({error:"Choose Cash or an online payment."});
+    }
+
+    const allowedOtherProviders=["Maya","MariBank","GoTyme","VYBE by BPI"];
+    const paymentProvider=
+      paymentMethod==="GCash" ? "GCash" :
+      paymentMethod==="Other" ? String(req.body.paymentProvider || "").trim() :
+      null;
+
+    if (paymentMethod==="Other" && !allowedOtherProviders.includes(paymentProvider)) {
+      return res.status(400).json({error:"Choose Maya, MariBank, GoTyme, or VYBE by BPI."});
+    }
+
+    const isDigital=paymentMethod!=="Cash";
+    if (isDigital && !req.file) {
+      return res.status(400).json({error:paymentProvider+" receipt image is required."});
+    }
+    if (isDigital && !String(req.file.mimetype || "").startsWith("image/")) {
+      return res.status(400).json({error:"The payment receipt must be an image."});
+    }
+
+    let paymentReference=null;
+    let paymentReferenceStatus=isDigital ? "unreadable" : null;
+    if (isDigital && String(req.body.ocrVerified)==="true") {
+      const detected=normalizePaymentReference(req.body.detectedReference,paymentProvider);
+      const submitted=normalizePaymentReference(req.body.paymentReference,paymentProvider);
+      if (isValidPaymentReference(detected,paymentProvider) &&
+          isValidPaymentReference(submitted,paymentProvider) &&
+          isSingleDigitCorrection(detected,submitted)) {
+        paymentReference=submitted;
+        paymentReferenceStatus="verified";
+      }
+    }
+
+    const total=unitPrice*qty;
+    const { rows }=await pool.query(
+      `INSERT INTO delivery_queue(
+        tenant_id,unit_no,unit_price,qty,total,payment_method,payment_provider,
+        payment_reference,payment_reference_status,receipt_mime,receipt_image
+       )
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+       RETURNING id,unit_no,unit_price,qty,total,payment_method,payment_provider,
+                 payment_reference,payment_reference_status,status,created_at`,
+      [
+        req.tenant.id,req.tenant.unit_no,unitPrice,qty,total,paymentMethod,paymentProvider,
+        paymentReference,paymentReferenceStatus,req.file?.mimetype||null,req.file?.buffer||null
+      ]
+    );
+
+    const row=rows[0];
+    res.status(201).json({
+      ...row,
+      unit_price:Number(row.unit_price),
+      total:Number(row.total),
+      qty:Number(row.qty)
+    });
+  } catch(e){ next(e); }
+});
+
+app.get("/api/pos/queue", async (req,res,next) => {
+  try {
+    const { rows }=await pool.query(
+      `SELECT q.id,q.unit_no,q.unit_price,q.qty,q.total,q.payment_method,q.payment_provider,
+              q.payment_reference,q.payment_reference_status,q.status,q.created_at,
+              (q.receipt_image IS NOT NULL) AS has_receipt,
+              t.name AS tenant_name,t.phone AS tenant_phone
+       FROM delivery_queue q
+       JOIN tenant_accounts t ON t.id=q.tenant_id
+       WHERE q.status='requested'
+       ORDER BY q.created_at ASC
+       LIMIT 100`
+    );
+    res.json(rows.map(r=>({
+      ...r,
+      unit_price:Number(r.unit_price),
+      total:Number(r.total),
+      qty:Number(r.qty)
+    })));
+  } catch(e){ next(e); }
+});
+
+app.get("/api/pos/queue/:id/receipt", async (req,res,next) => {
+  try {
+    const { rows }=await pool.query(
+      "SELECT receipt_mime,receipt_image FROM delivery_queue WHERE id=$1 LIMIT 1",
+      [req.params.id]
+    );
+    if (!rows.length || !rows[0].receipt_image) return res.status(404).end();
+    res.type(rows[0].receipt_mime || "image/jpeg").send(rows[0].receipt_image);
+  } catch(e){ next(e); }
+});
+
+app.post("/api/pos/queue/:id/complete", async (req,res,next) => {
+  const client=await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const queueResult=await client.query(
+      `SELECT q.*,t.name AS tenant_name,t.phone AS tenant_phone
+       FROM delivery_queue q
+       JOIN tenant_accounts t ON t.id=q.tenant_id
+       WHERE q.id=$1
+       FOR UPDATE`,
+      [req.params.id]
+    );
+
+    if (!queueResult.rows.length) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({error:"Queue request not found."});
+    }
+
+    const q=queueResult.rows[0];
+    if (q.status!=="requested") {
+      await client.query("ROLLBACK");
+      return res.status(409).json({error:"This request has already been processed."});
+    }
+
+    const reference=txRef();
+    const sale=await client.query(
+      `INSERT INTO sales(
+        transaction_ref,payment_method,payment_provider,payment_reference,payment_reference_status,
+        gcash_reference,delivery_room_unit,total,receipt_mime,receipt_image
+       )
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       RETURNING id,transaction_ref,created_at`,
+      [
+        reference,q.payment_method,q.payment_provider,q.payment_reference,q.payment_reference_status,
+        q.payment_method==="GCash" ? q.payment_reference : null,
+        q.unit_no,q.total,q.receipt_mime,q.receipt_image
+      ]
+    );
+
+    await client.query(
+      `INSERT INTO sale_items(sale_id,category,label,unit_price,qty,line_total)
+       VALUES($1,'Delivery',$2,$3,$4,$5)`,
+      [sale.rows[0].id,"Delivery ₱"+Number(q.unit_price),q.unit_price,q.qty,q.total]
+    );
+
+    await client.query(
+      `UPDATE delivery_queue
+       SET status='completed',sale_id=$1,completed_at=NOW()
+       WHERE id=$2`,
+      [sale.rows[0].id,q.id]
+    );
+
+    await client.query("COMMIT");
+    res.json({
+      saleId:sale.rows[0].id,
+      transactionRef:sale.rows[0].transaction_ref,
+      total:Number(q.total)
+    });
+  } catch(e) {
+    await client.query("ROLLBACK").catch(()=>{});
     next(e);
   } finally {
     client.release();
