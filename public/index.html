@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0d6b69">
   <title>Water POS</title>
-  <link rel="stylesheet" href="/styles.css?v=20260929-6">
+  <link rel="stylesheet" href="/styles.css?v=20260929-7">
 </head>
 <body class="pos-page">
   <header class="pos-header">
@@ -73,7 +73,11 @@
         </button>
         <button type="button" class="payment-method" data-payment="GCash">
           <span class="payment-icon">G</span>
-          <span><strong>GCash</strong><small>Scan receipt reference</small></span>
+          <span><strong>GCash</strong><small>Scan reference</small></span>
+        </button>
+        <button type="button" class="payment-method" data-payment="Other">
+          <span class="payment-icon">•••</span>
+          <span><strong>Other</strong><small>More e-wallets</small></span>
         </button>
       </div>
 
@@ -82,20 +86,30 @@
       </div>
 
       <div id="gcashPanel" class="payment-panel hidden">
+        <div id="otherProviderPanel" class="provider-panel hidden">
+          <span class="provider-title">Choose payment app</span>
+          <div class="provider-grid">
+            <button type="button" class="provider-option" data-provider="Maya">Maya</button>
+            <button type="button" class="provider-option" data-provider="MariBank">MariBank</button>
+            <button type="button" class="provider-option" data-provider="GoTyme">GoTyme</button>
+            <button type="button" class="provider-option" data-provider="VYBE by BPI">VYBE / BPI</button>
+          </div>
+        </div>
+
         <label class="receipt-drop" id="receiptDrop">
           <input id="receiptInput" type="file" accept="image/*">
           <span class="upload-icon">＋</span>
           <span class="receipt-drop-copy">
-            <strong>Add GCash receipt</strong>
+            <strong id="receiptTitle">Add payment receipt</strong>
             <small>Camera or gallery · saved for admin cross-checking</small>
           </span>
         </label>
         <div id="ocrStatus" class="ocr-status hidden"></div>
-        <img id="receiptPreview" class="receipt-preview hidden" alt="GCash receipt preview">
+        <img id="receiptPreview" class="receipt-preview hidden" alt="Payment receipt preview">
         <label class="field gcash-reference-field">
-          <span>GCash reference</span>
+          <span id="referenceLabel">Payment reference</span>
           <input id="gcashReference" autocomplete="off" inputmode="numeric" placeholder="Waiting for receipt scan" readonly>
-          <small id="gcashRefHelp">After GCash is selected, the scanner first finds "Reference" or "Reference Number", then reads only the number beside it.</small>
+          <small id="gcashRefHelp">The scanner finds "Reference" or "Reference Number", then reads only the number beside it.</small>
         </label>
       </div>
 
@@ -122,6 +136,6 @@
 
   <div id="toast" class="toast" role="status"></div>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="/app.js?v=20260929-6"></script>
+  <script src="/app.js?v=20260929-7"></script>
 </body>
 </html>
