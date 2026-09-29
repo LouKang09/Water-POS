@@ -244,3 +244,181 @@ th{color:var(--muted);font-size:.68rem;text-transform:uppercase;letter-spacing:.
   .print-table .num{text-align:right;white-space:nowrap}
   .print-table.compact{width:55%;min-width:0}
 }
+
+.room-unit-field{
+  margin-top:14px;
+  padding-top:14px;
+  border-top:1px solid var(--line);
+}
+.room-unit-field input{
+  background:#fbfdfd;
+}
+
+.receipt-upload{
+  border:1.5px dashed #99bfbb;
+  border-radius:16px;
+  background:#f7fbfa;
+  padding:12px;
+}
+.receipt-upload.has-file{
+  border-style:solid;
+  background:var(--surface-2);
+}
+.receipt-upload.disabled{
+  opacity:.5;
+  pointer-events:none;
+}
+.receipt-upload-head{
+  display:flex;
+  flex-direction:column;
+  gap:3px;
+  margin-bottom:10px;
+}
+.receipt-upload-head>strong{
+  font-size:.82rem;
+}
+.receipt-upload-head>small{
+  color:var(--muted);
+  font-size:.68rem;
+  line-height:1.35;
+}
+.receipt-actions{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+}
+.receipt-action{
+  display:flex;
+  align-items:center;
+  gap:9px;
+  border:1px solid var(--line);
+  border-radius:13px;
+  background:#fff;
+  padding:10px;
+  cursor:pointer;
+  min-width:0;
+}
+.receipt-action-primary{
+  border-color:#91c4c0;
+  background:#eef8f7;
+}
+.receipt-action input{
+  display:none;
+}
+.receipt-action>span:last-child{
+  min-width:0;
+}
+.receipt-action strong,
+.receipt-action small{
+  display:block;
+}
+.receipt-action strong{
+  font-size:.76rem;
+}
+.receipt-action small{
+  margin-top:2px;
+  color:var(--muted);
+  font-size:.62rem;
+}
+.ocr-status.warning{
+  background:#fff8e6;
+  color:#7a5b0b;
+  border:1px solid #efd89b;
+}
+
+.service-breakdown-grid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:12px;
+  padding:16px 18px 18px;
+}
+.service-breakdown-card{
+  border:1px solid var(--line);
+  border-radius:14px;
+  background:#fbfdfd;
+  padding:14px;
+}
+.service-breakdown-card.overall{
+  background:var(--surface-2);
+}
+.service-breakdown-card h3{
+  margin:0 0 10px;
+  font-size:.85rem;
+}
+.breakdown-lines{
+  display:grid;
+  gap:7px;
+}
+.breakdown-line{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  padding:7px 0;
+  border-bottom:1px solid #e9efee;
+  font-size:.8rem;
+}
+.breakdown-line:last-child{
+  border-bottom:0;
+}
+.breakdown-line strong{
+  white-space:nowrap;
+}
+.breakdown-empty{
+  color:var(--muted);
+  font-size:.76rem;
+}
+.badge-warning{
+  background:#fff4d6;
+  color:#7a5600;
+}
+
+@media(max-width:767px){
+  .receipt-upload{
+    padding:10px;
+    border-radius:13px;
+  }
+  .receipt-upload-head{
+    margin-bottom:8px;
+  }
+  .receipt-actions{
+    gap:7px;
+  }
+  .receipt-action{
+    padding:8px;
+    border-radius:11px;
+  }
+}
+
+@media(max-width:900px) and (min-width:768px){
+  .service-breakdown-grid{
+    grid-template-columns:1fr;
+  }
+}
+
+@media print{
+  .print-service-grid{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:8px;
+    margin-bottom:14px;
+  }
+  .print-service-box{
+    border:1px solid #aaa;
+    border-radius:6px;
+    padding:8px;
+  }
+  .print-service-box h3{
+    margin:0 0 6px;
+    font-size:9pt;
+  }
+  .print-service-box>div{
+    display:flex;
+    justify-content:space-between;
+    gap:10px;
+    padding:3px 0;
+    font-size:8pt;
+  }
+  .print-no-data{
+    color:#666;
+  }
+}
