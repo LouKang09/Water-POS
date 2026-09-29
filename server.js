@@ -205,7 +205,7 @@ app.post("/api/admin/setup", async (req,res,next) => {
   try {
     const email = String(req.body.email || "").trim().toLowerCase();
     const password = String(req.body.password || "");
-    if (!/^\\S+@\\S+\\.\\S+$/.test(email)) return res.status(400).json({error:"Enter a valid email."});
+    if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) return res.status(400).json({error:"Enter a valid email."});
     if (password.length < 10) return res.status(400).json({error:"Use at least 10 characters for the admin password."});
 
     await client.query("BEGIN");
