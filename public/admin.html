@@ -67,8 +67,21 @@
           <article class="stat-card"><span>Expenses</span><strong id="statExpenses">₱0</strong></article>
           <article class="stat-card"><span>Net</span><strong id="statNet">₱0</strong></article>
         </div>
-        <div class="panel">
-          <div class="panel-header"><h2>Recent sales</h2><span id="txCount" class="badge">0 transactions</span></div>
+        <div class="panel chart-panel">
+          <div class="panel-header">
+            <div class="panel-header-copy">
+              <h2>Daily Sales Trend</h2>
+              <p>Connected day-to-day sales, split by Cash and GCash.</p>
+            </div>
+            <span id="chartRange" class="badge">Last 14 days</span>
+          </div>
+          <div class="chart-wrap">
+            <canvas id="salesTrendChart" aria-label="Daily sales trend chart"></canvas>
+          </div>
+        </div>
+
+        <div class="panel" style="margin-top:16px">
+          <div class="panel-header"><h2>Sales transactions</h2><span id="txCount" class="badge">0 transactions</span></div>
           <div class="table-wrap">
             <table>
               <thead><tr><th>Date</th><th>Reference</th><th>Items</th><th>Payment</th><th>GCash Ref</th><th>Total</th><th>Receipt</th></tr></thead>
@@ -121,6 +134,7 @@
     </div>
   </dialog>
   <div id="toast" class="toast"></div>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script src="/admin.js"></script>
 </body>
 </html>
