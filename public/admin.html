@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#092f2e">
+  <title>Water POS Admin</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="admin-page">
+  <div class="admin-mobile-block">
+    <div>
+      <p class="eyebrow" style="color:#75c1bb">WATER POS ADMIN</p>
+      <h1>Desktop or tablet required</h1>
+      <p>The phone experience is intentionally limited to the POS. Open this admin dashboard on a tablet or desktop to view sales, receipts, expenses, and Used pricing.</p>
+      <a href="/" class="primary-button" style="display:inline-block;text-decoration:none">Return to POS</a>
+    </div>
+  </div>
+
+  <div id="loginScreen" class="login-screen">
+    <form id="loginForm" class="login-card">
+      <p class="eyebrow">SECURE ADMIN</p>
+      <h1>Water POS Admin</h1>
+      <p>Sign in to review sales and manage expenses.</p>
+      <label class="field"><span>Email</span><input id="loginEmail" type="email" required autocomplete="username"></label>
+      <label class="field"><span>Password</span><input id="loginPassword" type="password" required autocomplete="current-password"></label>
+      <div id="loginError" class="error-text"></div>
+      <button class="primary-button full">Sign in</button>
+    </form>
+  </div>
+
+  <div class="admin-layout">
+    <aside class="sidebar">
+      <div class="brand-lockup">
+        <p>WATER REFILLING STATION</p>
+        <h1>Water POS</h1>
+      </div>
+      <nav class="side-nav">
+        <button class="active" data-section="sales">Sales & Dashboard</button>
+        <button data-section="expenses">Expenses</button>
+        <button data-section="used">Used Pricing</button>
+      </nav>
+      <div class="sidebar-footer">
+        <button id="logoutBtn">Sign out</button>
+      </div>
+    </aside>
+
+    <main class="admin-main">
+      <div class="admin-top">
+        <div>
+          <p class="eyebrow">ADMIN CONTROL</p>
+          <h1 id="adminTitle">Sales & Dashboard</h1>
+        </div>
+        <div class="filter-row" id="dateFilter">
+          <input type="date" id="fromDate" aria-label="From date">
+          <span>to</span>
+          <input type="date" id="toDate" aria-label="To date">
+          <button id="applyFilter">Apply</button>
+        </div>
+      </div>
+
+      <section id="salesSection" class="admin-section active">
+        <div class="stat-grid">
+          <article class="stat-card"><span>Total Sales</span><strong id="statSales">₱0</strong></article>
+          <article class="stat-card"><span>Cash</span><strong id="statCash">₱0</strong></article>
+          <article class="stat-card"><span>GCash</span><strong id="statGcash">₱0</strong></article>
+          <article class="stat-card"><span>Expenses</span><strong id="statExpenses">₱0</strong></article>
+          <article class="stat-card"><span>Net</span><strong id="statNet">₱0</strong></article>
+        </div>
+        <div class="panel">
+          <div class="panel-header"><h2>Recent sales</h2><span id="txCount" class="badge">0 transactions</span></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Date</th><th>Reference</th><th>Items</th><th>Payment</th><th>GCash Ref</th><th>Total</th><th>Receipt</th></tr></thead>
+              <tbody id="salesBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="expensesSection" class="admin-section">
+        <div class="panel">
+          <div class="panel-header"><h2>Add expense</h2></div>
+          <form id="expenseForm" class="form-grid">
+            <label class="field"><span>Date</span><input id="expenseDate" type="date" required></label>
+            <label class="field"><span>Category</span><input id="expenseCategory" placeholder="Fuel, Utilities, Supplies…" required></label>
+            <label class="field"><span>Amount</span><input id="expenseAmount" type="number" min="0.01" step="0.01" placeholder="0.00" required></label>
+            <div class="actions"><button class="primary-button">Add Expense</button></div>
+            <label class="field span-2"><span>Note</span><input id="expenseNote" placeholder="Optional details"></label>
+          </form>
+        </div>
+        <div class="panel" style="margin-top:16px">
+          <div class="panel-header"><h2>Expense history</h2></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Date</th><th>Category</th><th>Note</th><th>Amount</th><th></th></tr></thead>
+              <tbody id="expenseBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="usedSection" class="admin-section">
+        <div class="panel">
+          <div class="panel-header"><h2>Used price options</h2></div>
+          <form id="usedForm" class="form-grid">
+            <label class="field span-2"><span>Button label</span><input id="usedLabel" placeholder="Example: Used Gallon - Good" required></label>
+            <label class="field"><span>Price</span><input id="usedPrice" type="number" min="0.01" step="0.01" required></label>
+            <div class="actions"><button class="primary-button">Add Used Price</button></div>
+          </form>
+          <div id="usedList" class="list-stack"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="receiptModal" class="receipt-modal">
+    <div class="receipt-box">
+      <div class="dialog-header"><div><p class="eyebrow">GCASH CROSS-CHECK</p><h2>Receipt image</h2></div><button id="closeReceipt" class="icon-button">×</button></div>
+      <img id="receiptImage" alt="GCash receipt">
+    </div>
+  </dialog>
+  <div id="toast" class="toast"></div>
+  <script src="/admin.js"></script>
+</body>
+</html>
