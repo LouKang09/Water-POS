@@ -88,4 +88,16 @@ h2{margin:0;font-size:1.15rem}
 .text-button{border:0;background:none;color:var(--brand);font-weight:800;font-size:.7rem}
 .toast{position:fixed;left:50%;bottom:25px;z-index:100;transform:translate(-50%,18px);opacity:0;background:#17302e;color:#fff;border-radius:12px;padding:10px 13px;font-size:.74rem;pointer-events:none;transition:.18s}
 .toast.show{opacity:1;transform:translate(-50%,0)}
-@media(min-width:720px){.queue-shell{padding-top:20px}.queue-card{padding:20px}}
+
+.auth-tabs{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:16px 0 4px;padding:4px;border-radius:14px;background:var(--soft)}
+.auth-tab{border:0;border-radius:10px;background:transparent;color:var(--muted);padding:10px 8px;font-size:.74rem;font-weight:850}
+.auth-tab.active{background:#fff;color:var(--brand);box-shadow:0 3px 12px rgba(24,67,64,.08)}
+.auth-tab:disabled{opacity:.45;cursor:not-allowed}
+.auth-form{margin-top:8px}
+.auth-link{width:100%;border:0;background:none;color:var(--brand);padding:12px 4px 2px;font-size:.69rem;font-weight:800;text-align:center}
+.legacy-note{display:grid;gap:4px;margin:12px 0 4px;padding:11px 12px;border:1px solid #efd89b;border-radius:13px;background:#fff8e6}
+.legacy-note strong{font-size:.75rem;color:#6f5100}
+.legacy-note span{font-size:.67rem;color:#7c6a38;line-height:1.45}
+.account-card .primary-button{margin-top:3px}
+
+@media(min-width:720px){.queue-shell{padding-top:20px}.queue-card{padding:20px}.account-card{max-width:520px;margin-left:auto;margin-right:auto}}
