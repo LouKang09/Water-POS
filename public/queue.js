@@ -39,6 +39,63 @@ async function api(url,opts={}){
   return data;
 }
 
+async function authRequest(url,body){
+  const res=await fetch(url,{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify(body)
+  });
+  const data=await res.json().catch(()=>({}));
+  if(!res.ok){
+    const err=new Error(data.error||"Unable to continue.");
+    err.code=data.code||"";
+    throw err;
+  }
+  return data;
+}
+
+function saveSession(result){
+  tenantToken=result.token;
+  localStorage.setItem(tokenKey,tenantToken);
+  state.account=result.account;
+  renderAccount();
+  updateSummary();
+  loadHistory();
+}
+
+function clearSession(){
+  tenantToken="";
+  localStorage.removeItem(tokenKey);
+  state.account=null;
+  renderAccount();
+  showAuthMode("login");
+}
+
+function showAuthMode(mode){
+  const login=mode==="login";
+  const signup=mode==="signup";
+  const legacy=mode==="legacy";
+
+  $("#loginForm").classList.toggle("hidden",!login);
+  $("#accountForm").classList.toggle("hidden",!signup);
+  $("#legacyForm").classList.toggle("hidden",!legacy);
+  $("#loginTab").classList.toggle("active",login);
+  $("#signupTab").classList.toggle("active",signup);
+  $("#loginTab").disabled=legacy;
+  $("#signupTab").disabled=legacy;
+
+  if(login){
+    $("#authTitle").textContent="Existing User Login";
+    $("#authDescription").textContent="Sign in with the phone number and password registered to your tenant account.";
+  }else if(signup){
+    $("#authTitle").textContent="Create Tenant Account";
+    $("#authDescription").textContent="Register your name, phone, unit number, and password to request delivery online.";
+  }else{
+    $("#authTitle").textContent="Set Password for Existing Preview Account";
+    $("#authDescription").textContent="Use this only if your account was created before tenant login was added.";
+  }
+}
+
 function normalizeReference(value,provider=selectedProvider()){
   const raw=String(value||"").toUpperCase();
   const cleaned=raw.split("").filter(ch=>
@@ -244,8 +301,7 @@ function updateSummary(){
   }
   $("#summaryPayment").textContent=paymentText;
 
-  const digitalReady=state.payment==="Cash" ||
-    (selectedProvider() && state.receiptFile);
+  const digitalReady=state.payment==="Cash" || (selectedProvider() && state.receiptFile);
   $("#submitRequest").disabled=!digitalReady;
 }
 
@@ -319,7 +375,7 @@ async function submitRequest(){
   button.disabled=true;
   button.textContent="Sending request…";
   try{
-    const result=await api("/api/queue/requests",{method:"POST",body:fd});
+    await api("/api/queue/requests",{method:"POST",body:fd});
     toast("Delivery request added to the queue.");
     state.qty=1;
     state.price=25;
@@ -336,32 +392,106 @@ async function submitRequest(){
   }
 }
 
+$("#loginTab").addEventListener("click",()=>showAuthMode("login"));
+$("#signupTab").addEventListener("click",()=>showAuthMode("signup"));
+$("#showLegacySetup").addEventListener("click",()=>{
+  $("#legacyPhone").value=$("#loginPhone").value;
+  showAuthMode("legacy");
+});
+$("#backToLogin").addEventListener("click",()=>showAuthMode("login"));
+
+$("#loginForm").addEventListener("submit",async e=>{
+  e.preventDefault();
+  $("#loginError").textContent="";
+  const button=e.submitter;
+  button.disabled=true;
+  button.textContent="Logging in…";
+  try{
+    const result=await authRequest("/api/queue/login",{
+      phone:$("#loginPhone").value,
+      password:$("#loginPassword").value
+    });
+    saveSession(result);
+    e.target.reset();
+  }catch(err){
+    if(err.code==="LEGACY_SETUP"){
+      $("#legacyPhone").value=$("#loginPhone").value;
+      showAuthMode("legacy");
+      $("#legacyError").textContent=err.message;
+    }else{
+      $("#loginError").textContent=err.message;
+    }
+  }finally{
+    button.disabled=false;
+    button.textContent="Log In";
+  }
+});
+
 $("#accountForm").addEventListener("submit",async e=>{
   e.preventDefault();
   $("#accountError").textContent="";
+  const password=$("#tenantPassword").value;
+  if(password!==$("#tenantPasswordConfirm").value){
+    $("#accountError").textContent="Passwords do not match.";
+    return;
+  }
+  const button=e.submitter;
+  button.disabled=true;
+  button.textContent="Creating account…";
   try{
-    const result=await api("/api/queue/account",{method:"POST",body:{
+    const result=await authRequest("/api/queue/account",{
       name:$("#tenantName").value,
       phone:$("#tenantPhone").value,
-      unitNo:$("#tenantUnit").value
-    }});
-    tenantToken=result.token;
-    localStorage.setItem(tokenKey,tenantToken);
-    state.account=result.account;
-    renderAccount();
-    updateSummary();
-    await loadHistory();
+      unitNo:$("#tenantUnit").value,
+      password
+    });
+    saveSession(result);
+    e.target.reset();
   }catch(err){
     $("#accountError").textContent=err.message;
+    if(err.code==="LEGACY_ACCOUNT"){
+      $("#legacyPhone").value=$("#tenantPhone").value;
+      $("#legacyUnit").value=$("#tenantUnit").value;
+      showAuthMode("legacy");
+      $("#legacyError").textContent=err.message;
+    }
+  }finally{
+    button.disabled=false;
+    button.textContent="Create Account";
+  }
+});
+
+$("#legacyForm").addEventListener("submit",async e=>{
+  e.preventDefault();
+  $("#legacyError").textContent="";
+  const password=$("#legacyPassword").value;
+  if(password!==$("#legacyPasswordConfirm").value){
+    $("#legacyError").textContent="Passwords do not match.";
+    return;
+  }
+  const button=e.submitter;
+  button.disabled=true;
+  button.textContent="Setting password…";
+  try{
+    const result=await authRequest("/api/queue/claim",{
+      phone:$("#legacyPhone").value,
+      unitNo:$("#legacyUnit").value,
+      password
+    });
+    saveSession(result);
+    e.target.reset();
+    toast("Password created. You are logged in.");
+  }catch(err){
+    $("#legacyError").textContent=err.message;
+  }finally{
+    button.disabled=false;
+    button.textContent="Set Password & Log In";
   }
 });
 
 $("#changeAccount").addEventListener("click",()=>{
-  if(!confirm("Use a different tenant account on this device?")) return;
-  tenantToken="";
-  localStorage.removeItem(tokenKey);
-  state.account=null;
-  renderAccount();
+  if(!confirm("Log out of this tenant account?")) return;
+  clearSession();
 });
 
 document.querySelectorAll(".price-option").forEach(btn=>btn.addEventListener("click",()=>{
@@ -389,6 +519,7 @@ $("#submitRequest").addEventListener("click",submitRequest);
 $("#refreshHistory").addEventListener("click",loadHistory);
 
 (async function init(){
+  showAuthMode("login");
   renderAccount();
   updateSummary();
   if(!tenantToken) return;
@@ -397,9 +528,6 @@ $("#refreshHistory").addEventListener("click",loadHistory);
     renderAccount();
     await loadHistory();
   }catch{
-    tenantToken="";
-    localStorage.removeItem(tokenKey);
-    state.account=null;
-    renderAccount();
+    clearSession();
   }
 })();
