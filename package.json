@@ -1,11 +1,11 @@
 {
   "name": "water-pos",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "description": "Mobile-first water refilling POS with authenticated cashier, online delivery, sales and expense dashboard",
   "main": "server.js",
   "scripts": {
-    "start": "node -r ./pos-auth.js -r ./tenant-auth.js server.js"
+    "start": "node -r ./pos-auth.js -r ./tenant-auth.js -r ./admin-control.js server.js"
   },
   "engines": {
     "node": ">=20"
