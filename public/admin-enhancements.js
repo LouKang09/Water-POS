@@ -42,7 +42,7 @@ function ensureAdminUserControl() {
       <div class="panel account-control-panel">
         <div class="panel-header">
           <div class="panel-header-copy">
-            <h2>Admin User Control</h2>
+            <h2>Admin Login</h2>
             <p>Update the email or password used to sign in to this Admin dashboard.</p>
           </div>
           <span class="badge">Admin account</span>
@@ -70,6 +70,19 @@ function ensureAdminUserControl() {
             <button id="saveAdminAccount" type="submit" class="primary-button">Save Admin Login</button>
           </div>
         </form>
+      </div>
+
+      <div class="panel account-control-panel" style="margin-top:16px">
+        <div class="panel-header">
+          <div class="panel-header-copy">
+            <h2>POS User Accounts</h2>
+            <p>Edit the name, login email, or password used by POS/cashier users on the website and Android app.</p>
+          </div>
+          <span id="posUserCount" class="badge">0 users</span>
+        </div>
+        <div id="posUserList" class="pos-user-control-list">
+          <div class="empty-state">Loading POS users…</div>
+        </div>
       </div>`;
     main.appendChild(section);
   }
@@ -84,7 +97,7 @@ function ensureAdminUserControl() {
     const state = document.createElement("div");
     state.id = "adminRefreshState";
     state.className = "admin-refresh-state";
-    state.innerHTML = '<span class="live-dot"></span><span>Auto refresh every 30s</span><small id="adminLastRefresh">Waiting for sign in</small>';
+    state.innerHTML = '<span class="live-dot"></span><span>Sales auto refresh every 30s</span><small id="adminLastRefresh">Waiting for sign in</small>';
     top.appendChild(state);
   }
 }
@@ -116,11 +129,67 @@ function markAdminRefreshed() {
   el.textContent = "Updated " + new Date().toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit", second: "2-digit" });
 }
 
-async function loadAdminAccount() {
+function renderPosUsers(rows) {
+  const list = document.querySelector("#posUserList");
+  const count = document.querySelector("#posUserCount");
+  if (count) count.textContent = rows.length + " user" + (rows.length === 1 ? "" : "s");
+  if (!list) return;
+  if (!rows.length) {
+    list.innerHTML = '<div class="empty-state">No POS user exists yet. The first POS login screen will create one.</div>';
+    return;
+  }
+
+  list.innerHTML = rows.map(user => {
+    const lastLogin = user.last_login_at
+      ? new Date(user.last_login_at).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Manila" })
+      : "Never";
+    return `
+      <form class="pos-user-editor" data-id="${user.id}">
+        <div class="pos-user-editor-head">
+          <div>
+            <strong>POS User #${user.id}</strong>
+            <small>Last login: ${escapeHtml(lastLogin)}</small>
+          </div>
+          <span class="badge">${user.active ? "Active" : "Inactive"}</span>
+        </div>
+        <div class="account-control-form">
+          <label class="field">
+            <span>Name</span>
+            <input class="pos-user-name" value="${escapeHtml(user.name || "")}" maxlength="120" required>
+          </label>
+          <label class="field">
+            <span>Login Email</span>
+            <input class="pos-user-email" type="email" value="${escapeHtml(user.email || "")}" required autocomplete="off">
+          </label>
+          <label class="field">
+            <span>New Password</span>
+            <input class="pos-user-password" type="password" minlength="8" autocomplete="new-password" placeholder="Leave blank to keep current password">
+            <small>Optional. Use at least 8 characters if changing it.</small>
+          </label>
+          <label class="field">
+            <span>Confirm New Password</span>
+            <input class="pos-user-confirm" type="password" minlength="8" autocomplete="new-password" placeholder="Repeat new password">
+          </label>
+          <div class="pos-user-error error-text span-2"></div>
+          <div class="account-control-actions span-2">
+            <button type="submit" class="primary-button save-pos-user">Save POS User</button>
+          </div>
+        </div>
+      </form>`;
+  }).join("");
+
+  list.querySelectorAll(".pos-user-password,.pos-user-confirm").forEach(input => addPasswordToggle(input));
+}
+
+async function loadUserControl() {
   if (!token) return;
-  const data = await api("/api/admin/account");
+  const [account, posUsers] = await Promise.all([
+    api("/api/admin/account"),
+    api("/api/admin/pos-users")
+  ]);
   const input = document.querySelector("#adminAccountEmail");
-  if (input && document.activeElement !== input) input.value = data.email || "";
+  if (input && document.activeElement !== input) input.value = account.email || "";
+  renderPosUsers(posUsers);
 }
 
 async function refreshAdminSection(section = adminActiveSection, silent = false) {
@@ -134,7 +203,7 @@ async function refreshAdminSection(section = adminActiveSection, silent = false)
     } else if (section === "used") {
       await loadUsed();
     } else if (section === "account") {
-      await loadAdminAccount();
+      await loadUserControl();
     }
     markAdminRefreshed();
   } catch (error) {
@@ -192,7 +261,7 @@ function bindAdminEnhancements() {
       document.querySelector("#adminNewPassword").value = "";
       document.querySelector("#adminConfirmPassword").value = "";
       toast(result.passwordChanged ? "Admin email/password updated." : "Admin email updated.");
-      await loadAdminAccount();
+      await loadUserControl();
       markAdminRefreshed();
     } catch (error) {
       errorEl.textContent = error.message;
@@ -202,18 +271,53 @@ function bindAdminEnhancements() {
     }
   });
 
+  document.querySelector("#accountSection")?.addEventListener("submit", async event => {
+    const form = event.target.closest(".pos-user-editor");
+    if (!form) return;
+    event.preventDefault();
+    const errorEl = form.querySelector(".pos-user-error");
+    errorEl.textContent = "";
+    const newPassword = form.querySelector(".pos-user-password").value;
+    const confirmPassword = form.querySelector(".pos-user-confirm").value;
+    if (newPassword !== confirmPassword) {
+      errorEl.textContent = "New POS passwords do not match.";
+      return;
+    }
+
+    const button = form.querySelector(".save-pos-user");
+    button.disabled = true;
+    button.textContent = "Saving…";
+    try {
+      const result = await api("/api/admin/pos-users/" + form.dataset.id, {
+        method: "PATCH",
+        body: {
+          name: form.querySelector(".pos-user-name").value.trim(),
+          email: form.querySelector(".pos-user-email").value.trim(),
+          newPassword
+        }
+      });
+      toast(result.passwordChanged ? "POS user email/password updated." : "POS user updated.");
+      await loadUserControl();
+      markAdminRefreshed();
+    } catch (error) {
+      errorEl.textContent = error.message;
+    } finally {
+      button.disabled = false;
+      button.textContent = "Save POS User";
+    }
+  });
+
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible" && token) refreshAdminSection(adminActiveSection, true);
+    if (document.visibilityState === "visible" && token && adminActiveSection !== "account") {
+      refreshAdminSection(adminActiveSection, true);
+    }
   });
   window.addEventListener("focus", () => {
-    if (token) refreshAdminSection(adminActiveSection, true);
+    if (token && adminActiveSection === "sales") refreshAdminSection("sales", true);
   });
 
   startAdminAutoRefresh();
-  if (token) {
-    loadAdminAccount().catch(() => {});
-    markAdminRefreshed();
-  }
+  if (token) markAdminRefreshed();
 }
 
 ensureAdminUserControl();
