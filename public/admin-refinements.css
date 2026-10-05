@@ -1,0 +1,204 @@
+/* Final desktop refinements for Admin User Control and Manual Transaction */
+#accountSection,
+#manualSection{
+  max-width:980px;
+}
+
+.account-control-panel{
+  max-width:760px!important;
+  overflow:hidden;
+}
+.manual-transaction-panel{
+  max-width:880px!important;
+  overflow:hidden;
+}
+
+.account-control-panel .panel-header,
+.manual-transaction-panel .panel-header{
+  padding:14px 18px!important;
+}
+.account-control-panel .panel-header h2,
+.manual-transaction-panel .panel-header h2{
+  font-size:1rem!important;
+  line-height:1.2;
+}
+.account-control-panel .panel-header p,
+.manual-transaction-panel .panel-header p{
+  margin-top:4px!important;
+  font-size:.68rem!important;
+  line-height:1.35!important;
+}
+.account-control-panel .badge,
+.manual-transaction-panel .badge{
+  font-size:.62rem!important;
+  padding:6px 9px!important;
+}
+
+.account-control-form{
+  margin:0!important;
+  padding:14px 18px 16px!important;
+  gap:10px 14px!important;
+}
+.account-control-form .field,
+.manual-meta-grid .field{
+  margin:0!important;
+  gap:5px!important;
+}
+.account-control-form .field>span,
+.manual-meta-grid .field>span,
+.manual-item-row label>span{
+  font-size:.68rem!important;
+  line-height:1.2;
+}
+.account-control-form input,
+.manual-meta-grid input,
+.manual-meta-grid select,
+.manual-item-row input,
+.manual-item-row select{
+  min-height:38px!important;
+  height:38px!important;
+  padding:0 11px!important;
+  border-radius:9px!important;
+  font-size:.78rem!important;
+}
+.account-control-form .field small{
+  font-size:.61rem!important;
+  margin-top:0!important;
+}
+.password-toggle{
+  right:4px!important;
+  font-size:.62rem!important;
+  padding:4px 6px!important;
+}
+.password-control input{
+  padding-right:52px!important;
+}
+.account-control-actions{
+  padding-top:2px!important;
+}
+.account-control-actions .primary-button,
+.manual-form-footer .primary-button{
+  min-width:132px!important;
+  min-height:36px!important;
+  height:36px!important;
+  padding:0 14px!important;
+  border-radius:10px!important;
+  font-size:.72rem!important;
+}
+
+.pos-users-panel{
+  margin-top:12px!important;
+}
+.pos-user-control-list{
+  margin:0!important;
+  padding:12px 14px 14px!important;
+  gap:8px!important;
+}
+.pos-user-editor{
+  padding:11px!important;
+  border-radius:12px!important;
+}
+.pos-user-editor-head{
+  padding-bottom:8px!important;
+  gap:8px!important;
+}
+.pos-user-editor-head strong{
+  font-size:.76rem!important;
+}
+.pos-user-editor-head small{
+  font-size:.6rem!important;
+}
+.pos-user-editor .account-control-form{
+  padding:10px 0 0!important;
+}
+
+.manual-transaction-form{
+  margin:0!important;
+}
+.manual-meta-grid{
+  padding:14px 16px 4px!important;
+  gap:10px 12px!important;
+}
+.manual-items-head{
+  margin:8px 16px 0!important;
+  padding:11px 0 0!important;
+}
+.manual-items-head strong{
+  font-size:.75rem!important;
+}
+.manual-items-head small{
+  font-size:.61rem!important;
+}
+.manual-items-head .small-button{
+  height:34px!important;
+  padding:0 11px!important;
+  border-radius:9px!important;
+  font-size:.68rem!important;
+}
+.manual-item-list{
+  margin:8px 0 0!important;
+  padding:0 16px!important;
+  gap:7px!important;
+}
+.manual-item-row{
+  grid-template-columns:122px minmax(190px,1fr) 92px 70px 32px!important;
+  gap:8px!important;
+  padding:9px!important;
+  border-radius:10px!important;
+}
+.manual-item-row label{
+  gap:4px!important;
+}
+.manual-item-row .manual-item-price[readonly]{
+  background:#f0f5f4!important;
+  color:#526664!important;
+  cursor:default;
+}
+.manual-item-remove{
+  width:32px!important;
+  height:38px!important;
+  border-radius:9px!important;
+  font-size:.9rem!important;
+}
+.manual-form-footer{
+  margin:10px 0 0!important;
+  padding:0 16px 14px!important;
+  gap:10px!important;
+}
+.manual-total strong{
+  font-size:1rem!important;
+}
+.manual-total span{
+  font-size:.58rem!important;
+}
+
+.custom-print-range{
+  max-width:760px;
+}
+
+@media(max-width:1100px){
+  .manual-item-row{
+    grid-template-columns:115px minmax(170px,1fr) 86px 68px 32px!important;
+  }
+}
+
+@media(max-width:900px){
+  .account-control-panel,
+  .manual-transaction-panel{
+    max-width:none!important;
+  }
+  .account-control-form,
+  .manual-meta-grid{
+    grid-template-columns:1fr!important;
+  }
+  .manual-item-row{
+    grid-template-columns:1fr 1fr!important;
+  }
+  .manual-item-label-wrap{
+    grid-column:1/-1!important;
+  }
+  .manual-item-remove{
+    grid-column:2!important;
+    justify-self:end!important;
+  }
+}
