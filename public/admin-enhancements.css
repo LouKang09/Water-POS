@@ -45,7 +45,7 @@
   box-shadow:0 0 0 3px rgba(27,156,104,.12);
 }
 .account-control-panel{
-  max-width:860px;
+  max-width:900px;
 }
 .account-control-form{
   display:grid;
@@ -65,6 +65,36 @@
 }
 .account-control-actions .primary-button{
   min-width:180px;
+}
+.pos-user-control-list{
+  display:grid;
+  gap:14px;
+  margin-top:14px;
+}
+.pos-user-editor{
+  border:1px solid var(--line,#dce7e6);
+  border-radius:16px;
+  padding:14px;
+  background:#fbfdfd;
+}
+.pos-user-editor-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+  padding-bottom:10px;
+  border-bottom:1px solid var(--line,#dce7e6);
+}
+.pos-user-editor-head>div{
+  display:grid;
+  gap:3px;
+}
+.pos-user-editor-head strong{
+  font-size:.84rem;
+}
+.pos-user-editor-head small{
+  color:var(--muted,#6f7c7b);
+  font-size:.68rem;
 }
 @media(max-width:900px){
   .account-control-form{grid-template-columns:1fr;}
