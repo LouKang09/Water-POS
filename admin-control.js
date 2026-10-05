@@ -135,6 +135,70 @@ function addRoutes(app) {
       res.status(500).json({ error: "Unable to update the admin account." });
     }
   });
+
+  baseGet.call(app, "/api/admin/pos-users", strictAdminGuard, async (req, res) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT id,name,email,active,created_at,last_login_at
+         FROM pos_users
+         ORDER BY id ASC`
+      );
+      res.json(rows);
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: "Unable to load POS users." });
+    }
+  });
+
+  basePatch.call(app, "/api/admin/pos-users/:id", strictAdminGuard, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid POS user." });
+
+      const existing = await pool.query(
+        "SELECT id,name,email,password_hash,salt,active FROM pos_users WHERE id=$1 LIMIT 1",
+        [id]
+      );
+      if (!existing.rows.length) return res.status(404).json({ error: "POS user not found." });
+
+      const current = existing.rows[0];
+      const name = String(req.body.name || current.name).trim().slice(0, 120);
+      const email = String(req.body.email || current.email).trim().toLowerCase();
+      const newPassword = String(req.body.newPassword || "");
+
+      if (name.length < 2) return res.status(400).json({ error: "Enter the POS user's name." });
+      if (!validEmail(email)) return res.status(400).json({ error: "Enter a valid POS user email." });
+      if (newPassword && newPassword.length < 8) {
+        return res.status(400).json({ error: "Use at least 8 characters for the new POS password." });
+      }
+
+      const conflict = await pool.query(
+        "SELECT id FROM pos_users WHERE email=$1 AND id<>$2 LIMIT 1",
+        [email, id]
+      );
+      if (conflict.rows.length) return res.status(409).json({ error: "That POS email is already in use." });
+
+      let passwordHash = current.password_hash;
+      let salt = current.salt;
+      if (newPassword) {
+        const secure = makePasswordHash(newPassword);
+        passwordHash = secure.hash;
+        salt = secure.salt;
+      }
+
+      const { rows } = await pool.query(
+        `UPDATE pos_users
+         SET name=$1,email=$2,password_hash=$3,salt=$4
+         WHERE id=$5
+         RETURNING id,name,email,active,created_at,last_login_at`,
+        [name, email, passwordHash, salt, id]
+      );
+      res.json({ ...rows[0], passwordChanged: Boolean(newPassword) });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: "Unable to update the POS user." });
+    }
+  });
 }
 
 express.application.listen = function(...args) {
