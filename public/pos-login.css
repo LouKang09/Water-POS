@@ -9,6 +9,10 @@
 .login-notice strong{font-size:.78rem;color:var(--brand)}
 .login-notice span{font-size:.7rem;color:var(--muted);line-height:1.4}
 .pos-login-form{display:grid;gap:2px}
+.pos-password-control{position:relative;display:flex;align-items:center}
+.pos-password-control input{width:100%;padding-right:68px!important}
+.pos-password-toggle{position:absolute;right:8px;top:50%;transform:translateY(-50%);border:0;background:transparent;color:var(--brand);font-size:.72rem;font-weight:850;padding:7px 8px;border-radius:8px;cursor:pointer}
+.pos-password-toggle:hover,.pos-password-toggle:focus-visible{background:rgba(13,107,105,.08);outline:none}
 .login-error{min-height:18px;margin:8px 0 4px;color:#b33f3f;font-size:.72rem}
 .login-footnote{margin:15px 0 0;padding-top:13px;border-top:1px solid var(--line);color:var(--muted);font-size:.66rem;line-height:1.5;text-align:center}
 @media(max-width:480px){.pos-login-page{padding:0}.pos-login-shell{width:100%;min-height:100dvh}.pos-login-card{min-height:100dvh;border:0;border-radius:0;padding:24px 18px calc(28px + env(safe-area-inset-bottom));display:flex;flex-direction:column;justify-content:center}.pos-login-brand{margin-bottom:20px}}
