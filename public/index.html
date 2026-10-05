@@ -5,19 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0d6b69">
   <title>Water POS</title>
-  <link rel="stylesheet" href="/styles.css?v=20260929-13">
+  <link rel="stylesheet" href="/styles.css?v=20261005-1">
 </head>
 <body class="pos-page">
   <header class="pos-header">
     <div>
       <p class="eyebrow">WATER REFILLING STATION</p>
       <h1>Water POS</h1>
+      <small class="pos-user-line">Signed in as <strong id="posUserLabel">POS User</strong></small>
     </div>
     <div class="pos-header-actions">
       <button id="onlineQueueBtn" class="queue-header-button" type="button">
         Online Queue <span id="onlineQueueCount">0</span>
       </button>
       <a href="/admin.html" class="admin-link">Admin</a>
+      <button id="posLogoutBtn" class="admin-link pos-logout-button" type="button">Logout</button>
     </div>
   </header>
 
@@ -70,7 +72,7 @@
     <div class="queue-sheet">
       <div class="dialog-header queue-dialog-header">
         <div>
-          <p class="eyebrow">PREVIEW · TENANT REQUESTS</p>
+          <p class="eyebrow">ONLINE DELIVERY REQUESTS</p>
           <h2>Online Queue</h2>
           <p class="queue-dialog-copy">Delivery requests submitted from the tenant website.</p>
         </div>
@@ -175,7 +177,8 @@
   </dialog>
 
   <div id="toast" class="toast" role="status"></div>
+  <script src="/pos-auth.js?v=20261005-1"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="/app.js?v=20260929-13"></script>
+  <script src="/app.js?v=20261005-1"></script>
 </body>
 </html>
