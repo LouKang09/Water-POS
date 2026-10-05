@@ -3,11 +3,15 @@ package com.waterpos.mobile;
 import android.app.Activity;
 import android.app.ActivityManager;
 import android.app.AlertDialog;
+import android.app.admin.DevicePolicyManager;
+import android.content.ComponentName;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ResolveInfo;
 import android.graphics.Color;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
@@ -22,8 +26,13 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Toast;
 
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
 public class MainActivity extends Activity {
     private static final String POS_URL = "https://water-pos-web-production.up.railway.app/";
+    private static final String POS_LOGIN_URL = "https://water-pos-web-production.up.railway.app/pos-login.html";
     private static final String POS_HOST = "water-pos-web-production.up.railway.app";
     private static final int FILE_CHOOSER_REQUEST = 9001;
 
@@ -32,10 +41,16 @@ public class MainActivity extends Activity {
     private Uri cameraUri;
     private boolean resumeKioskAfterChooser = false;
     private boolean exitRequested = false;
+    private DevicePolicyManager devicePolicyManager;
+    private ComponentName adminComponent;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        devicePolicyManager = (DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
+        adminComponent = new ComponentName(this, KioskDeviceAdminReceiver.class);
+        configureDedicatedKiosk();
 
         Window window = getWindow();
         window.setStatusBarColor(Color.rgb(13, 107, 105));
@@ -57,7 +72,7 @@ public class MainActivity extends Activity {
         settings.setUseWideViewPort(true);
         settings.setMediaPlaybackRequiresUserGesture(true);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        settings.setUserAgentString(settings.getUserAgentString() + " WaterPOSAndroid/1.1");
+        settings.setUserAgentString(settings.getUserAgentString() + " WaterPOSAndroid/1.2");
 
         CookieManager cookieManager = CookieManager.getInstance();
         cookieManager.setAcceptCookie(true);
@@ -79,8 +94,8 @@ public class MainActivity extends Activity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
-                injectExitButton();
-                hideSystemUi();
+                injectNativeControls();
+                enterKioskMode();
             }
         });
 
@@ -91,25 +106,26 @@ public class MainActivity extends Activity {
                 fileCallback = uploadCallback;
 
                 Intent cameraIntent = buildCameraIntent();
+                Intent galleryIntent = new Intent(Intent.ACTION_GET_CONTENT);
+                galleryIntent.addCategory(Intent.CATEGORY_OPENABLE);
+                galleryIntent.setType("image/*");
+
                 resumeKioskAfterChooser = true;
-                leaveKioskTemporarily();
 
                 if (fileChooserParams != null && fileChooserParams.isCaptureEnabled() && cameraIntent != null) {
+                    prepareExternalPicker(cameraIntent);
                     try {
                         startActivityForResult(cameraIntent, FILE_CHOOSER_REQUEST);
                         return true;
                     } catch (Exception ignored) {}
                 }
 
-                Intent galleryIntent = new Intent(Intent.ACTION_GET_CONTENT);
-                galleryIntent.addCategory(Intent.CATEGORY_OPENABLE);
-                galleryIntent.setType("image/*");
-
                 Intent chooser = Intent.createChooser(galleryIntent, "Select receipt image");
                 if (cameraIntent != null) {
                     chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[]{cameraIntent});
                 }
 
+                prepareExternalPicker(galleryIntent, cameraIntent, chooser);
                 try {
                     startActivityForResult(chooser, FILE_CHOOSER_REQUEST);
                     return true;
@@ -117,6 +133,7 @@ public class MainActivity extends Activity {
                     fileCallback.onReceiveValue(null);
                     fileCallback = null;
                     resumeKioskAfterChooser = false;
+                    restoreDedicatedKioskPackages();
                     enterKioskMode();
                     return false;
                 }
@@ -130,6 +147,53 @@ public class MainActivity extends Activity {
         }
 
         enterKioskMode();
+    }
+
+    private boolean isDedicatedKiosk() {
+        return devicePolicyManager != null && devicePolicyManager.isDeviceOwnerApp(getPackageName());
+    }
+
+    private void configureDedicatedKiosk() {
+        if (!isDedicatedKiosk()) return;
+        try {
+            devicePolicyManager.setLockTaskPackages(adminComponent, new String[]{getPackageName()});
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                devicePolicyManager.setLockTaskFeatures(adminComponent, DevicePolicyManager.LOCK_TASK_FEATURE_NONE);
+            }
+            devicePolicyManager.setStatusBarDisabled(adminComponent, true);
+            devicePolicyManager.setKeyguardDisabled(adminComponent, true);
+        } catch (Exception ignored) {}
+    }
+
+    private void restoreDedicatedKioskPackages() {
+        if (!isDedicatedKiosk()) return;
+        try {
+            devicePolicyManager.setLockTaskPackages(adminComponent, new String[]{getPackageName()});
+        } catch (Exception ignored) {}
+    }
+
+    private void prepareExternalPicker(Intent... intents) {
+        if (!isDedicatedKiosk()) {
+            leaveKioskTemporarily();
+            return;
+        }
+
+        try {
+            Set<String> allowed = new HashSet<>();
+            allowed.add(getPackageName());
+            if (intents != null) {
+                for (Intent intent : intents) {
+                    if (intent == null) continue;
+                    List<ResolveInfo> matches = getPackageManager().queryIntentActivities(intent, 0);
+                    for (ResolveInfo match : matches) {
+                        if (match.activityInfo != null && match.activityInfo.packageName != null) {
+                            allowed.add(match.activityInfo.packageName);
+                        }
+                    }
+                }
+            }
+            devicePolicyManager.setLockTaskPackages(adminComponent, allowed.toArray(new String[0]));
+        } catch (Exception ignored) {}
     }
 
     private void hideSystemUi() {
@@ -167,9 +231,11 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void injectExitButton() {
+    private void injectNativeControls() {
         if (webView == null) return;
         String script = "(function(){" +
+            "var logout=document.getElementById('posLogoutBtn');" +
+            "if(logout&&!logout.dataset.nativeLogout){logout.dataset.nativeLogout='1';logout.onclick=function(e){e.preventDefault();e.stopImmediatePropagation();AndroidPos.logoutApp();};}" +
             "if(document.getElementById('waterPosNativeExit'))return;" +
             "var b=document.createElement('button');" +
             "b.id='waterPosNativeExit';b.type='button';b.textContent='Exit App';" +
@@ -185,6 +251,17 @@ public class MainActivity extends Activity {
     }
 
     private class AndroidPosBridge {
+        @JavascriptInterface
+        public void logoutApp() {
+            runOnUiThread(() -> {
+                if (webView == null) return;
+                webView.evaluateJavascript(
+                    "localStorage.removeItem('water_pos_user_token');sessionStorage.clear();",
+                    value -> webView.loadUrl(POS_LOGIN_URL)
+                );
+            });
+        }
+
         @JavascriptInterface
         public void exitApp() {
             runOnUiThread(() -> new AlertDialog.Builder(MainActivity.this)
@@ -202,6 +279,12 @@ public class MainActivity extends Activity {
         if (isLockTaskActive()) {
             try {
                 stopLockTask();
+            } catch (Exception ignored) {}
+        }
+        if (isDedicatedKiosk()) {
+            try {
+                devicePolicyManager.setStatusBarDisabled(adminComponent, false);
+                devicePolicyManager.setKeyguardDisabled(adminComponent, false);
             } catch (Exception ignored) {}
         }
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
@@ -263,19 +346,26 @@ public class MainActivity extends Activity {
         fileCallback = null;
         cameraUri = null;
         resumeKioskAfterChooser = false;
+        restoreDedicatedKioskPackages();
         enterKioskMode();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        if (!resumeKioskAfterChooser) enterKioskMode();
+        if (!resumeKioskAfterChooser) {
+            restoreDedicatedKioskPackages();
+            enterKioskMode();
+        }
     }
 
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
-        if (hasFocus && !exitRequested && !resumeKioskAfterChooser) hideSystemUi();
+        if (hasFocus && !exitRequested && !resumeKioskAfterChooser) {
+            hideSystemUi();
+            if (isDedicatedKiosk() && !isLockTaskActive()) enterKioskMode();
+        }
     }
 
     @Override
