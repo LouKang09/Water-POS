@@ -94,7 +94,7 @@ function addRoutes(app) {
       const newPassword = String(req.body.newPassword || "");
 
       if (!verifyPassword(currentPassword, req.adminAccount.salt, req.adminAccount.password_hash)) {
-        return res.status(401).json({ error: "Current password is incorrect." });
+        return res.status(400).json({ error: "Current password is incorrect." });
       }
       if (!validEmail(newEmail)) {
         return res.status(400).json({ error: "Enter a valid admin email." });
