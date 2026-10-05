@@ -4,15 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0d6b69">
-  <title>Water Delivery Queue · Preview</title>
-  <link rel="stylesheet" href="/queue.css?v=20260930-2">
+  <title>Online Water Delivery</title>
+  <link rel="stylesheet" href="/queue.css?v=20261005-1">
 </head>
 <body>
   <header class="queue-header">
     <div>
-      <div class="preview-pill">PREVIEW</div>
       <p>WATER REFILLING STATION</p>
-      <h1>Online Delivery Queue</h1>
+      <h1>Online Water Delivery</h1>
     </div>
   </header>
 
@@ -32,7 +31,7 @@
         <label class="field"><span>Password</span><input id="loginPassword" required maxlength="100" type="password" autocomplete="current-password" placeholder="Your password"></label>
         <div id="loginError" class="error-text"></div>
         <button class="primary-button full">Log In</button>
-        <button id="showLegacySetup" class="auth-link" type="button">I already had a preview account before passwords were added</button>
+        <button id="showLegacySetup" class="auth-link" type="button">I already had an account before passwords were added</button>
       </form>
 
       <form id="accountForm" class="auth-form hidden">
@@ -47,7 +46,7 @@
 
       <form id="legacyForm" class="auth-form hidden">
         <div class="legacy-note">
-          <strong>Existing preview account</strong>
+          <strong>Existing early-access account</strong>
           <span>If you created an account before login was added, verify it once using your Phone + Unit #, then create your password.</span>
         </div>
         <label class="field"><span>Phone</span><input id="legacyPhone" required maxlength="20" inputmode="tel" autocomplete="tel" placeholder="09XXXXXXXXX"></label>
@@ -157,6 +156,6 @@
 
   <div id="queueToast" class="toast"></div>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="/queue.js?v=20260930-2"></script>
+  <script src="/queue.js?v=20261005-1"></script>
 </body>
 </html>
