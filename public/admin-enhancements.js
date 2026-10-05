@@ -23,8 +23,67 @@ function addPasswordToggle(input, label = "Show") {
   wrap.appendChild(button);
 }
 
-function ensureAdminUserControl() {
+function localDateTimeValue(date = new Date()) {
+  const pad = value => String(value).padStart(2, "0");
+  return [
+    date.getFullYear(), "-", pad(date.getMonth() + 1), "-", pad(date.getDate()),
+    "T", pad(date.getHours()), ":", pad(date.getMinutes())
+  ].join("");
+}
+
+function ensureCustomPrintRange() {
+  const toolbar = document.querySelector(".report-toolbar");
+  if (!toolbar || document.querySelector("#customPrintRange")) return;
+  const row = document.createElement("div");
+  row.id = "customPrintRange";
+  row.className = "custom-print-range";
+  row.innerHTML = `
+    <div class="custom-print-copy">
+      <strong>Custom date range</strong>
+      <small>Print any specific start and end date.</small>
+    </div>
+    <label><span>From</span><input id="customPrintFrom" type="date"></label>
+    <label><span>To</span><input id="customPrintTo" type="date"></label>
+    <button id="printCustomRange" type="button" class="small-button">Print Custom Range</button>`;
+  toolbar.insertAdjacentElement("afterend", row);
+
+  const todayValue = today();
+  document.querySelector("#customPrintFrom").value = document.querySelector("#fromDate")?.value || todayValue;
+  document.querySelector("#customPrintTo").value = document.querySelector("#toDate")?.value || todayValue;
+
+  if (typeof window.reportRange === "function" && !window.__waterPosCustomRangeInstalled) {
+    const originalReportRange = window.reportRange;
+    window.reportRange = function(period) {
+      if (period === "custom") {
+        return {
+          from: document.querySelector("#customPrintFrom")?.value || today(),
+          to: document.querySelector("#customPrintTo")?.value || today(),
+          label: "Custom"
+        };
+      }
+      return originalReportRange(period);
+    };
+    window.__waterPosCustomRangeInstalled = true;
+  }
+
+  document.querySelector("#printCustomRange").addEventListener("click", () => {
+    const from = document.querySelector("#customPrintFrom").value;
+    const to = document.querySelector("#customPrintTo").value;
+    if (!from || !to) return toast("Choose both custom report dates.");
+    if (from > to) return toast("Custom report From date cannot be after To date.");
+    printSalesReport("custom");
+  });
+}
+
+function ensureAdminSections() {
   const nav = document.querySelector(".side-nav");
+  if (nav && !nav.querySelector('[data-section="manual"]')) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.section = "manual";
+    button.textContent = "Manual Transaction";
+    nav.appendChild(button);
+  }
   if (nav && !nav.querySelector('[data-section="account"]')) {
     const button = document.createElement("button");
     button.type = "button";
@@ -33,8 +92,72 @@ function ensureAdminUserControl() {
     nav.appendChild(button);
   }
 
-  if (!document.querySelector("#accountSection")) {
-    const main = document.querySelector(".admin-main");
+  const main = document.querySelector(".admin-main");
+  if (main && !document.querySelector("#manualSection")) {
+    const section = document.createElement("section");
+    section.id = "manualSection";
+    section.className = "admin-section";
+    section.innerHTML = `
+      <div class="panel manual-transaction-panel">
+        <div class="panel-header">
+          <div class="panel-header-copy">
+            <h2>Add Historical Transaction</h2>
+            <p>Backfill an older sale into the main Water POS sales log. The chosen transaction date is used in reports and dashboard totals.</p>
+          </div>
+          <span class="badge">Admin entry</span>
+        </div>
+        <form id="manualTransactionForm" class="manual-transaction-form">
+          <div class="manual-meta-grid">
+            <label class="field">
+              <span>Transaction Date & Time</span>
+              <input id="manualDateTime" type="datetime-local" required>
+            </label>
+            <label class="field">
+              <span>Payment</span>
+              <select id="manualPaymentMethod">
+                <option value="Cash">Cash</option>
+                <option value="GCash">GCash</option>
+                <option value="Other">Other Digital</option>
+              </select>
+            </label>
+            <label id="manualProviderField" class="field hidden">
+              <span>Payment Provider</span>
+              <select id="manualPaymentProvider">
+                <option value="Maya">Maya</option>
+                <option value="MariBank">MariBank</option>
+                <option value="GoTyme">GoTyme</option>
+                <option value="VYBE by BPI">VYBE / BPI</option>
+              </select>
+            </label>
+            <label id="manualReferenceField" class="field hidden">
+              <span>Payment Reference</span>
+              <input id="manualPaymentReference" autocomplete="off" placeholder="Optional for historical entry">
+            </label>
+            <label class="field">
+              <span>Room / Unit</span>
+              <input id="manualRoomUnit" maxlength="100" autocomplete="off" placeholder="Optional">
+            </label>
+          </div>
+
+          <div class="manual-items-head">
+            <div>
+              <strong>Transaction items</strong>
+              <small>Add every line item from the old transaction.</small>
+            </div>
+            <button id="addManualItem" type="button" class="small-button">+ Add Item</button>
+          </div>
+          <div id="manualItemList" class="manual-item-list"></div>
+          <div class="manual-form-footer">
+            <div class="manual-total"><span>Total</span><strong id="manualTransactionTotal">₱0</strong></div>
+            <div id="manualTransactionError" class="error-text"></div>
+            <button id="saveManualTransaction" type="submit" class="primary-button">Save Historical Transaction</button>
+          </div>
+        </form>
+      </div>`;
+    main.appendChild(section);
+  }
+
+  if (main && !document.querySelector("#accountSection")) {
     const section = document.createElement("section");
     section.id = "accountSection";
     section.className = "admin-section";
@@ -59,7 +182,7 @@ function ensureAdminUserControl() {
           <label class="field">
             <span>New Password</span>
             <input id="adminNewPassword" type="password" minlength="10" autocomplete="new-password" placeholder="Leave blank to keep current password">
-            <small>Optional. Use at least 10 characters if changing it.</small>
+            <small>Optional · at least 10 characters if changing.</small>
           </label>
           <label class="field">
             <span>Confirm New Password</span>
@@ -72,7 +195,7 @@ function ensureAdminUserControl() {
         </form>
       </div>
 
-      <div class="panel account-control-panel" style="margin-top:16px">
+      <div class="panel account-control-panel pos-users-panel">
         <div class="panel-header">
           <div class="panel-header-copy">
             <h2>POS User Accounts</h2>
@@ -100,6 +223,11 @@ function ensureAdminUserControl() {
     state.innerHTML = '<span class="live-dot"></span><span>Sales auto refresh every 30s</span><small id="adminLastRefresh">Waiting for sign in</small>';
     top.appendChild(state);
   }
+
+  const dateTime = document.querySelector("#manualDateTime");
+  if (dateTime && !dateTime.value) dateTime.value = localDateTimeValue();
+  if (!document.querySelector("#manualItemList")?.children.length) addManualItemRow();
+  updateManualPaymentFields();
 }
 
 function adminSectionTitle(section) {
@@ -107,6 +235,7 @@ function adminSectionTitle(section) {
     sales: "Sales & Dashboard",
     expenses: "Expenses",
     used: "Used Pricing",
+    manual: "Manual Transaction",
     account: "User Control"
   }[section] || "Water POS Admin";
 }
@@ -147,8 +276,8 @@ function renderPosUsers(rows) {
       <form class="pos-user-editor" data-id="${user.id}">
         <div class="pos-user-editor-head">
           <div>
-            <strong>POS User #${user.id}</strong>
-            <small>Last login: ${escapeHtml(lastLogin)}</small>
+            <strong>${escapeHtml(user.name || "POS User")}</strong>
+            <small>POS User #${user.id} · Last login ${escapeHtml(lastLogin)}</small>
           </div>
           <span class="badge">${user.active ? "Active" : "Inactive"}</span>
         </div>
@@ -164,7 +293,7 @@ function renderPosUsers(rows) {
           <label class="field">
             <span>New Password</span>
             <input class="pos-user-password" type="password" minlength="8" autocomplete="new-password" placeholder="Leave blank to keep current password">
-            <small>Optional. Use at least 8 characters if changing it.</small>
+            <small>Optional · at least 8 characters if changing.</small>
           </label>
           <label class="field">
             <span>Confirm New Password</span>
@@ -179,6 +308,62 @@ function renderPosUsers(rows) {
   }).join("");
 
   list.querySelectorAll(".pos-user-password,.pos-user-confirm").forEach(input => addPasswordToggle(input));
+}
+
+function manualDefaults(category) {
+  if (category === "Delivery") return { label: "Delivery ₱25", price: 25 };
+  if (category === "Pick-Up") return { label: "Pick-Up ₱20", price: 20 };
+  if (category === "New") return { label: "New Gallon", price: 200 };
+  return { label: "Used Gallon", price: "" };
+}
+
+function addManualItemRow(values = {}) {
+  const list = document.querySelector("#manualItemList");
+  if (!list) return;
+  const category = values.category || "Delivery";
+  const defaults = manualDefaults(category);
+  const row = document.createElement("div");
+  row.className = "manual-item-row";
+  row.innerHTML = `
+    <label><span>Category</span><select class="manual-item-category">
+      <option value="Delivery">Delivery</option>
+      <option value="Pick-Up">Pick-Up</option>
+      <option value="New">New</option>
+      <option value="Used">Used</option>
+    </select></label>
+    <label class="manual-item-label-wrap"><span>Label</span><input class="manual-item-label" maxlength="120" value="${escapeHtml(values.label || defaults.label)}"></label>
+    <label><span>Unit Price</span><input class="manual-item-price" type="number" min="0.01" step="0.01" value="${values.unitPrice ?? defaults.price}" required></label>
+    <label><span>Qty</span><input class="manual-item-qty" type="number" min="1" max="500" step="1" value="${values.qty || 1}" required></label>
+    <button type="button" class="manual-item-remove" aria-label="Remove item">×</button>`;
+  row.querySelector(".manual-item-category").value = category;
+  list.appendChild(row);
+  updateManualTotal();
+}
+
+function updateManualTotal() {
+  let total = 0;
+  document.querySelectorAll(".manual-item-row").forEach(row => {
+    total += (Number(row.querySelector(".manual-item-price").value) || 0) * (Number(row.querySelector(".manual-item-qty").value) || 0);
+  });
+  const totalEl = document.querySelector("#manualTransactionTotal");
+  if (totalEl) totalEl.textContent = money(total);
+}
+
+function updateManualPaymentFields() {
+  const method = document.querySelector("#manualPaymentMethod")?.value || "Cash";
+  document.querySelector("#manualProviderField")?.classList.toggle("hidden", method !== "Other");
+  document.querySelector("#manualReferenceField")?.classList.toggle("hidden", method === "Cash");
+  const ref = document.querySelector("#manualPaymentReference");
+  if (ref && method === "Cash") ref.value = "";
+}
+
+function collectManualItems() {
+  return [...document.querySelectorAll(".manual-item-row")].map(row => ({
+    category: row.querySelector(".manual-item-category").value,
+    label: row.querySelector(".manual-item-label").value.trim(),
+    unitPrice: row.querySelector(".manual-item-price").value,
+    qty: row.querySelector(".manual-item-qty").value
+  }));
 }
 
 async function loadUserControl() {
@@ -307,6 +492,63 @@ function bindAdminEnhancements() {
     }
   });
 
+  document.querySelector("#addManualItem")?.addEventListener("click", () => addManualItemRow({ category: "Delivery" }));
+  document.querySelector("#manualPaymentMethod")?.addEventListener("change", updateManualPaymentFields);
+  document.querySelector("#manualItemList")?.addEventListener("input", updateManualTotal);
+  document.querySelector("#manualItemList")?.addEventListener("change", event => {
+    const category = event.target.closest(".manual-item-category");
+    if (category) {
+      const row = category.closest(".manual-item-row");
+      const defaults = manualDefaults(category.value);
+      row.querySelector(".manual-item-label").value = defaults.label;
+      row.querySelector(".manual-item-price").value = defaults.price;
+    }
+    updateManualTotal();
+  });
+  document.querySelector("#manualItemList")?.addEventListener("click", event => {
+    const remove = event.target.closest(".manual-item-remove");
+    if (!remove) return;
+    const rows = document.querySelectorAll(".manual-item-row");
+    if (rows.length === 1) return toast("A transaction needs at least one item.");
+    remove.closest(".manual-item-row").remove();
+    updateManualTotal();
+  });
+
+  document.querySelector("#manualTransactionForm")?.addEventListener("submit", async event => {
+    event.preventDefault();
+    const errorEl = document.querySelector("#manualTransactionError");
+    errorEl.textContent = "";
+    const button = document.querySelector("#saveManualTransaction");
+    button.disabled = true;
+    button.textContent = "Saving…";
+    try {
+      const method = document.querySelector("#manualPaymentMethod").value;
+      const result = await api("/api/admin/manual-sales", {
+        method: "POST",
+        body: {
+          dateTime: document.querySelector("#manualDateTime").value,
+          paymentMethod: method,
+          paymentProvider: method === "Other" ? document.querySelector("#manualPaymentProvider").value : null,
+          paymentReference: document.querySelector("#manualPaymentReference").value.trim(),
+          roomUnit: document.querySelector("#manualRoomUnit").value.trim(),
+          items: collectManualItems()
+        }
+      });
+      toast("Historical transaction saved · " + result.transaction_ref);
+      document.querySelector("#manualPaymentReference").value = "";
+      document.querySelector("#manualRoomUnit").value = "";
+      document.querySelector("#manualItemList").innerHTML = "";
+      addManualItemRow();
+      await Promise.all([loadSummary(), loadTrend(), loadSales()]);
+      markAdminRefreshed();
+    } catch (error) {
+      errorEl.textContent = error.message;
+    } finally {
+      button.disabled = false;
+      button.textContent = "Save Historical Transaction";
+    }
+  });
+
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible" && token && adminActiveSection !== "account") {
       refreshAdminSection(adminActiveSection, true);
@@ -320,5 +562,6 @@ function bindAdminEnhancements() {
   if (token) markAdminRefreshed();
 }
 
-ensureAdminUserControl();
+ensureCustomPrintRange();
+ensureAdminSections();
 bindAdminEnhancements();
