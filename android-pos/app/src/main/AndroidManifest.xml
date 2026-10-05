@@ -5,16 +5,16 @@
     <application
         android:allowBackup="false"
         android:icon="@drawable/ic_launcher"
-        android:label="Water POS"
+        android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
         android:usesCleartextTraffic="false">
 
         <receiver
             android:name=".KioskDeviceAdminReceiver"
-            android:description="Water POS dedicated kiosk administration"
+            android:description="@string/kiosk_admin_description"
             android:exported="true"
-            android:label="Water POS Kiosk Admin"
+            android:label="@string/app_name"
             android:permission="android.permission.BIND_DEVICE_ADMIN">
             <meta-data
                 android:name="android.app.device_admin"
