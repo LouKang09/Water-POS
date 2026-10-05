@@ -25,6 +25,19 @@ function setSetupMode(enabled) {
   $("#posLoginButton").textContent = enabled ? "Create POS User" : "Log in to POS";
 }
 
+function bindPasswordVisibility(){
+  document.querySelectorAll(".pos-password-toggle").forEach(button=>{
+    button.addEventListener("click",()=>{
+      const input=document.getElementById(button.dataset.target);
+      if(!input) return;
+      const showing=input.type==="text";
+      input.type=showing?"password":"text";
+      button.textContent=showing?"Show":"Hide";
+      button.setAttribute("aria-label",showing?"Show password":"Hide password");
+    });
+  });
+}
+
 $("#posLoginForm").addEventListener("submit", async event => {
   event.preventDefault();
   $("#posLoginError").textContent = "";
@@ -60,6 +73,8 @@ $("#posLoginForm").addEventListener("submit", async event => {
     button.textContent = setupMode ? "Create POS User" : "Log in to POS";
   }
 });
+
+bindPasswordVisibility();
 
 (async function init(){
   const existing = localStorage.getItem(POS_TOKEN_KEY);
