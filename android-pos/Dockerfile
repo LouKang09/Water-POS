@@ -18,11 +18,11 @@ RUN yes | sdkmanager --sdk_root=${ANDROID_HOME} --licenses >/dev/null \
 WORKDIR /workspace
 COPY android-pos/ /workspace/
 RUN gradle assembleDebug --no-daemon \
-    && cp app/build/outputs/apk/debug/app-debug.apk /tmp/Water-POS-v1.0.0.apk
+    && cp app/build/outputs/apk/debug/app-debug.apk /tmp/Water-POS-v1.1.0.apk
 
 FROM python:3.12-alpine
 WORKDIR /app
-COPY --from=build /tmp/Water-POS-v1.0.0.apk /app/Water-POS-v1.0.0.apk
-RUN printf '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Water POS APK</title></head><body style="font-family:sans-serif;padding:30px"><h1>Water POS Android</h1><p>Authenticated smartphone POS app.</p><p><a href="/Water-POS-v1.0.0.apk">Download Water-POS-v1.0.0.apk</a></p></body></html>' > /app/index.html
+COPY --from=build /tmp/Water-POS-v1.1.0.apk /app/Water-POS-v1.1.0.apk
+RUN printf '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Water POS APK</title></head><body style="font-family:sans-serif;padding:30px"><h1>Water POS Android</h1><p>Authenticated smartphone POS app with kiosk mode.</p><p><a href="/Water-POS-v1.1.0.apk">Download Water-POS-v1.1.0.apk</a></p></body></html>' > /app/index.html
 EXPOSE 8080
 CMD ["python", "-m", "http.server", "8080", "--bind", "0.0.0.0"]
