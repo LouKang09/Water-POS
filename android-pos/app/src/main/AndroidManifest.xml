@@ -12,7 +12,7 @@
 
         <receiver
             android:name=".KioskDeviceAdminReceiver"
-            android:description="@string/app_name"
+            android:description="Water POS dedicated kiosk administration"
             android:exported="true"
             android:label="Water POS Kiosk Admin"
             android:permission="android.permission.BIND_DEVICE_ADMIN">
