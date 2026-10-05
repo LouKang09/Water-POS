@@ -65,6 +65,14 @@ function addPosPasswordToggle(input) {
 }
 
 function ensurePosAccountUi() {
+  if (!document.querySelector('link[data-pos-account-style]')) {
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = "/pos-account.css?v=20261006-1";
+    link.dataset.posAccountStyle = "true";
+    document.head.appendChild(link);
+  }
+
   const actions = document.querySelector(".pos-header-actions");
   if (actions && !document.querySelector("#posAccountBtn")) {
     const button = document.createElement("button");
