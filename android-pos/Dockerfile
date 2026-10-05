@@ -1,0 +1,28 @@
+FROM gradle:8.7-jdk17 AS build
+
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends curl unzip && rm -rf /var/lib/apt/lists/*
+
+ENV ANDROID_HOME=/opt/android-sdk
+ENV PATH=${PATH}:${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools
+
+RUN mkdir -p ${ANDROID_HOME}/cmdline-tools \
+    && curl -fsSL https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o /tmp/cmdline.zip \
+    && unzip -q /tmp/cmdline.zip -d /tmp/android-cli \
+    && mv /tmp/android-cli/cmdline-tools ${ANDROID_HOME}/cmdline-tools/latest \
+    && rm -rf /tmp/cmdline.zip /tmp/android-cli
+
+RUN yes | sdkmanager --sdk_root=${ANDROID_HOME} --licenses >/dev/null \
+    && sdkmanager --sdk_root=${ANDROID_HOME} "platforms;android-35" "build-tools;35.0.0"
+
+WORKDIR /workspace
+COPY android-pos/ /workspace/
+RUN gradle assembleDebug --no-daemon \
+    && cp app/build/outputs/apk/debug/app-debug.apk /tmp/Water-POS-v1.0.0.apk
+
+FROM python:3.12-alpine
+WORKDIR /app
+COPY --from=build /tmp/Water-POS-v1.0.0.apk /app/Water-POS-v1.0.0.apk
+RUN printf '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Water POS APK</title></head><body style="font-family:sans-serif;padding:30px"><h1>Water POS Android</h1><p>Authenticated smartphone POS app.</p><p><a href="/Water-POS-v1.0.0.apk">Download Water-POS-v1.0.0.apk</a></p></body></html>' > /app/index.html
+EXPOSE 8080
+CMD ["python", "-m", "http.server", "8080", "--bind", "0.0.0.0"]
