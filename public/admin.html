@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#092f2e">
   <title>Water POS Admin</title>
-  <link rel="stylesheet" href="/styles.css?v=20260929-12">
+  <link rel="stylesheet" href="/styles.css?v=20261006-1">
+  <link rel="stylesheet" href="/admin-enhancements.css?v=20261006-1">
 </head>
 <body class="admin-page">
   <div class="admin-mobile-block">
@@ -102,18 +103,9 @@
             </div>
           </div>
           <div class="service-breakdown-grid">
-            <div class="service-breakdown-card">
-              <h3>Delivery</h3>
-              <div id="deliveryBreakdown" class="breakdown-lines"></div>
-            </div>
-            <div class="service-breakdown-card">
-              <h3>Pick-Up</h3>
-              <div id="pickupBreakdown" class="breakdown-lines"></div>
-            </div>
-            <div class="service-breakdown-card overall">
-              <h3>Overall</h3>
-              <div id="overallBreakdown" class="breakdown-lines"></div>
-            </div>
+            <div class="service-breakdown-card"><h3>Delivery</h3><div id="deliveryBreakdown" class="breakdown-lines"></div></div>
+            <div class="service-breakdown-card"><h3>Pick-Up</h3><div id="pickupBreakdown" class="breakdown-lines"></div></div>
+            <div class="service-breakdown-card overall"><h3>Overall</h3><div id="overallBreakdown" class="breakdown-lines"></div></div>
           </div>
         </div>
 
@@ -174,18 +166,13 @@
         </div>
         <button id="closeReceipt" class="icon-button" type="button">×</button>
       </div>
-
       <div class="receipt-toolbar" aria-label="Receipt zoom controls">
         <button id="zoomOutReceipt" class="small-button" type="button">− Zoom</button>
         <button id="resetReceiptZoom" class="small-button" type="button">100%</button>
         <button id="zoomInReceipt" class="small-button" type="button">+ Zoom</button>
         <span id="receiptZoomLabel">100%</span>
       </div>
-
-      <div id="receiptViewport" class="receipt-viewport">
-        <img id="receiptImage" alt="Payment receipt">
-      </div>
-
+      <div id="receiptViewport" class="receipt-viewport"><img id="receiptImage" alt="Payment receipt"></div>
       <div id="completeReceiptPanel" class="complete-receipt-panel hidden">
         <div>
           <p class="eyebrow">OPTIONAL ADMIN REVIEW</p>
@@ -199,7 +186,6 @@
         </label>
         <button id="saveManualReference" class="primary-button full" type="button">Save & Mark Complete</button>
       </div>
-
       <div id="completedReceiptPanel" class="completed-receipt-panel hidden">
         <span class="badge">Completed manually</span>
         <strong id="completedReference"></strong>
@@ -209,6 +195,7 @@
   <section id="printReport" class="print-report" aria-hidden="true"></section>
   <div id="toast" class="toast"></div>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-  <script src="/admin.js?v=20260929-12"></script>
+  <script src="/admin.js?v=20261006-1"></script>
+  <script src="/admin-enhancements.js?v=20261006-1"></script>
 </body>
 </html>
