@@ -16,6 +16,15 @@ const MANUAL_POS_PRESETS = {
   ]
 };
 
+function ensureOtherCategoryOption(row) {
+  const categorySelect = row?.querySelector(".manual-item-category");
+  if (!categorySelect || categorySelect.querySelector('option[value="Other"]')) return;
+  const option = document.createElement("option");
+  option.value = "Other";
+  option.textContent = "Other";
+  categorySelect.appendChild(option);
+}
+
 function manualPresetOptions(category) {
   if (category === "Used") {
     return manualUsedProducts
@@ -31,9 +40,40 @@ function manualOptionText(option) {
   return option.label + " · ₱" + Number(option.price).toLocaleString("en-PH");
 }
 
+function setOtherManualControls(row, preferredLabel = "") {
+  const existing = row.querySelector(".manual-item-label");
+  let input = existing;
+  if (!input || input.tagName !== "INPUT") {
+    input = document.createElement("input");
+    input.className = "manual-item-label";
+    input.maxLength = 120;
+    input.required = true;
+    input.placeholder = "What is this Other item?";
+    if (existing) existing.replaceWith(input);
+  }
+  if (preferredLabel) input.value = preferredLabel;
+  input.disabled = false;
+
+  const price = row.querySelector(".manual-item-price");
+  if (price) {
+    price.readOnly = false;
+    price.tabIndex = 0;
+    price.title = "Enter the unit price manually";
+    if (!price.value || Number(price.value) <= 0) price.value = "";
+    price.placeholder = "0.00";
+  }
+}
+
 function updateManualPresetRow(row, preferredLabel = "") {
   if (!row) return;
+  ensureOtherCategoryOption(row);
   const category = row.querySelector(".manual-item-category")?.value || "Delivery";
+
+  if (category === "Other") {
+    setOtherManualControls(row, preferredLabel);
+    return;
+  }
+
   const options = manualPresetOptions(category);
   const existing = row.querySelector(".manual-item-label");
   const currentLabel = preferredLabel || existing?.value || "";
@@ -77,7 +117,10 @@ function updateManualPresetRow(row, preferredLabel = "") {
 }
 
 function refreshManualPresetRows() {
-  document.querySelectorAll(".manual-item-row").forEach(row => updateManualPresetRow(row));
+  document.querySelectorAll(".manual-item-row").forEach(row => {
+    ensureOtherCategoryOption(row);
+    updateManualPresetRow(row);
+  });
   if (typeof updateManualTotal === "function") updateManualTotal();
 }
 
@@ -105,7 +148,7 @@ function installManualPresetControls() {
 
     if (event.target.matches(".manual-item-category")) {
       updateManualPresetRow(row);
-    } else if (event.target.matches(".manual-item-label")) {
+    } else if (event.target.matches(".manual-item-label") && event.target.tagName === "SELECT") {
       const option = event.target.selectedOptions[0];
       const price = row.querySelector(".manual-item-price");
       if (price && option) price.value = Number(option.dataset.price || 0);
