@@ -158,6 +158,22 @@ function installManualPresetControls() {
   });
 }
 
+function loadLedgerAssets() {
+  if (!document.querySelector('link[data-admin-ledger="true"]')) {
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = "/admin-ledger.css?v=20261006-1";
+    link.dataset.adminLedger = "true";
+    document.head.appendChild(link);
+  }
+  if (!document.querySelector('script[data-admin-ledger="true"]')) {
+    const script = document.createElement("script");
+    script.src = "/admin-ledger.js?v=20261006-1";
+    script.dataset.adminLedger = "true";
+    document.body.appendChild(script);
+  }
+}
+
 function installAdminRefinements() {
   installManualPresetControls();
   document.querySelector(".side-nav")?.addEventListener("click", event => {
@@ -169,6 +185,7 @@ function installAdminRefinements() {
     }
   });
   loadManualUsedProducts();
+  loadLedgerAssets();
 }
 
 installAdminRefinements();
