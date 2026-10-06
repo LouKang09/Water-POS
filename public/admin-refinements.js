@@ -158,20 +158,33 @@ function installManualPresetControls() {
   });
 }
 
+function loadBankPettyAsset() {
+  if (document.querySelector('script[data-admin-bank-petty="true"]')) return;
+  const bank = document.createElement("script");
+  bank.src = "/admin-bank-petty.js?v=20261006-1";
+  bank.dataset.adminBankPetty = "true";
+  document.body.appendChild(bank);
+}
+
 function loadLedgerAssets() {
   if (!document.querySelector('link[data-admin-ledger="true"]')) {
     const link = document.createElement("link");
     link.rel = "stylesheet";
-    link.href = "/admin-ledger.css?v=20261006-1";
+    link.href = "/admin-ledger.css?v=20261006-2";
     link.dataset.adminLedger = "true";
     document.head.appendChild(link);
   }
-  if (!document.querySelector('script[data-admin-ledger="true"]')) {
-    const script = document.createElement("script");
-    script.src = "/admin-ledger.js?v=20261006-1";
-    script.dataset.adminLedger = "true";
-    document.body.appendChild(script);
+  const existing = document.querySelector('script[data-admin-ledger="true"]');
+  if (existing) {
+    if (document.querySelector("#cashflowSection")) loadBankPettyAsset();
+    else existing.addEventListener("load", loadBankPettyAsset, { once: true });
+    return;
   }
+  const script = document.createElement("script");
+  script.src = "/admin-ledger.js?v=20261006-2";
+  script.dataset.adminLedger = "true";
+  script.addEventListener("load", loadBankPettyAsset, { once: true });
+  document.body.appendChild(script);
 }
 
 function installAdminRefinements() {
