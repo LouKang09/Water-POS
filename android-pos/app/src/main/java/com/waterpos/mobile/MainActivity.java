@@ -14,9 +14,14 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.MediaStore;
 import android.view.View;
 import android.view.Window;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
+import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
@@ -43,6 +48,15 @@ public class MainActivity extends Activity {
     private boolean exitRequested = false;
     private DevicePolicyManager devicePolicyManager;
     private ComponentName adminComponent;
+    private Handler kioskHandler;
+    private boolean lockTaskObserved = false;
+    private boolean pinningRequested = false;
+    private final Runnable kioskRecoveryRunnable = new Runnable() {
+        @Override
+        public void run() {
+            recoverKioskIfNeeded();
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -50,11 +64,19 @@ public class MainActivity extends Activity {
 
         devicePolicyManager = (DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
         adminComponent = new ComponentName(this, KioskDeviceAdminReceiver.class);
+        kioskHandler = new Handler(Looper.getMainLooper());
         configureDedicatedKiosk();
 
         Window window = getWindow();
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         window.setStatusBarColor(Color.rgb(13, 107, 105));
         window.setNavigationBarColor(Color.BLACK);
+
+        getWindow().getDecorView().setOnSystemUiVisibilityChangeListener(visibility -> {
+            if (!exitRequested && !resumeKioskAfterChooser) {
+                scheduleKioskRecovery(80);
+            }
+        });
 
         webView = new WebView(this);
         webView.setBackgroundColor(Color.WHITE);
@@ -72,7 +94,7 @@ public class MainActivity extends Activity {
         settings.setUseWideViewPort(true);
         settings.setMediaPlaybackRequiresUserGesture(true);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        settings.setUserAgentString(settings.getUserAgentString() + " WaterPOSAndroid/1.2");
+        settings.setUserAgentString(settings.getUserAgentString() + " WaterPOSAndroid/1.2.1");
 
         CookieManager cookieManager = CookieManager.getInstance();
         cookieManager.setAcceptCookie(true);
@@ -198,7 +220,21 @@ public class MainActivity extends Activity {
 
     private void hideSystemUi() {
         if (exitRequested) return;
-        getWindow().getDecorView().setSystemUiVisibility(
+
+        Window window = getWindow();
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            WindowInsetsController controller = window.getInsetsController();
+            if (controller != null) {
+                controller.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
+                controller.setSystemBarsBehavior(
+                    WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                );
+            }
+        }
+
+        window.getDecorView().setSystemUiVisibility(
             View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
             View.SYSTEM_UI_FLAG_FULLSCREEN |
             View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
@@ -208,22 +244,87 @@ public class MainActivity extends Activity {
         );
     }
 
-    private boolean isLockTaskActive() {
+    private int lockTaskState() {
         ActivityManager manager = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
-        return manager != null && manager.getLockTaskModeState() != ActivityManager.LOCK_TASK_MODE_NONE;
+        return manager == null ? ActivityManager.LOCK_TASK_MODE_NONE : manager.getLockTaskModeState();
+    }
+
+    private boolean isLockTaskActive() {
+        return lockTaskState() != ActivityManager.LOCK_TASK_MODE_NONE;
+    }
+
+    private boolean isFullKioskLocked() {
+        return lockTaskState() == ActivityManager.LOCK_TASK_MODE_LOCKED;
+    }
+
+    private void requestLockTask() {
+        if (exitRequested || resumeKioskAfterChooser) return;
+
+        if (isLockTaskActive()) {
+            lockTaskObserved = true;
+            return;
+        }
+
+        // Device Owner mode enters true LOCKED kiosk without a confirmation prompt.
+        // A normal personal device can only enter Android's user-approved screen pinning mode.
+        if (isDedicatedKiosk() || !pinningRequested || lockTaskObserved) {
+            try {
+                pinningRequested = true;
+                startLockTask();
+            } catch (Exception ignored) {}
+        }
+
+        if (isLockTaskActive()) lockTaskObserved = true;
     }
 
     private void enterKioskMode() {
         if (exitRequested || resumeKioskAfterChooser) return;
+        configureDedicatedKiosk();
         hideSystemUi();
-        if (!isLockTaskActive()) {
-            try {
-                startLockTask();
-            } catch (Exception ignored) {}
+        requestLockTask();
+
+        // EMUI can briefly restore navigation gestures after focus/layout changes.
+        // Re-assert immersive + LockTask after the transition settles.
+        scheduleKioskRecovery(350);
+    }
+
+    private void scheduleKioskRecovery(long delayMs) {
+        if (kioskHandler == null || exitRequested || resumeKioskAfterChooser) return;
+        kioskHandler.removeCallbacks(kioskRecoveryRunnable);
+        kioskHandler.postDelayed(kioskRecoveryRunnable, delayMs);
+    }
+
+    private void recoverKioskIfNeeded() {
+        if (exitRequested || resumeKioskAfterChooser) return;
+
+        hideSystemUi();
+        configureDedicatedKiosk();
+        requestLockTask();
+
+        if (!isLockTaskActive() && (isDedicatedKiosk() || lockTaskObserved)) {
+            bringTaskToFront();
+            hideSystemUi();
+            requestLockTask();
         }
     }
 
+    private void bringTaskToFront() {
+        try {
+            ActivityManager manager = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+            if (manager != null) {
+                manager.moveTaskToFront(getTaskId(), ActivityManager.MOVE_TASK_WITH_HOME);
+            }
+        } catch (Exception ignored) {}
+
+        try {
+            Intent intent = new Intent(this, MainActivity.class);
+            intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            startActivity(intent);
+        } catch (Exception ignored) {}
+    }
+
     private void leaveKioskTemporarily() {
+        if (kioskHandler != null) kioskHandler.removeCallbacks(kioskRecoveryRunnable);
         if (isLockTaskActive()) {
             try {
                 stopLockTask();
@@ -276,6 +377,7 @@ public class MainActivity extends Activity {
     private void exitWaterPos() {
         exitRequested = true;
         resumeKioskAfterChooser = false;
+        if (kioskHandler != null) kioskHandler.removeCallbacks(kioskRecoveryRunnable);
         if (isLockTaskActive()) {
             try {
                 stopLockTask();
@@ -356,15 +458,48 @@ public class MainActivity extends Activity {
         if (!resumeKioskAfterChooser) {
             restoreDedicatedKioskPackages();
             enterKioskMode();
+            scheduleKioskRecovery(700);
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (!exitRequested && !resumeKioskAfterChooser) {
+            scheduleKioskRecovery(180);
+        }
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        if (!exitRequested && !resumeKioskAfterChooser) {
+            scheduleKioskRecovery(260);
+        }
+    }
+
+    @Override
+    protected void onUserLeaveHint() {
+        super.onUserLeaveHint();
+        if (!exitRequested && !resumeKioskAfterChooser) {
+            // Huawei/EMUI Home gesture reaches this callback before the task leaves the foreground.
+            hideSystemUi();
+            requestLockTask();
+            scheduleKioskRecovery(60);
         }
     }
 
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
-        if (hasFocus && !exitRequested && !resumeKioskAfterChooser) {
-            hideSystemUi();
-            if (isDedicatedKiosk() && !isLockTaskActive()) enterKioskMode();
+        if (!exitRequested && !resumeKioskAfterChooser) {
+            if (hasFocus) {
+                hideSystemUi();
+                requestLockTask();
+                scheduleKioskRecovery(220);
+            } else if (lockTaskObserved || isDedicatedKiosk()) {
+                scheduleKioskRecovery(120);
+            }
         }
     }
 
@@ -385,6 +520,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (kioskHandler != null) kioskHandler.removeCallbacks(kioskRecoveryRunnable);
         if (webView != null) {
             webView.removeJavascriptInterface("AndroidPos");
             webView.stopLoading();
