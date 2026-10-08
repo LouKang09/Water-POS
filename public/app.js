@@ -256,7 +256,11 @@ function renderCart() {
 }
 
 function unpaidItemsText(items){
-  return (items||[]).map(item=>Number(item.qty)+"× "+item.label).join(" · ");
+  return (items||[]).map(item=>item.label).join(" · ");
+}
+
+function unpaidQuantity(items){
+  return (items||[]).reduce((sum,item)=>sum+(Number(item.qty)||0),0);
 }
 
 function renderUnpaidSales(){
@@ -283,6 +287,9 @@ function renderUnpaidSales(){
       <div class="unpaid-meta">
         <span>${sale.delivery_room_unit ? "Room / Unit "+escapeHtml(sale.delivery_room_unit) : "No room / unit"}</span>
         <span>${new Date(sale.created_at).toLocaleString("en-PH",{dateStyle:"medium",timeStyle:"short"})}</span>
+      </div>
+      <div class="unpaid-quantity-row">
+        <span class="unpaid-quantity-badge">QTY ${unpaidQuantity(sale.items)}</span>
       </div>
       <button type="button" class="primary-button full settle-unpaid" data-id="${sale.id}">Settle Payment</button>
     </article>
