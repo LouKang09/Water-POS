@@ -280,7 +280,7 @@ async function validatedItems(items) {
   if (!Array.isArray(items) || !items.length) throw new Error("Add at least one item.");
   const allowed = {
     Delivery: [25,35,45],
-    "Pick-Up": [20,30,40],
+    "Pick-Up": [5,10,20,30,40],
     New: [200],
   };
   const usedRows = await pool.query("SELECT id, label, price FROM used_products WHERE active = TRUE");
@@ -302,7 +302,16 @@ async function validatedItems(items) {
       if (!allowed[category] || !allowed[category].includes(price)) {
         throw new Error("Invalid price for " + category + ".");
       }
-      label = category === "New" ? "New Gallon" : category + " ₱" + price;
+
+      if (category === "Pick-Up" && (price === 5 || price === 10)) {
+        const variant = String(raw.variant || "").trim();
+        if (!["Tumbler","Bottled Water"].includes(variant)) {
+          throw new Error("Choose Tumbler or Bottled Water for Pick-Up ₱" + price + ".");
+        }
+        label = variant + " · Pick-Up ₱" + price;
+      } else {
+        label = category === "New" ? "New Gallon" : category + " ₱" + price;
+      }
     }
 
     clean.push({ category, label, unitPrice:price, qty, lineTotal:price * qty });
