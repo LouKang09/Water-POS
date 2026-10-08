@@ -2,7 +2,7 @@
 .pos-login-shell{width:min(100%,430px)}
 .pos-login-card{background:#fff;border:1px solid var(--line);border-radius:24px;padding:24px;box-shadow:0 18px 50px rgba(20,69,66,.12)}
 .pos-login-brand{display:flex;align-items:center;gap:14px;margin-bottom:18px}
-.pos-login-mark{width:52px;height:52px;border-radius:16px;background:var(--brand);color:#fff;display:grid;place-items:center;font-weight:900;font-size:1.35rem;box-shadow:0 10px 24px rgba(13,107,105,.2)}
+.pos-login-logo{width:86px;height:86px;object-fit:contain;border-radius:18px;background:#fff;box-shadow:0 10px 24px rgba(18,105,162,.14);flex:0 0 auto}
 .pos-login-brand h1{margin:1px 0 2px;font-size:1.55rem;letter-spacing:-.04em}
 .pos-login-brand>div:last-child>p:last-child{margin:0;color:var(--muted);font-size:.75rem}
 .login-notice{display:grid;gap:4px;margin:0 0 14px;padding:12px 13px;border:1px solid #b9ddd8;border-radius:14px;background:#eff9f7}
