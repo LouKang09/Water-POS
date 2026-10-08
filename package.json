@@ -5,7 +5,7 @@
   "description": "Mobile-first water refilling POS with authenticated cashier, online delivery, sales and expense dashboard",
   "main": "server.js",
   "scripts": {
-    "start": "node -r ./receipt-storage.js -r ./pos-auth.js -r ./tenant-auth.js -r ./admin-control.js -r ./admin-ledger.js -r ./admin-bank-petty.js server.js"
+    "start": "node -r ./receipt-storage.js -r ./pos-auth.js -r ./tenant-auth.js -r ./admin-control.js -r ./unpaid-ledger.js -r ./admin-ledger.js -r ./admin-bank-petty.js server.js"
   },
   "engines": {
     "node": ">=20"
