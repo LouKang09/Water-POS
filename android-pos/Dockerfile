@@ -18,13 +18,13 @@ RUN yes | sdkmanager --sdk_root=${ANDROID_HOME} --licenses >/dev/null \
 WORKDIR /workspace
 COPY android-pos/ /workspace/
 RUN mkdir -p /workspace/app/src/main/res/drawable-nodpi
-COPY branding/inyou-official.png /workspace/app/src/main/res/drawable-nodpi/inyou_logo.png
+COPY branding/inyou-official.jpg /workspace/app/src/main/res/drawable-nodpi/inyou_logo.jpg
 RUN gradle assembleDebug --no-daemon \
-    && cp app/build/outputs/apk/debug/app-debug.apk /tmp/INYOU-Water-POS-v1.2.5.apk
+    && cp app/build/outputs/apk/debug/app-debug.apk /tmp/INYOU-Water-POS-v1.2.6.apk
 
 FROM python:3.12-alpine
 WORKDIR /app
-COPY --from=build /tmp/INYOU-Water-POS-v1.2.5.apk /app/INYOU-Water-POS-v1.2.5.apk
-RUN printf '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Water POS APK</title></head><body style="font-family:sans-serif;padding:30px"><h1>INYOU Water POS Android v1.2.5</h1><p>Official INYOU Water POS app with the approved INYOU logo, universal adaptive/round Android launcher icon, 5-second water loading splash, session-safe startup, kiosk hardening, logout, Exit App, and dedicated Device Owner lock.</p><p><a href="/INYOU-Water-POS-v1.2.5.apk">Download INYOU-Water-POS-v1.2.5.apk</a></p></body></html>' > /app/index.html
+COPY --from=build /tmp/INYOU-Water-POS-v1.2.6.apk /app/INYOU-Water-POS-v1.2.6.apk
+RUN printf '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Water POS APK</title></head><body style="font-family:sans-serif;padding:30px"><h1>INYOU Water POS Android v1.2.6</h1><p>Official INYOU Water POS app with the approved INYOU logo, universal adaptive/round Android launcher icon, 5-second water loading splash, session-safe startup, kiosk hardening, logout, Exit App, and dedicated Device Owner lock.</p><p><a href="/INYOU-Water-POS-v1.2.6.apk">Download INYOU-Water-POS-v1.2.6.apk</a></p></body></html>' > /app/index.html
 EXPOSE 8080
 CMD ["python", "-m", "http.server", "8080", "--bind", "0.0.0.0"]
