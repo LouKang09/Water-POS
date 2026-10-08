@@ -151,9 +151,10 @@ function paymentQuantitySummary(sales) {
     Cash: { transactions: 0, qty: 0, amount: 0 },
     GCash: { transactions: 0, qty: 0, amount: 0 },
     Other: { transactions: 0, qty: 0, amount: 0 },
+    "Pay Later": { transactions: 0, qty: 0, amount: 0 },
   };
   for (const sale of sales || []) {
-    const key = sale.payment_method === "GCash" ? "GCash" : sale.payment_method === "Other" ? "Other" : "Cash";
+    const key = sale.payment_method === "GCash" ? "GCash" : sale.payment_method === "Other" ? "Other" : sale.payment_method === "Pay Later" ? "Pay Later" : "Cash";
     out[key].transactions += 1;
     out[key].amount += Number(sale.total || 0);
     out[key].qty += (sale.items || []).reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
@@ -164,14 +165,14 @@ function paymentQuantitySummary(sales) {
 function paymentAwareServiceBreakdown(sales) {
   const buckets = { Delivery: {}, "Pick-Up": {}, Overall: {} };
   for (const sale of sales || []) {
-    const payment = sale.payment_method === "GCash" ? "GCash" : sale.payment_method === "Other" ? "Other" : "Cash";
+    const payment = sale.payment_method === "GCash" ? "GCash" : sale.payment_method === "Other" ? "Other" : sale.payment_method === "Pay Later" ? "PayLater" : "Cash";
     for (const item of sale.items || []) {
       if (item.category !== "Delivery" && item.category !== "Pick-Up") continue;
       const price = Number(item.unitPrice);
       const qty = Number(item.qty) || 0;
       const key = String(price);
       for (const bucketName of [item.category, "Overall"]) {
-        if (!buckets[bucketName][key]) buckets[bucketName][key] = { total: 0, Cash: 0, GCash: 0, Other: 0 };
+        if (!buckets[bucketName][key]) buckets[bucketName][key] = { total: 0, Cash: 0, GCash: 0, Other: 0, PayLater: 0 };
         buckets[bucketName][key].total += qty;
         buckets[bucketName][key][payment] += qty;
       }
@@ -186,7 +187,7 @@ function paymentAwareBreakdownHtml(bucket) {
   return rows.map(row => `
     <div class="breakdown-payment-row">
       <strong>₱${row.price.toLocaleString("en-PH")} × ${row.total}</strong>
-      <small>Cash ${row.Cash} · GCash ${row.GCash} · Other ${row.Other}</small>
+      <small>Cash ${row.Cash} · GCash ${row.GCash} · Other ${row.Other} · Pay Later ${row.PayLater || 0}</small>
     </div>`).join("");
 }
 
@@ -345,10 +346,10 @@ async function printSalesReport(period) {
 
     const serviceBox = (title, bucket) => {
       const rows = Object.entries(bucket || {}).map(([price, data]) => ({ price: Number(price), ...data })).sort((a,b) => a.price-b.price);
-      return `<div class="print-service-box"><h3>${title}</h3>${rows.length ? rows.map(row => `<div><span>₱${row.price.toLocaleString("en-PH")} × ${row.total}</span><strong>Cash ${row.Cash} · GCash ${row.GCash} · Other ${row.Other}</strong></div>`).join("") : '<div class="print-no-data">No items</div>'}</div>`;
+      return `<div class="print-service-box"><h3>${title}</h3>${rows.length ? rows.map(row => `<div><span>₱${row.price.toLocaleString("en-PH")} × ${row.total}</span><strong>Cash ${row.Cash} · GCash ${row.GCash} · Other ${row.Other} · Pay Later ${row.PayLater || 0}</strong></div>`).join("") : '<div class="print-no-data">No items</div>'}</div>`;
     };
 
-    const paymentRows = ["Cash", "GCash", "Other"].map(name => {
+    const paymentRows = ["Cash", "GCash", "Other", "Pay Later"].map(name => {
       const row = payments[name];
       return `<tr><td>${name === "Other" ? "Other Digital" : name}</td><td class="num">${row.transactions}</td><td class="num">${row.qty}</td><td class="num">${ledgerMoney(row.amount)}</td></tr>`;
     }).join("");
