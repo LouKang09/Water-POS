@@ -301,9 +301,10 @@ public class MainActivity extends Activity {
 
             canvas.drawRoundRect(track, radius, radius, trackPaint);
 
-            float fillRight = Math.max(h, w * progress);
-            canvas.save();
-            canvas.clipRect(0, 0, Math.min(fillRight, w), h);
+            float fillRight = w * progress;
+            if (fillRight > 0f) {
+                canvas.save();
+                canvas.clipRect(0, 0, Math.min(fillRight, w), h);
 
             waterPaint.setShader(new LinearGradient(
                 0, 0, w, h,
@@ -341,7 +342,8 @@ public class MainActivity extends Activity {
                 float r = h * (0.035f + (i % 3) * 0.012f);
                 canvas.drawCircle(x, y, r, bubblePaint);
             }
-            canvas.restore();
+                canvas.restore();
+            }
 
             canvas.drawRoundRect(track, radius, radius, highlightPaint);
         }
