@@ -1,7 +1,7 @@
 FROM gradle:8.7-jdk17 AS build
 
 USER root
-RUN apt-get update && apt-get install -y --no-install-recommends curl unzip webp && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends curl unzip && rm -rf /var/lib/apt/lists/*
 
 ENV ANDROID_HOME=/opt/android-sdk
 ENV PATH=${PATH}:${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools
@@ -18,8 +18,7 @@ RUN yes | sdkmanager --sdk_root=${ANDROID_HOME} --licenses >/dev/null \
 WORKDIR /workspace
 COPY android-pos/ /workspace/
 RUN mkdir -p /workspace/app/src/main/res/drawable-nodpi
-COPY branding/inyou-official.webp /tmp/inyou-official.webp
-RUN dwebp /tmp/inyou-official.webp -o /workspace/app/src/main/res/drawable-nodpi/inyou_logo.png >/dev/null
+COPY branding/inyou-official.png /workspace/app/src/main/res/drawable-nodpi/inyou_logo.png
 RUN gradle assembleDebug --no-daemon \
     && cp app/build/outputs/apk/debug/app-debug.apk /tmp/INYOU-Water-POS-v1.2.4.apk
 
