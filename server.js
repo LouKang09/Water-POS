@@ -14,12 +14,11 @@ const pool = new Pool({
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
 
 app.use(express.json({ limit: "1mb" }));
-app.get("/brand/inyou-official.webp", (req,res) => {
-  res.redirect(302,"/brand/inyou-official.png");
-});
-app.get("/brand/inyou-official.png", (req,res) => {
+app.get("/brand/inyou-official.webp", (req,res) => res.redirect(302,"/brand/inyou-official.jpg"));
+app.get("/brand/inyou-official.png", (req,res) => res.redirect(302,"/brand/inyou-official.jpg"));
+app.get("/brand/inyou-official.jpg", (req,res) => {
   res.setHeader("Cache-Control","public, max-age=86400");
-  res.type("image/png").sendFile(path.join(__dirname,"branding","inyou-official.png"));
+  res.type("image/jpeg").sendFile(path.join(__dirname,"branding","inyou-official.jpg"));
 });
 const SITE_MODE = process.env.SITE_MODE || "pos";
 app.use(express.static(path.join(__dirname, "public"), {
