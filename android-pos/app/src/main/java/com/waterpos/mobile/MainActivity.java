@@ -4,12 +4,19 @@ import android.app.Activity;
 import android.app.ActivityManager;
 import android.app.AlertDialog;
 import android.app.admin.DevicePolicyManager;
+import android.animation.ValueAnimator;
 import android.content.ComponentName;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ResolveInfo;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.LinearGradient;
+import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.RectF;
+import android.graphics.Shader;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -17,7 +24,9 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.MediaStore;
+import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
@@ -29,6 +38,10 @@ import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import java.util.HashSet;
@@ -40,6 +53,7 @@ public class MainActivity extends Activity {
     private static final String POS_LOGIN_URL = "https://water-pos-web-production.up.railway.app/pos-login.html";
     private static final String POS_HOST = "water-pos-web-production.up.railway.app";
     private static final int FILE_CHOOSER_REQUEST = 9001;
+    private static final long STARTUP_SPLASH_MS = 5000L;
 
     private WebView webView;
     private ValueCallback<Uri[]> fileCallback;
@@ -51,6 +65,7 @@ public class MainActivity extends Activity {
     private Handler kioskHandler;
     private boolean lockTaskObserved = false;
     private boolean pinningRequested = false;
+    private ValueAnimator splashAnimator;
     private final Runnable kioskRecoveryRunnable = new Runnable() {
         @Override
         public void run() {
@@ -78,6 +93,90 @@ public class MainActivity extends Activity {
             }
         });
 
+        showStartupSplash(savedInstanceState);
+        enterKioskMode();
+    }
+
+    private int dp(float value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    private void showStartupSplash(Bundle savedInstanceState) {
+        FrameLayout root = new FrameLayout(this);
+        root.setBackgroundColor(Color.WHITE);
+
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setGravity(Gravity.CENTER_HORIZONTAL);
+        content.setPadding(dp(28), dp(32), dp(28), dp(32));
+
+        FrameLayout.LayoutParams contentParams = new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.CENTER
+        );
+
+        ImageView logo = new ImageView(this);
+        logo.setImageResource(R.drawable.inyou_official);
+        logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        LinearLayout.LayoutParams logoParams = new LinearLayout.LayoutParams(dp(285), dp(285));
+        logoParams.bottomMargin = dp(34);
+        content.addView(logo, logoParams);
+
+        WaterLoadingView loader = new WaterLoadingView(this);
+        LinearLayout.LayoutParams loaderParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(48)
+        );
+        loaderParams.setMargins(dp(18), 0, dp(18), dp(12));
+        content.addView(loader, loaderParams);
+
+        TextView loadingText = new TextView(this);
+        loadingText.setText("Loading 0%");
+        loadingText.setTextColor(Color.rgb(20, 88, 142));
+        loadingText.setTextSize(14);
+        loadingText.setGravity(Gravity.CENTER);
+        loadingText.setLetterSpacing(0.12f);
+        content.addView(loadingText, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ));
+
+        TextView brandText = new TextView(this);
+        brandText.setText("INYOU WATER SUPPLY CO.");
+        brandText.setTextColor(Color.rgb(80, 102, 120));
+        brandText.setTextSize(11);
+        brandText.setGravity(Gravity.CENTER);
+        brandText.setLetterSpacing(0.18f);
+        LinearLayout.LayoutParams brandParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        brandParams.topMargin = dp(10);
+        content.addView(brandText, brandParams);
+
+        root.addView(content, contentParams);
+        setContentView(root);
+
+        splashAnimator = ValueAnimator.ofFloat(0f, 1f);
+        splashAnimator.setDuration(STARTUP_SPLASH_MS);
+        splashAnimator.addUpdateListener(animation -> {
+            float progress = (float) animation.getAnimatedValue();
+            loader.setProgress(progress);
+            loadingText.setText("Loading " + Math.round(progress * 100f) + "%");
+        });
+        splashAnimator.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(android.animation.Animator animation) {
+                splashAnimator = null;
+                initializeWebView(savedInstanceState);
+            }
+        });
+        splashAnimator.start();
+    }
+
+    private void initializeWebView(Bundle savedInstanceState) {
+        if (isFinishing() || isDestroyed()) return;
+
         webView = new WebView(this);
         webView.setBackgroundColor(Color.WHITE);
         setContentView(webView);
@@ -94,7 +193,7 @@ public class MainActivity extends Activity {
         settings.setUseWideViewPort(true);
         settings.setMediaPlaybackRequiresUserGesture(true);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        settings.setUserAgentString(settings.getUserAgentString() + " WaterPOSAndroid/1.2.2");
+        settings.setUserAgentString(settings.getUserAgentString() + " WaterPOSAndroid/1.2.3");
 
         CookieManager cookieManager = CookieManager.getInstance();
         cookieManager.setAcceptCookie(true);
@@ -169,6 +268,83 @@ public class MainActivity extends Activity {
         }
 
         enterKioskMode();
+    }
+
+    private static class WaterLoadingView extends View {
+        private final Paint trackPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint waterPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint highlightPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Path wavePath = new Path();
+        private float progress = 0f;
+
+        WaterLoadingView(Context context) {
+            super(context);
+            trackPaint.setStyle(Paint.Style.FILL);
+            trackPaint.setColor(Color.rgb(232, 245, 252));
+            highlightPaint.setStyle(Paint.Style.STROKE);
+            highlightPaint.setStrokeWidth(2f);
+            highlightPaint.setColor(Color.argb(150, 73, 177, 232));
+        }
+
+        void setProgress(float value) {
+            progress = Math.max(0f, Math.min(1f, value));
+            invalidate();
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            float w = getWidth();
+            float h = getHeight();
+            float radius = h / 2f;
+            RectF track = new RectF(0, 0, w, h);
+
+            canvas.drawRoundRect(track, radius, radius, trackPaint);
+
+            float fillRight = Math.max(h, w * progress);
+            canvas.save();
+            canvas.clipRect(0, 0, Math.min(fillRight, w), h);
+
+            waterPaint.setShader(new LinearGradient(
+                0, 0, w, h,
+                new int[]{
+                    Color.rgb(16, 117, 225),
+                    Color.rgb(42, 183, 239),
+                    Color.rgb(8, 105, 214)
+                },
+                null,
+                Shader.TileMode.CLAMP
+            ));
+
+            float waveBase = h * 0.43f;
+            float amplitude = h * 0.12f;
+            float phase = progress * (float) Math.PI * 5f;
+            wavePath.reset();
+            wavePath.moveTo(0, h);
+            wavePath.lineTo(0, waveBase);
+
+            int steps = 70;
+            for (int i = 0; i <= steps; i++) {
+                float x = w * i / steps;
+                float y = waveBase + (float) Math.sin((i / 7.0f) + phase) * amplitude;
+                wavePath.lineTo(x, y);
+            }
+            wavePath.lineTo(w, h);
+            wavePath.close();
+            canvas.drawPath(wavePath, waterPaint);
+
+            Paint bubblePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            bubblePaint.setColor(Color.argb(150, 255, 255, 255));
+            for (int i = 0; i < 5; i++) {
+                float x = (w * ((i * 0.19f + progress * 0.37f) % 1f));
+                float y = h * (0.28f + ((i * 0.17f + progress * 0.8f) % 0.45f));
+                float r = h * (0.035f + (i % 3) * 0.012f);
+                canvas.drawCircle(x, y, r, bubblePaint);
+            }
+            canvas.restore();
+
+            canvas.drawRoundRect(track, radius, radius, highlightPaint);
+        }
     }
 
     private boolean isDedicatedKiosk() {
@@ -505,7 +681,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onSaveInstanceState(Bundle outState) {
-        webView.saveState(outState);
+        if (webView != null) webView.saveState(outState);
         super.onSaveInstanceState(outState);
     }
 
@@ -520,6 +696,10 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (splashAnimator != null) {
+            splashAnimator.cancel();
+            splashAnimator = null;
+        }
         if (kioskHandler != null) kioskHandler.removeCallbacks(kioskRecoveryRunnable);
         if (webView != null) {
             webView.removeJavascriptInterface("AndroidPos");
