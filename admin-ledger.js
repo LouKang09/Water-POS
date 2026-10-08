@@ -336,7 +336,7 @@ function addRoutes(app) {
           SELECT generate_series($1::date,$2::date,interval '1 day')::date AS day
         ),
         sales_daily AS (
-          SELECT (created_at AT TIME ZONE 'Asia/Manila')::date AS day,
+          SELECT (COALESCE(paid_at,created_at) AT TIME ZONE 'Asia/Manila')::date AS day,
                  COALESCE(SUM(total),0)::numeric AS daily_income,
                  COALESCE(SUM(total) FILTER (WHERE payment_method='Cash'),0)::numeric AS cash,
                  COALESCE(SUM(total) FILTER (WHERE payment_method='GCash'),0)::numeric AS gcash,
@@ -346,7 +346,8 @@ function addRoutes(app) {
                  COUNT(*) FILTER (WHERE payment_method='GCash')::int AS gcash_txns,
                  COUNT(*) FILTER (WHERE payment_method='Other')::int AS other_txns
           FROM sales
-          WHERE (created_at AT TIME ZONE 'Asia/Manila')::date BETWEEN $1::date AND $2::date
+          WHERE payment_status='paid'
+            AND (COALESCE(paid_at,created_at) AT TIME ZONE 'Asia/Manila')::date BETWEEN $1::date AND $2::date
           GROUP BY 1
         ),
         expense_daily AS (
