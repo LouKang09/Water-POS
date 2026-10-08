@@ -121,7 +121,7 @@ public class MainActivity extends Activity {
         logo.setImageResource(R.drawable.inyou_logo);
         logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
         logo.setAdjustViewBounds(true);
-        LinearLayout.LayoutParams logoParams = new LinearLayout.LayoutParams(dp(230), dp(230));
+        LinearLayout.LayoutParams logoParams = new LinearLayout.LayoutParams(dp(236), dp(236));
         logoParams.bottomMargin = dp(22);
         content.addView(logo, logoParams);
 
@@ -223,7 +223,7 @@ public class MainActivity extends Activity {
         settings.setUseWideViewPort(true);
         settings.setMediaPlaybackRequiresUserGesture(true);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        settings.setUserAgentString(settings.getUserAgentString() + " WaterPOSAndroid/1.2.5");
+        settings.setUserAgentString(settings.getUserAgentString() + " WaterPOSAndroid/1.2.6");
 
         CookieManager cookieManager = CookieManager.getInstance();
         cookieManager.setAcceptCookie(true);
