@@ -284,3 +284,6 @@ if (enabled) {
 } else {
   console.warn("Receipt storage disabled: S3 environment variables are not configured");
 }
+
+
+module.exports = { enabled, storeReceipt, fetchReceipt };
