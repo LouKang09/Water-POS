@@ -3,6 +3,7 @@ const path = require("path");
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 const multer = require("multer");
+const sharp = require("sharp");
 const { Pool } = require("pg");
 
 const app = express();
@@ -17,6 +18,22 @@ app.use(express.json({ limit: "1mb" }));
 app.get("/brand/inyou-official.webp", (req,res) => {
   res.setHeader("Cache-Control","public, max-age=86400");
   res.type("image/webp").sendFile(path.join(__dirname,"branding","inyou-official.webp"));
+});
+let inyouPngPromise=null;
+app.get("/brand/inyou-official.png", async (req,res,next) => {
+  try {
+    if (!inyouPngPromise) {
+      inyouPngPromise=sharp(path.join(__dirname,"branding","inyou-official.webp"))
+        .png({ compressionLevel: 9 })
+        .toBuffer();
+    }
+    const image=await inyouPngPromise;
+    res.setHeader("Cache-Control","public, max-age=86400");
+    res.type("image/png").send(image);
+  } catch (error) {
+    inyouPngPromise=null;
+    next(error);
+  }
 });
 const SITE_MODE = process.env.SITE_MODE || "pos";
 app.use(express.static(path.join(__dirname, "public"), {
