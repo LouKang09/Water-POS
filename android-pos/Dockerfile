@@ -1,7 +1,7 @@
 FROM gradle:8.7-jdk17 AS build
 
 USER root
-RUN apt-get update && apt-get install -y --no-install-recommends curl unzip && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends curl unzip webp && rm -rf /var/lib/apt/lists/*
 
 ENV ANDROID_HOME=/opt/android-sdk
 ENV PATH=${PATH}:${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools
@@ -18,13 +18,14 @@ RUN yes | sdkmanager --sdk_root=${ANDROID_HOME} --licenses >/dev/null \
 WORKDIR /workspace
 COPY android-pos/ /workspace/
 RUN mkdir -p /workspace/app/src/main/res/drawable-nodpi
-COPY branding/inyou-official.webp /workspace/app/src/main/res/drawable-nodpi/inyou_official.webp
+COPY branding/inyou-official.webp /tmp/inyou-official.webp
+RUN dwebp /tmp/inyou-official.webp -o /workspace/app/src/main/res/drawable-nodpi/inyou_logo.png >/dev/null
 RUN gradle assembleDebug --no-daemon \
-    && cp app/build/outputs/apk/debug/app-debug.apk /tmp/INYOU-Water-POS-v1.2.3.apk
+    && cp app/build/outputs/apk/debug/app-debug.apk /tmp/INYOU-Water-POS-v1.2.4.apk
 
 FROM python:3.12-alpine
 WORKDIR /app
-COPY --from=build /tmp/INYOU-Water-POS-v1.2.3.apk /app/INYOU-Water-POS-v1.2.3.apk
-RUN printf '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Water POS APK</title></head><body style="font-family:sans-serif;padding:30px"><h1>INYOU Water POS Android v1.2.3</h1><p>Official INYOU Water POS app with approved branding, 5-second water loading splash, Huawei/EMUI kiosk hardening, logout, Exit App, and dedicated Device Owner lock.</p><p><a href="/INYOU-Water-POS-v1.2.3.apk">Download INYOU-Water-POS-v1.2.3.apk</a></p></body></html>' > /app/index.html
+COPY --from=build /tmp/INYOU-Water-POS-v1.2.4.apk /app/INYOU-Water-POS-v1.2.4.apk
+RUN printf '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Water POS APK</title></head><body style="font-family:sans-serif;padding:30px"><h1>INYOU Water POS Android v1.2.4</h1><p>Official INYOU Water POS app with adaptive INYOU launcher icon, redesigned 5-second water loading splash, session-safe startup, Huawei/EMUI kiosk hardening, logout, Exit App, and dedicated Device Owner lock.</p><p><a href="/INYOU-Water-POS-v1.2.4.apk">Download INYOU-Water-POS-v1.2.4.apk</a></p></body></html>' > /app/index.html
 EXPOSE 8080
 CMD ["python", "-m", "http.server", "8080", "--bind", "0.0.0.0"]
