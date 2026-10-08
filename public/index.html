@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0d6b69">
   <title>Water POS</title>
-  <link rel="stylesheet" href="/styles.css?v=20261008-1">
+  <link rel="stylesheet" href="/styles.css?v=20261008-2">
 </head>
 <body class="pos-page">
   <header class="pos-header">
@@ -68,6 +68,34 @@
     </div>
     <button id="checkoutBtn" class="primary-button" disabled>Payment</button>
   </div>
+
+  <dialog id="quantityDialog" class="quantity-dialog">
+    <form id="quantityForm" class="quantity-sheet">
+      <div class="dialog-header">
+        <div>
+          <p class="eyebrow" id="quantityCategory">ITEM QUANTITY</p>
+          <h2 id="quantityTitle">Add item</h2>
+        </div>
+        <button type="button" class="icon-button" id="closeQuantity" aria-label="Close">×</button>
+      </div>
+
+      <div id="pickupTypePanel" class="pickup-type-panel hidden">
+        <span class="quantity-label">Choose type</span>
+        <div class="pickup-type-options">
+          <button type="button" class="pickup-type-option" data-pickup-type="Tumbler">Tumbler</button>
+          <button type="button" class="pickup-type-option" data-pickup-type="Bottled Water">Bottled Water</button>
+        </div>
+      </div>
+
+      <label class="quantity-field">
+        <span class="quantity-label">Quantity</span>
+        <input id="quantityInput" type="number" inputmode="numeric" pattern="[0-9]*" min="1" max="999" step="1" value="1" required>
+        <small id="quantityHelp">Enter how many to add to this order.</small>
+      </label>
+
+      <button id="addQuantityBtn" type="submit" class="primary-button full">Add to Order</button>
+    </form>
+  </dialog>
 
   <dialog id="onlineQueueDialog" class="queue-dialog">
     <div class="queue-sheet">
@@ -188,6 +216,6 @@
   <div id="toast" class="toast" role="status"></div>
   <script src="/pos-auth.js?v=20261005-1"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="/app.js?v=20261008-1"></script>
+  <script src="/app.js?v=20261008-2"></script>
 </body>
 </html>
