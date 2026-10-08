@@ -14,6 +14,10 @@ const pool = new Pool({
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
 
 app.use(express.json({ limit: "1mb" }));
+app.get("/brand/inyou-official.webp", (req,res) => {
+  res.setHeader("Cache-Control","public, max-age=86400");
+  res.type("image/webp").sendFile(path.join(__dirname,"branding","inyou-official.webp"));
+});
 const SITE_MODE = process.env.SITE_MODE || "pos";
 app.use(express.static(path.join(__dirname, "public"), {
   index: SITE_MODE === "queue" ? false : "index.html",
