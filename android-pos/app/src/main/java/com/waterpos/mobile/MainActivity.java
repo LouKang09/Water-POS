@@ -51,6 +51,7 @@ import java.util.Set;
 public class MainActivity extends Activity {
     private static final String POS_URL = "https://water-pos-web-production.up.railway.app/";
     private static final String POS_LOGIN_URL = "https://water-pos-web-production.up.railway.app/pos-login.html";
+    private static final String POS_START_URL = "https://water-pos-web-production.up.railway.app/pos-start.html";
     private static final String POS_HOST = "water-pos-web-production.up.railway.app";
     private static final int FILE_CHOOSER_REQUEST = 9001;
     private static final long STARTUP_SPLASH_MS = 5000L;
@@ -108,7 +109,7 @@ public class MainActivity extends Activity {
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         content.setGravity(Gravity.CENTER_HORIZONTAL);
-        content.setPadding(dp(28), dp(32), dp(28), dp(32));
+        content.setPadding(dp(34), dp(28), dp(34), dp(28));
 
         FrameLayout.LayoutParams contentParams = new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
@@ -117,42 +118,71 @@ public class MainActivity extends Activity {
         );
 
         ImageView logo = new ImageView(this);
-        logo.setImageResource(R.drawable.inyou_official);
+        logo.setImageResource(R.drawable.inyou_logo);
         logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        LinearLayout.LayoutParams logoParams = new LinearLayout.LayoutParams(dp(285), dp(285));
-        logoParams.bottomMargin = dp(34);
+        logo.setAdjustViewBounds(true);
+        LinearLayout.LayoutParams logoParams = new LinearLayout.LayoutParams(dp(230), dp(230));
+        logoParams.bottomMargin = dp(22);
         content.addView(logo, logoParams);
 
-        WaterLoadingView loader = new WaterLoadingView(this);
-        LinearLayout.LayoutParams loaderParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, dp(48)
-        );
-        loaderParams.setMargins(dp(18), 0, dp(18), dp(12));
-        content.addView(loader, loaderParams);
-
-        TextView loadingText = new TextView(this);
-        loadingText.setText("Loading 0%");
-        loadingText.setTextColor(Color.rgb(20, 88, 142));
-        loadingText.setTextSize(14);
-        loadingText.setGravity(Gravity.CENTER);
-        loadingText.setLetterSpacing(0.12f);
-        content.addView(loadingText, new LinearLayout.LayoutParams(
+        TextView title = new TextView(this);
+        title.setText("INYOU WATER SUPPLY CO.");
+        title.setTextColor(Color.rgb(10, 74, 104));
+        title.setTextSize(13);
+        title.setGravity(Gravity.CENTER);
+        title.setLetterSpacing(0.13f);
+        title.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
+        content.addView(title, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
-        TextView brandText = new TextView(this);
-        brandText.setText("INYOU WATER SUPPLY CO.");
-        brandText.setTextColor(Color.rgb(80, 102, 120));
-        brandText.setTextSize(11);
-        brandText.setGravity(Gravity.CENTER);
-        brandText.setLetterSpacing(0.18f);
-        LinearLayout.LayoutParams brandParams = new LinearLayout.LayoutParams(
+        TextView subtitle = new TextView(this);
+        subtitle.setText("Starting Water POS");
+        subtitle.setTextColor(Color.rgb(103, 129, 141));
+        subtitle.setTextSize(12);
+        subtitle.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams subtitleParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT
         );
-        brandParams.topMargin = dp(10);
-        content.addView(brandText, brandParams);
+        subtitleParams.topMargin = dp(5);
+        subtitleParams.bottomMargin = dp(24);
+        content.addView(subtitle, subtitleParams);
+
+        LinearLayout progressHeader = new LinearLayout(this);
+        progressHeader.setOrientation(LinearLayout.HORIZONTAL);
+        progressHeader.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView loadingText = new TextView(this);
+        loadingText.setText("Preparing secure POS");
+        loadingText.setTextColor(Color.rgb(45, 91, 113));
+        loadingText.setTextSize(12);
+        loadingText.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
+
+        TextView percentText = new TextView(this);
+        percentText.setText("0%");
+        percentText.setTextColor(Color.rgb(12, 118, 201));
+        percentText.setTextSize(12);
+        percentText.setGravity(Gravity.END);
+        percentText.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
+
+        progressHeader.addView(loadingText, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        progressHeader.addView(percentText, new LinearLayout.LayoutParams(dp(52), ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout.LayoutParams headerParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        headerParams.setMargins(dp(10), 0, dp(10), dp(8));
+        content.addView(progressHeader, headerParams);
+
+        WaterLoadingView loader = new WaterLoadingView(this);
+        LinearLayout.LayoutParams loaderParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(34)
+        );
+        loaderParams.setMargins(dp(8), 0, dp(8), 0);
+        content.addView(loader, loaderParams);
 
         root.addView(content, contentParams);
         setContentView(root);
@@ -162,7 +192,7 @@ public class MainActivity extends Activity {
         splashAnimator.addUpdateListener(animation -> {
             float progress = (float) animation.getAnimatedValue();
             loader.setProgress(progress);
-            loadingText.setText("Loading " + Math.round(progress * 100f) + "%");
+            percentText.setText(Math.round(progress * 100f) + "%");
         });
         splashAnimator.addListener(new android.animation.AnimatorListenerAdapter() {
             @Override
@@ -193,7 +223,7 @@ public class MainActivity extends Activity {
         settings.setUseWideViewPort(true);
         settings.setMediaPlaybackRequiresUserGesture(true);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        settings.setUserAgentString(settings.getUserAgentString() + " WaterPOSAndroid/1.2.3");
+        settings.setUserAgentString(settings.getUserAgentString() + " WaterPOSAndroid/1.2.4");
 
         CookieManager cookieManager = CookieManager.getInstance();
         cookieManager.setAcceptCookie(true);
@@ -261,11 +291,10 @@ public class MainActivity extends Activity {
             }
         });
 
-        if (savedInstanceState == null) {
-            webView.loadUrl(POS_URL);
-        } else {
-            webView.restoreState(savedInstanceState);
-        }
+        // Never restore a stale Login/POS page on a fresh app launch.
+        // The gate validates the saved token first, preventing the login page from flashing
+        // for an already authenticated cashier.
+        webView.loadUrl(POS_START_URL);
 
         enterKioskMode();
     }
@@ -273,17 +302,30 @@ public class MainActivity extends Activity {
     private static class WaterLoadingView extends View {
         private final Paint trackPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint waterPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint highlightPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint waveHighlightPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint borderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint bubblePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Path wavePath = new Path();
+        private final Path highlightPath = new Path();
         private float progress = 0f;
 
         WaterLoadingView(Context context) {
             super(context);
+            setLayerType(View.LAYER_TYPE_SOFTWARE, null);
+
             trackPaint.setStyle(Paint.Style.FILL);
-            trackPaint.setColor(Color.rgb(232, 245, 252));
-            highlightPaint.setStyle(Paint.Style.STROKE);
-            highlightPaint.setStrokeWidth(2f);
-            highlightPaint.setColor(Color.argb(150, 73, 177, 232));
+            trackPaint.setColor(Color.rgb(235, 247, 253));
+
+            waveHighlightPaint.setStyle(Paint.Style.STROKE);
+            waveHighlightPaint.setStrokeWidth(2.4f);
+            waveHighlightPaint.setColor(Color.argb(165, 255, 255, 255));
+
+            borderPaint.setStyle(Paint.Style.STROKE);
+            borderPaint.setStrokeWidth(2f);
+            borderPaint.setColor(Color.rgb(155, 214, 240));
+
+            bubblePaint.setStyle(Paint.Style.FILL);
+            bubblePaint.setColor(Color.argb(175, 255, 255, 255));
         }
 
         void setProgress(float value) {
@@ -297,55 +339,62 @@ public class MainActivity extends Activity {
             float w = getWidth();
             float h = getHeight();
             float radius = h / 2f;
-            RectF track = new RectF(0, 0, w, h);
+            RectF track = new RectF(1f, 1f, w - 1f, h - 1f);
 
             canvas.drawRoundRect(track, radius, radius, trackPaint);
 
             float fillRight = w * progress;
             if (fillRight > 0f) {
                 canvas.save();
-                canvas.clipRect(0, 0, Math.min(fillRight, w), h);
+                canvas.clipRect(0f, 0f, Math.min(fillRight, w), h);
 
-            waterPaint.setShader(new LinearGradient(
-                0, 0, w, h,
-                new int[]{
-                    Color.rgb(16, 117, 225),
-                    Color.rgb(42, 183, 239),
-                    Color.rgb(8, 105, 214)
-                },
-                null,
-                Shader.TileMode.CLAMP
-            ));
+                waterPaint.setShader(new LinearGradient(
+                    0f, 0f, w, h,
+                    new int[]{
+                        Color.rgb(4, 104, 218),
+                        Color.rgb(24, 166, 235),
+                        Color.rgb(71, 202, 243)
+                    },
+                    null,
+                    Shader.TileMode.CLAMP
+                ));
 
-            float waveBase = h * 0.43f;
-            float amplitude = h * 0.12f;
-            float phase = progress * (float) Math.PI * 5f;
-            wavePath.reset();
-            wavePath.moveTo(0, h);
-            wavePath.lineTo(0, waveBase);
+                float base = h * 0.50f;
+                float amplitude = h * 0.11f;
+                float phase = progress * (float)Math.PI * 7f;
 
-            int steps = 70;
-            for (int i = 0; i <= steps; i++) {
-                float x = w * i / steps;
-                float y = waveBase + (float) Math.sin((i / 7.0f) + phase) * amplitude;
-                wavePath.lineTo(x, y);
-            }
-            wavePath.lineTo(w, h);
-            wavePath.close();
-            canvas.drawPath(wavePath, waterPaint);
+                wavePath.reset();
+                wavePath.moveTo(0f, h);
+                wavePath.lineTo(0f, base);
+                int steps = 80;
+                for (int i = 0; i <= steps; i++) {
+                    float x = w * i / steps;
+                    float y = base + (float)Math.sin((i / 6.3f) + phase) * amplitude;
+                    wavePath.lineTo(x, y);
+                }
+                wavePath.lineTo(w, h);
+                wavePath.close();
+                canvas.drawPath(wavePath, waterPaint);
 
-            Paint bubblePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            bubblePaint.setColor(Color.argb(150, 255, 255, 255));
-            for (int i = 0; i < 5; i++) {
-                float x = (w * ((i * 0.19f + progress * 0.37f) % 1f));
-                float y = h * (0.28f + ((i * 0.17f + progress * 0.8f) % 0.45f));
-                float r = h * (0.035f + (i % 3) * 0.012f);
-                canvas.drawCircle(x, y, r, bubblePaint);
-            }
+                highlightPath.reset();
+                for (int i = 0; i <= steps; i++) {
+                    float x = w * i / steps;
+                    float y = base - h * 0.02f + (float)Math.sin((i / 6.3f) + phase) * amplitude;
+                    if (i == 0) highlightPath.moveTo(x, y);
+                    else highlightPath.lineTo(x, y);
+                }
+                canvas.drawPath(highlightPath, waveHighlightPaint);
+
+                for (int i = 0; i < 6; i++) {
+                    float x = w * ((i * 0.17f + progress * 0.42f) % 1f);
+                    float y = h * (0.22f + ((i * 0.19f + progress * 0.85f) % 0.50f));
+                    float r = h * (0.035f + (i % 3) * 0.012f);
+                    canvas.drawCircle(x, y, r, bubblePaint);
+                }
                 canvas.restore();
             }
 
-            canvas.drawRoundRect(track, radius, radius, highlightPaint);
+            canvas.drawRoundRect(track, radius, radius, borderPaint);
         }
     }
 
