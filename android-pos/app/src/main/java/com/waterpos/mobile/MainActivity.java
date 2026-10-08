@@ -223,7 +223,7 @@ public class MainActivity extends Activity {
         settings.setUseWideViewPort(true);
         settings.setMediaPlaybackRequiresUserGesture(true);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        settings.setUserAgentString(settings.getUserAgentString() + " WaterPOSAndroid/1.2.6");
+        settings.setUserAgentString(settings.getUserAgentString() + " WaterPOSAndroid/1.2.7");
 
         CookieManager cookieManager = CookieManager.getInstance();
         cookieManager.setAcceptCookie(true);
@@ -307,6 +307,7 @@ public class MainActivity extends Activity {
         private final Paint bubblePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Path wavePath = new Path();
         private final Path highlightPath = new Path();
+        private final Path clipPath = new Path();
         private float progress = 0f;
 
         WaterLoadingView(Context context) {
@@ -346,6 +347,9 @@ public class MainActivity extends Activity {
             float fillRight = w * progress;
             if (fillRight > 0f) {
                 canvas.save();
+                clipPath.reset();
+                clipPath.addRoundRect(track, radius, radius, Path.Direction.CW);
+                canvas.clipPath(clipPath);
                 canvas.clipRect(0f, 0f, Math.min(fillRight, w), h);
 
                 waterPaint.setShader(new LinearGradient(
@@ -410,7 +414,6 @@ public class MainActivity extends Activity {
                 devicePolicyManager.setLockTaskFeatures(adminComponent, DevicePolicyManager.LOCK_TASK_FEATURE_NONE);
             }
             devicePolicyManager.setStatusBarDisabled(adminComponent, true);
-            devicePolicyManager.setKeyguardDisabled(adminComponent, true);
         } catch (Exception ignored) {}
     }
 
@@ -492,14 +495,14 @@ public class MainActivity extends Activity {
             return;
         }
 
-        // Device Owner mode enters true LOCKED kiosk without a confirmation prompt.
-        // A normal personal device can only enter Android's user-approved screen pinning mode.
-        if (isDedicatedKiosk() || !pinningRequested || lockTaskObserved) {
-            try {
-                pinningRequested = true;
-                startLockTask();
-            } catch (Exception ignored) {}
-        }
+        // Only a Device Owner is allowed to enter true Android kiosk mode.
+        // Normal phones use soft kiosk recovery instead of screen pinning so Exit App
+        // returns to the phone normally instead of triggering a lock screen.
+        if (!isDedicatedKiosk()) return;
+
+        try {
+            startLockTask();
+        } catch (Exception ignored) {}
 
         if (isLockTaskActive()) lockTaskObserved = true;
     }
@@ -528,10 +531,16 @@ public class MainActivity extends Activity {
         configureDedicatedKiosk();
         requestLockTask();
 
-        if (!isLockTaskActive() && (isDedicatedKiosk() || lockTaskObserved)) {
+        if (isDedicatedKiosk()) {
+            if (!isLockTaskActive()) {
+                requestLockTask();
+                hideSystemUi();
+            }
+        } else if (!hasWindowFocus()) {
+            // Soft kiosk fallback: recover from Home/Recents without using Android screen
+            // pinning, which can force a PIN/lock screen when the app exits.
             bringTaskToFront();
             hideSystemUi();
-            requestLockTask();
         }
     }
 
@@ -605,7 +614,7 @@ public class MainActivity extends Activity {
         exitRequested = true;
         resumeKioskAfterChooser = false;
         if (kioskHandler != null) kioskHandler.removeCallbacks(kioskRecoveryRunnable);
-        if (isLockTaskActive()) {
+        if (isDedicatedKiosk() && isLockTaskActive()) {
             try {
                 stopLockTask();
             } catch (Exception ignored) {}
@@ -613,7 +622,6 @@ public class MainActivity extends Activity {
         if (isDedicatedKiosk()) {
             try {
                 devicePolicyManager.setStatusBarDisabled(adminComponent, false);
-                devicePolicyManager.setKeyguardDisabled(adminComponent, false);
             } catch (Exception ignored) {}
         }
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
@@ -724,7 +732,7 @@ public class MainActivity extends Activity {
                 hideSystemUi();
                 requestLockTask();
                 scheduleKioskRecovery(220);
-            } else if (lockTaskObserved || isDedicatedKiosk()) {
+            } else {
                 scheduleKioskRecovery(120);
             }
         }
