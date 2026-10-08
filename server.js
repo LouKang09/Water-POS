@@ -43,7 +43,7 @@ async function initDb() {
     CREATE TABLE IF NOT EXISTS sales (
       id SERIAL PRIMARY KEY,
       transaction_ref TEXT UNIQUE NOT NULL,
-      payment_method TEXT NOT NULL CHECK (payment_method IN ('Cash','GCash','Other')),
+      payment_method TEXT NOT NULL CHECK (payment_method IN ('Cash','GCash','Other','Pay Later')),
       payment_provider TEXT,
       payment_reference TEXT,
       gcash_reference TEXT,
@@ -116,6 +116,9 @@ async function initDb() {
     ALTER TABLE sales ADD COLUMN IF NOT EXISTS payment_reference TEXT;
     ALTER TABLE sales ADD COLUMN IF NOT EXISTS payment_reference_status TEXT;
     ALTER TABLE sales ADD COLUMN IF NOT EXISTS delivery_room_unit TEXT;
+    ALTER TABLE sales ADD COLUMN IF NOT EXISTS payment_status TEXT;
+    ALTER TABLE sales ADD COLUMN IF NOT EXISTS was_pay_later BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE sales ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ;
 
     UPDATE sales
     SET payment_provider = COALESCE(payment_provider, 'GCash'),
@@ -126,16 +129,32 @@ async function initDb() {
     UPDATE sales
     SET payment_reference_status = COALESCE(
       payment_reference_status,
-      CASE WHEN payment_method = 'Cash' THEN NULL
+      CASE WHEN payment_method IN ('Cash','Pay Later') THEN NULL
            WHEN payment_reference IS NOT NULL THEN 'verified'
            ELSE 'unreadable'
       END
     );
 
+    UPDATE sales
+    SET payment_status = CASE WHEN payment_method='Pay Later' THEN 'unpaid' ELSE 'paid' END
+    WHERE payment_status IS NULL;
+
+    UPDATE sales
+    SET paid_at = created_at
+    WHERE payment_status='paid' AND paid_at IS NULL;
+
+    ALTER TABLE sales ALTER COLUMN payment_status SET DEFAULT 'paid';
+    ALTER TABLE sales ALTER COLUMN payment_status SET NOT NULL;
+
+    ALTER TABLE sales DROP CONSTRAINT IF EXISTS sales_payment_status_check;
+    ALTER TABLE sales
+      ADD CONSTRAINT sales_payment_status_check
+      CHECK (payment_status IN ('paid','unpaid'));
+
     ALTER TABLE sales DROP CONSTRAINT IF EXISTS sales_payment_method_check;
     ALTER TABLE sales
       ADD CONSTRAINT sales_payment_method_check
-      CHECK (payment_method IN ('Cash','GCash','Other'));
+      CHECK (payment_method IN ('Cash','GCash','Other','Pay Later'));
   `);
 }
 
@@ -305,7 +324,7 @@ app.post("/api/sales", upload.single("receipt"), async (req,res,next) => {
   try {
     const paymentMethod = String(req.body.paymentMethod || "");
     const allowedOtherProviders = ["Maya","MariBank","GoTyme","VYBE by BPI"];
-    if (!["Cash","GCash","Other"].includes(paymentMethod)) {
+    if (!["Cash","GCash","Other","Pay Later"].includes(paymentMethod)) {
       return res.status(400).json({error:"Invalid payment method."});
     }
 
@@ -332,7 +351,7 @@ app.post("/api/sales", upload.single("receipt"), async (req,res,next) => {
       return res.status(400).json({error:"Room / Unit is required for Delivery orders."});
     }
 
-    const isDigital = paymentMethod !== "Cash";
+    const isDigital = paymentMethod !== "Cash" && paymentMethod !== "Pay Later";
     const submittedReference = isDigital
       ? normalizePaymentReference(req.body.paymentReference || req.body.gcashReference, paymentProvider)
       : null;
@@ -371,9 +390,10 @@ app.post("/api/sales", upload.single("receipt"), async (req,res,next) => {
     const sale = await client.query(
       `INSERT INTO sales (
          transaction_ref,payment_method,payment_provider,payment_reference,payment_reference_status,
-         gcash_reference,delivery_room_unit,total,receipt_mime,receipt_image
+         gcash_reference,delivery_room_unit,total,receipt_mime,receipt_image,
+         payment_status,was_pay_later,paid_at
        )
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
        RETURNING id, transaction_ref, created_at`,
       [
         reference,
@@ -385,7 +405,10 @@ app.post("/api/sales", upload.single("receipt"), async (req,res,next) => {
         deliveryRoomUnit,
         total,
         req.file?.mimetype || null,
-        req.file?.buffer || null
+        req.file?.buffer || null,
+        paymentMethod === "Pay Later" ? "unpaid" : "paid",
+        paymentMethod === "Pay Later",
+        paymentMethod === "Pay Later" ? null : new Date()
       ]
     );
 
