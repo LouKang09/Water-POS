@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff">
+  <title>INYOU Water POS</title>
+  <style>
+    html,body{margin:0;width:100%;height:100%;background:#fff;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    body{display:grid;place-items:center;color:#0a3145}
+    .gate{display:grid;justify-items:center;gap:12px;padding:24px}
+    .gate img{width:132px;height:132px;object-fit:contain}
+    .gate span{font-size:12px;font-weight:800;letter-spacing:.14em;color:#397493}
+  </style>
+</head>
+<body>
+  <div class="gate" aria-live="polite">
+    <img src="/brand/inyou-official.png" alt="INYOU Water Supply Co.">
+    <span>PREPARING WATER POS</span>
+  </div>
+  <script>
+    (async function(){
+      const key="water_pos_user_token";
+      const token=localStorage.getItem(key)||"";
+      if(!token){
+        location.replace("/pos-login.html");
+        return;
+      }
+      try{
+        const res=await fetch("/api/pos/me",{
+          headers:{Authorization:"Bearer "+token},
+          cache:"no-store"
+        });
+        if(res.ok){
+          location.replace("/");
+          return;
+        }
+      }catch(e){}
+      localStorage.removeItem(key);
+      location.replace("/pos-login.html");
+    })();
+  </script>
+</body>
+</html>
