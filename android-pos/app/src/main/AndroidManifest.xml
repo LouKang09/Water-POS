@@ -5,7 +5,8 @@
 
     <application
         android:allowBackup="false"
-        android:icon="@drawable/ic_launcher"
+        android:icon="@drawable/inyou_official"
+        android:roundIcon="@drawable/inyou_official"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
