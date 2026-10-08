@@ -18,11 +18,11 @@ RUN yes | sdkmanager --sdk_root=${ANDROID_HOME} --licenses >/dev/null \
 WORKDIR /workspace
 COPY android-pos/ /workspace/
 RUN gradle assembleDebug --no-daemon \
-    && cp app/build/outputs/apk/debug/app-debug.apk /tmp/Water-POS-v1.2.1.apk
+    && cp app/build/outputs/apk/debug/app-debug.apk /tmp/Water-POS-v1.2.2.apk
 
 FROM python:3.12-alpine
 WORKDIR /app
-COPY --from=build /tmp/Water-POS-v1.2.1.apk /app/Water-POS-v1.2.1.apk
-RUN printf '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Water POS APK</title></head><body style="font-family:sans-serif;padding:30px"><h1>Water POS Android v1.2.1</h1><p>Authenticated smartphone POS app with Huawei/EMUI kiosk hardening, logout, Exit App, and dedicated Device Owner lock.</p><p><a href="/Water-POS-v1.2.1.apk">Download Water-POS-v1.2.1.apk</a></p></body></html>' > /app/index.html
+COPY --from=build /tmp/Water-POS-v1.2.2.apk /app/Water-POS-v1.2.2.apk
+RUN printf '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Water POS APK</title></head><body style="font-family:sans-serif;padding:30px"><h1>Water POS Android v1.2.2</h1><p>Authenticated smartphone POS app with Huawei/EMUI kiosk hardening, logout, Exit App, and dedicated Device Owner lock.</p><p><a href="/Water-POS-v1.2.2.apk">Download Water-POS-v1.2.2.apk</a></p></body></html>' > /app/index.html
 EXPOSE 8080
 CMD ["python", "-m", "http.server", "8080", "--bind", "0.0.0.0"]
