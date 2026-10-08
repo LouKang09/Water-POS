@@ -805,9 +805,28 @@ th{color:var(--muted);font-size:.68rem;text-transform:uppercase;letter-spacing:.
   display:flex;
   justify-content:space-between;
   gap:12px;
-  margin:9px 0 11px;
+  margin:9px 0 7px;
   color:var(--muted);
   font-size:.64rem;
+}
+.unpaid-quantity-row{
+  display:flex;
+  justify-content:flex-end;
+  margin:0 0 10px;
+}
+.unpaid-quantity-badge{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:54px;
+  padding:6px 10px;
+  border-radius:999px;
+  background:#d93636;
+  color:#fff;
+  font-size:.68rem;
+  font-weight:900;
+  letter-spacing:.03em;
+  box-shadow:0 4px 10px rgba(217,54,54,.18);
 }
 .pay-later-info{
   background:#fff8e6!important;
