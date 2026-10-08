@@ -18,6 +18,8 @@ const state = {
   onlineQueue: [],
   unpaidSales: [],
   settlingUnpaidId: null,
+  pendingItem: null,
+  pendingPickupType: "",
 };
 
 const els = {
@@ -65,6 +67,15 @@ const els = {
   unpaidCount: document.querySelector("#unpaidCount"),
   successEyebrow: document.querySelector("#successEyebrow"),
   successTitle: document.querySelector("#successTitle"),
+  quantityDialog: document.querySelector("#quantityDialog"),
+  quantityForm: document.querySelector("#quantityForm"),
+  quantityCategory: document.querySelector("#quantityCategory"),
+  quantityTitle: document.querySelector("#quantityTitle"),
+  quantityInput: document.querySelector("#quantityInput"),
+  quantityHelp: document.querySelector("#quantityHelp"),
+  pickupTypePanel: document.querySelector("#pickupTypePanel"),
+  closeQuantity: document.querySelector("#closeQuantity"),
+  addQuantityBtn: document.querySelector("#addQuantityBtn"),
 };
 
 const money = n => "₱" + Number(n).toLocaleString("en-PH", {maximumFractionDigits:2});
@@ -79,7 +90,7 @@ function toast(message) {
 
 function presets(category) {
   if (category === "Delivery") return [25,35,45].map(p=>({category,label:`Delivery ₱${p}`,unitPrice:p}));
-  if (category === "Pick-Up") return [20,30,40].map(p=>({category,label:`Pick-Up ₱${p}`,unitPrice:p}));
+  if (category === "Pick-Up") return [5,10,20,30,40].map(p=>({category,label:`Pick-Up ₱${p}`,unitPrice:p}));
   if (category === "New") return [{category,label:"New Gallon",unitPrice:200}];
   return state.usedProducts.map(p=>({category:"Used",productId:p.id,label:p.label,unitPrice:p.price}));
 }
@@ -120,21 +131,98 @@ function renderProducts() {
       <span class="label">${p.label}</span>
     </button>`).join("");
   els.productGrid.querySelectorAll(".product-button").forEach(btn=>{
-    btn.addEventListener("click",()=>addToCart(items[Number(btn.dataset.index)]));
+    btn.addEventListener("click",()=>{
+      const item=items[Number(btn.dataset.index)];
+      if(item.category==="Delivery" || item.category==="Pick-Up") openQuantityDialog(item);
+      else addToCart(item,1);
+    });
   });
 }
 
 function keyOf(item) {
-  return [item.category,item.productId||"",item.unitPrice].join("|");
+  return [item.category,item.productId||"",item.variant||"",item.unitPrice].join("|");
 }
 
-function addToCart(item) {
+function addToCart(item,qty=1) {
+  const amount=Math.max(1,Math.min(999,parseInt(qty,10)||1));
   const key = keyOf(item);
   const found = state.cart.find(i=>keyOf(i)===key);
-  if (found) found.qty += 1;
-  else state.cart.push({...item,qty:1});
+  if (found) found.qty += amount;
+  else state.cart.push({...item,qty:amount});
   renderCart();
-  toast(item.label + " added");
+  toast(amount+" × "+item.label+" added");
+}
+
+function openQuantityDialog(item) {
+  state.pendingItem={...item};
+  state.pendingPickupType="";
+  const needsType=item.category==="Pick-Up" && (Number(item.unitPrice)===5 || Number(item.unitPrice)===10);
+
+  els.quantityCategory.textContent=item.category.toUpperCase();
+  els.quantityTitle.textContent=item.label;
+  els.pickupTypePanel.classList.toggle("hidden",!needsType);
+  document.querySelectorAll(".pickup-type-option").forEach(button=>button.classList.remove("active"));
+  els.quantityInput.value="1";
+  els.quantityInput.disabled=needsType;
+  els.addQuantityBtn.disabled=needsType;
+  els.quantityHelp.textContent=needsType
+    ? "Choose Tumbler or Bottled Water first, then enter the quantity."
+    : "Enter how many to add to this order.";
+
+  els.quantityDialog.showModal();
+
+  if(!needsType){
+    setTimeout(()=>{
+      els.quantityInput.focus();
+      els.quantityInput.select();
+    },80);
+  }
+}
+
+function choosePickupType(type) {
+  if(!state.pendingItem) return;
+  state.pendingPickupType=type;
+  document.querySelectorAll(".pickup-type-option").forEach(button=>{
+    button.classList.toggle("active",button.dataset.pickupType===type);
+  });
+  els.quantityInput.disabled=false;
+  els.addQuantityBtn.disabled=false;
+  els.quantityHelp.textContent=type+" selected. Enter the quantity.";
+  setTimeout(()=>{
+    els.quantityInput.focus();
+    els.quantityInput.select();
+  },60);
+}
+
+function closeQuantityDialog() {
+  state.pendingItem=null;
+  state.pendingPickupType="";
+  els.quantityDialog.close();
+}
+
+function submitQuantity(event) {
+  event.preventDefault();
+  if(!state.pendingItem) return;
+  const qty=Math.max(1,Math.min(999,parseInt(els.quantityInput.value,10)||0));
+  if(!(qty>0)){
+    toast("Enter a valid quantity.");
+    els.quantityInput.focus();
+    return;
+  }
+
+  let item={...state.pendingItem};
+  const needsType=item.category==="Pick-Up" && (Number(item.unitPrice)===5 || Number(item.unitPrice)===10);
+  if(needsType){
+    if(!state.pendingPickupType){
+      toast("Choose Tumbler or Bottled Water.");
+      return;
+    }
+    item.variant=state.pendingPickupType;
+    item.label=state.pendingPickupType+" · Pick-Up ₱"+item.unitPrice;
+  }
+
+  addToCart(item,qty);
+  closeQuantityDialog();
 }
 
 function changeQty(index,delta) {
@@ -1137,6 +1225,23 @@ async function completeOnlineQueue(id){
     }
   }
 }
+
+document.querySelectorAll(".pickup-type-option").forEach(button=>{
+  button.addEventListener("click",()=>choosePickupType(button.dataset.pickupType));
+});
+els.quantityForm.addEventListener("submit",submitQuantity);
+els.closeQuantity.addEventListener("click",closeQuantityDialog);
+els.quantityDialog.addEventListener("cancel",event=>{
+  event.preventDefault();
+  closeQuantityDialog();
+});
+els.quantityInput.addEventListener("input",()=>{
+  const value=parseInt(els.quantityInput.value,10);
+  els.addQuantityBtn.disabled=!(value>=1 && value<=999) ||
+    (state.pendingItem?.category==="Pick-Up" &&
+     [5,10].includes(Number(state.pendingItem?.unitPrice)) &&
+     !state.pendingPickupType);
+});
 
 document.querySelectorAll(".category-tab").forEach(btn=>{
   btn.addEventListener("click",async()=>{
