@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0d6b69">
   <title>Water POS</title>
-  <link rel="stylesheet" href="/styles.css?v=20261005-1">
+  <link rel="stylesheet" href="/styles.css?v=20261008-1">
 </head>
 <body class="pos-page">
   <header class="pos-header">
@@ -29,6 +29,7 @@
       <button class="category-tab" data-category="Pick-Up">Pick-Up</button>
       <button class="category-tab" data-category="New">New</button>
       <button class="category-tab" data-category="Used">Used</button>
+      <button class="category-tab unpaid-category-tab" data-category="Unpaid">Unpaid <span id="unpaidCount" class="unpaid-tab-count">0</span></button>
     </nav>
 
     <section class="catalog-card">
@@ -37,7 +38,7 @@
           <p class="eyebrow" id="categoryHint">DELIVERY</p>
           <h2 id="categoryTitle">Choose a price</h2>
         </div>
-        <span class="tap-tip">Tap to add</span>
+        <span class="tap-tip" id="tapTip">Tap to add</span>
       </div>
       <div id="productGrid" class="product-grid"></div>
       <label id="roomUnitField" class="field room-unit-field">
@@ -93,7 +94,7 @@
       <div class="dialog-header">
         <div>
           <p class="eyebrow">PAYMENT</p>
-          <h2>Complete transaction</h2>
+          <h2 id="paymentTitle">Complete transaction</h2>
         </div>
         <button type="button" class="icon-button" id="closePayment" aria-label="Close">×</button>
       </div>
@@ -111,10 +112,18 @@
           <span class="payment-icon">•••</span>
           <span><strong>Other</strong><small>More e-wallets</small></span>
         </button>
+        <button type="button" class="payment-method pay-later-method" data-payment="Pay Later">
+          <span class="payment-icon">⌛</span>
+          <span><strong>Pay Later</strong><small>Save as unpaid</small></span>
+        </button>
       </div>
 
       <div id="cashPanel" class="payment-panel">
         <p class="info-box">A Water POS transaction reference will be generated automatically after payment.</p>
+      </div>
+
+      <div id="payLaterPanel" class="payment-panel hidden">
+        <p class="info-box pay-later-info">This transaction will be saved as unpaid and will appear in the Unpaid category until payment is collected.</p>
       </div>
 
       <div id="gcashPanel" class="payment-panel hidden">
@@ -168,8 +177,8 @@
   <dialog id="successDialog" class="success-dialog">
     <div class="success-card">
       <div class="success-mark">✓</div>
-      <p class="eyebrow">TRANSACTION SAVED</p>
-      <h2>Payment complete</h2>
+      <p class="eyebrow" id="successEyebrow">TRANSACTION SAVED</p>
+      <h2 id="successTitle">Payment complete</h2>
       <p id="successRef" class="reference-text"></p>
       <p id="successTotal" class="success-total"></p>
       <button id="newOrderBtn" class="primary-button full">New order</button>
@@ -179,6 +188,6 @@
   <div id="toast" class="toast" role="status"></div>
   <script src="/pos-auth.js?v=20261005-1"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="/app.js?v=20261005-1"></script>
+  <script src="/app.js?v=20261008-1"></script>
 </body>
 </html>
