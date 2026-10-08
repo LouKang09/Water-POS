@@ -23,7 +23,7 @@ button{cursor:pointer}
 .admin-link{display:none;color:var(--brand);font-weight:750;text-decoration:none}
 .pos-shell{max-width:760px;margin:0 auto;padding:14px 14px 24px}
 .category-tabs{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;position:sticky;top:76px;z-index:15;padding:8px 0;background:linear-gradient(var(--bg) 72%,transparent)}
-.category-tab{border:1px solid var(--line);background:var(--surface);color:var(--muted);padding:12px 4px;border-radius:14px;font-size:.82rem;font-weight:800;box-shadow:0 4px 12px rgba(24,67,64,.04)}
+.category-tab{position:relative;overflow:visible;border:1px solid var(--line);background:var(--surface);color:var(--muted);padding:12px 4px;border-radius:14px;font-size:.82rem;font-weight:800;box-shadow:0 4px 12px rgba(24,67,64,.04)}
 .category-tab.active{background:var(--brand);border-color:var(--brand);color:white}
 .catalog-card,.cart-card{margin-top:10px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:17px;box-shadow:var(--shadow)}
 .section-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px}
@@ -728,30 +728,35 @@ th{color:var(--muted);font-size:.68rem;text-transform:uppercase;letter-spacing:.
 
 
 .unpaid-category-tab{
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  gap:5px;
+  position:relative;
+  overflow:visible;
 }
 .unpaid-tab-count{
+  position:absolute;
+  right:-8px;
+  bottom:-9px;
   display:grid;
   place-items:center;
-  min-width:18px;
-  height:18px;
-  padding:0 4px;
+  min-width:28px;
+  height:28px;
+  padding:0 7px;
   border-radius:999px;
-  background:#edf3f2;
-  color:var(--muted);
-  font-size:.58rem;
+  background:#e51e25;
+  color:#fff;
+  border:2px solid var(--bg);
+  font-size:.78rem;
+  line-height:1;
   font-weight:900;
+  box-shadow:0 4px 10px rgba(229,30,37,.28);
+  z-index:3;
 }
-.unpaid-tab-count.has-items{
-  background:#fff0d1;
-  color:#815b00;
+.unpaid-tab-count:not(.has-items){
+  display:none;
 }
 .category-tab.active .unpaid-tab-count{
-  background:rgba(255,255,255,.78);
-  color:var(--brand);
+  background:#e51e25;
+  color:#fff;
+  border-color:var(--bg);
 }
 .unpaid-grid{
   display:grid!important;
@@ -805,28 +810,9 @@ th{color:var(--muted);font-size:.68rem;text-transform:uppercase;letter-spacing:.
   display:flex;
   justify-content:space-between;
   gap:12px;
-  margin:9px 0 7px;
+  margin:9px 0 11px;
   color:var(--muted);
   font-size:.64rem;
-}
-.unpaid-quantity-row{
-  display:flex;
-  justify-content:flex-end;
-  margin:0 0 10px;
-}
-.unpaid-quantity-badge{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  min-width:54px;
-  padding:6px 10px;
-  border-radius:999px;
-  background:#d93636;
-  color:#fff;
-  font-size:.68rem;
-  font-weight:900;
-  letter-spacing:.03em;
-  box-shadow:0 4px 10px rgba(217,54,54,.18);
 }
 .pay-later-info{
   background:#fff8e6!important;
@@ -847,9 +833,12 @@ th{color:var(--muted);font-size:.68rem;text-transform:uppercase;letter-spacing:.
     border-radius:11px;
   }
   .unpaid-tab-count{
-    min-width:16px;
-    height:16px;
-    font-size:.54rem;
+    right:-7px;
+    bottom:-8px;
+    min-width:26px;
+    height:26px;
+    padding:0 6px;
+    font-size:.74rem;
   }
   .payment-methods{
     grid-template-columns:repeat(2,1fr);
