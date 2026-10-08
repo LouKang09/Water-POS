@@ -16,6 +16,8 @@ const state = {
   captureSource: "upload",
   deliveryRoomUnit: "",
   onlineQueue: [],
+  unpaidSales: [],
+  settlingUnpaidId: null,
 };
 
 const els = {
@@ -57,6 +59,12 @@ const els = {
   refreshOnlineQueue: document.querySelector("#refreshOnlineQueue"),
   onlineQueueList: document.querySelector("#onlineQueueList"),
   queueUpdatedText: document.querySelector("#queueUpdatedText"),
+  payLaterPanel: document.querySelector("#payLaterPanel"),
+  paymentTitle: document.querySelector("#paymentTitle"),
+  tapTip: document.querySelector("#tapTip"),
+  unpaidCount: document.querySelector("#unpaidCount"),
+  successEyebrow: document.querySelector("#successEyebrow"),
+  successTitle: document.querySelector("#successTitle"),
 };
 
 const money = n => "₱" + Number(n).toLocaleString("en-PH", {maximumFractionDigits:2});
@@ -78,16 +86,28 @@ function presets(category) {
 
 function renderDeliveryRoomField() {
   const cartHasDelivery=state.cart.some(item=>item.category==="Delivery");
-  const showField=state.category==="Delivery" || cartHasDelivery;
+  const showField=state.category!=="Unpaid" && (state.category==="Delivery" || cartHasDelivery);
   els.roomUnitField.classList.toggle("hidden",!showField);
-  els.roomUnit.required=cartHasDelivery;
-  els.roomUnitField.classList.toggle("required-field",cartHasDelivery);
+  els.roomUnit.required=cartHasDelivery && state.category!=="Unpaid";
+  els.roomUnitField.classList.toggle("required-field",cartHasDelivery && state.category!=="Unpaid");
 }
 
 function renderProducts() {
+  const unpaidMode=state.category==="Unpaid";
+  document.querySelector(".cart-card")?.classList.toggle("hidden",unpaidMode);
+  document.querySelector(".checkout-bar")?.classList.toggle("hidden",unpaidMode);
+  els.productGrid.classList.toggle("unpaid-grid",unpaidMode);
+
+  if(unpaidMode){
+    renderUnpaidSales();
+    renderDeliveryRoomField();
+    return;
+  }
+
   const items = presets(state.category);
   els.categoryHint.textContent = state.category.toUpperCase();
   els.categoryTitle.textContent = state.category === "New" ? "New gallon" : state.category === "Used" ? "Used items" : "Choose a price";
+  if(els.tapTip) els.tapTip.textContent="Tap to add";
   renderDeliveryRoomField();
   els.productGrid.classList.toggle("one", items.length === 1);
   if (!items.length) {
@@ -145,6 +165,74 @@ function renderCart() {
   els.paymentTotal.textContent = money(total);
   els.checkoutBtn.disabled = !state.cart.length;
   renderDeliveryRoomField();
+}
+
+function unpaidItemsText(items){
+  return (items||[]).map(item=>Number(item.qty)+"× "+item.label).join(" · ");
+}
+
+function renderUnpaidSales(){
+  els.categoryHint.textContent="UNPAID";
+  els.categoryTitle.textContent="Outstanding payments";
+  if(els.tapTip) els.tapTip.textContent=state.unpaidSales.length ? state.unpaidSales.length+" unpaid" : "All clear";
+  els.productGrid.classList.add("one");
+
+  if(!state.unpaidSales.length){
+    els.productGrid.innerHTML='<div class="empty-state unpaid-empty" style="grid-column:1/-1">No unpaid transactions. Pay Later sales will appear here until collected.</div>';
+    return;
+  }
+
+  els.productGrid.innerHTML=state.unpaidSales.map(sale=>`
+    <article class="unpaid-card">
+      <div class="unpaid-card-head">
+        <div>
+          <span class="unpaid-series">${escapeHtml(sale.series || sale.transaction_ref)}</span>
+          <strong>${money(sale.total)}</strong>
+        </div>
+        <span class="unpaid-badge">PAY LATER</span>
+      </div>
+      <div class="unpaid-items">${escapeHtml(unpaidItemsText(sale.items))}</div>
+      <div class="unpaid-meta">
+        <span>${sale.delivery_room_unit ? "Room / Unit "+escapeHtml(sale.delivery_room_unit) : "No room / unit"}</span>
+        <span>${new Date(sale.created_at).toLocaleString("en-PH",{dateStyle:"medium",timeStyle:"short"})}</span>
+      </div>
+      <button type="button" class="primary-button full settle-unpaid" data-id="${sale.id}">Settle Payment</button>
+    </article>
+  `).join("");
+
+  els.productGrid.querySelectorAll(".settle-unpaid").forEach(button=>{
+    button.addEventListener("click",()=>beginUnpaidSettlement(button.dataset.id));
+  });
+}
+
+async function loadUnpaidSales({quiet=false}={}){
+  try{
+    const res=await fetch("/api/pos/unpaid",{cache:"no-store"});
+    const data=await res.json().catch(()=>[]);
+    if(!res.ok) throw new Error(data.error||"Unable to load unpaid transactions.");
+    state.unpaidSales=Array.isArray(data)?data:[];
+    if(els.unpaidCount){
+      els.unpaidCount.textContent=String(state.unpaidSales.length);
+      els.unpaidCount.classList.toggle("has-items",state.unpaidSales.length>0);
+    }
+    if(state.category==="Unpaid") renderUnpaidSales();
+  }catch(error){
+    if(!quiet) toast(error.message);
+  }
+}
+
+function beginUnpaidSettlement(id){
+  const sale=state.unpaidSales.find(row=>String(row.id)===String(id));
+  if(!sale) return toast("That unpaid transaction is no longer available.");
+
+  state.settlingUnpaidId=sale.id;
+  clearReceiptScan();
+  setPayment("Cash");
+  const payLaterButton=document.querySelector('.payment-method[data-payment="Pay Later"]');
+  if(payLaterButton) payLaterButton.classList.add("hidden");
+  if(els.paymentTitle) els.paymentTitle.textContent="Settle unpaid transaction";
+  els.paymentTotal.textContent=money(sale.total);
+  els.paymentDialog.showModal();
 }
 
 function digitsOnly(value) {
@@ -258,7 +346,11 @@ function updateDigitalCopy() {
 }
 
 function updatePaymentButtonState() {
-  if (state.payment === "Cash") {
+  if(state.settlingUnpaidId && state.payment==="Pay Later"){
+    els.confirmPayment.disabled=true;
+    return;
+  }
+  if (state.payment === "Cash" || state.payment === "Pay Later") {
     els.confirmPayment.disabled = false;
     return;
   }
@@ -355,24 +447,27 @@ function setPayment(method) {
   if(changed) clearReceiptScan();
 
   state.payment = method;
-  if(method==="Cash") state.paymentProvider=null;
+  if(method==="Cash" || method==="Pay Later") state.paymentProvider=null;
   if(method==="GCash") state.paymentProvider="GCash";
   if(method==="Other" && state.paymentProvider==="GCash") state.paymentProvider=null;
 
   document.querySelectorAll(".payment-method").forEach(b=>b.classList.toggle("active",b.dataset.payment===method));
   els.cashPanel.classList.toggle("hidden",method!=="Cash");
-  els.gcashPanel.classList.toggle("hidden",method==="Cash");
+  els.payLaterPanel?.classList.toggle("hidden",method!=="Pay Later");
+  els.gcashPanel.classList.toggle("hidden",method==="Cash" || method==="Pay Later");
   els.otherProviderPanel.classList.toggle("hidden",method!=="Other");
 
   const provider=selectedProvider();
   els.confirmPayment.textContent=method==="Cash"
     ? "Confirm Cash Payment"
-    : provider
-      ? "Confirm "+provider+" Payment"
-      : "Choose Payment App";
+    : method==="Pay Later"
+      ? "Save as Pay Later"
+      : provider
+        ? "Confirm "+provider+" Payment"
+        : "Choose Payment App";
 
   updateDigitalCopy();
-  if(method!=="Cash") warmOcr().catch(()=>{});
+  if(method==="GCash" || method==="Other") warmOcr().catch(()=>{});
   updatePaymentButtonState();
 }
 
@@ -841,9 +936,11 @@ async function scanReceipt(file,{sourceType="upload"}={}) {
 }
 
 async function submitSale() {
-  if(!state.cart.length) return;
+  const settling=Boolean(state.settlingUnpaidId);
+  if(!settling && !state.cart.length) return;
+  if(settling && state.payment==="Pay Later") return toast("Choose Cash, GCash, or Other to settle this unpaid transaction.");
 
-  const hasDelivery=state.cart.some(item=>item.category==="Delivery");
+  const hasDelivery=!settling && state.cart.some(item=>item.category==="Delivery");
   if(hasDelivery && !state.deliveryRoomUnit.trim()){
     els.paymentDialog.close();
     els.roomUnit.focus();
@@ -851,7 +948,7 @@ async function submitSale() {
     return;
   }
 
-  const isDigital=state.payment!=="Cash";
+  const isDigital=state.payment==="GCash" || state.payment==="Other";
   const provider=selectedProvider();
 
   if(state.payment==="Other" && !provider) return toast("Choose a payment app first.");
@@ -870,8 +967,10 @@ async function submitSale() {
   els.confirmPayment.textContent="Saving…";
   const fd=new FormData();
   fd.append("paymentMethod",state.payment);
-  fd.append("items",JSON.stringify(state.cart));
-  fd.append("roomUnit",state.deliveryRoomUnit.trim());
+  if(!settling){
+    fd.append("items",JSON.stringify(state.cart));
+    fd.append("roomUnit",state.deliveryRoomUnit.trim());
+  }
 
   if(isDigital){
     fd.append("paymentProvider",provider);
@@ -884,10 +983,27 @@ async function submitSale() {
   }
 
   try{
-    const res=await fetch("/api/sales",{method:"POST",body:fd});
+    const endpoint=settling ? "/api/pos/unpaid/"+state.settlingUnpaidId+"/settle" : "/api/sales";
+    const res=await fetch(endpoint,{method:"POST",body:fd});
     const data=await res.json();
     if(!res.ok) throw new Error(data.error||"Unable to save transaction.");
     els.paymentDialog.close();
+
+    if(settling){
+      els.successEyebrow.textContent="UNPAID TRANSACTION SETTLED";
+      els.successTitle.textContent="Payment complete";
+      state.settlingUnpaidId=null;
+      document.querySelector('.payment-method[data-payment="Pay Later"]')?.classList.remove("hidden");
+      await loadUnpaidSales({quiet:true});
+    }else if(state.payment==="Pay Later"){
+      els.successEyebrow.textContent="UNPAID TRANSACTION SAVED";
+      els.successTitle.textContent="Payment due later";
+      await loadUnpaidSales({quiet:true});
+    }else{
+      els.successEyebrow.textContent="TRANSACTION SAVED";
+      els.successTitle.textContent="Payment complete";
+    }
+
     els.successRef.textContent=data.transactionRef;
     els.successTotal.textContent=money(data.total);
     els.successDialog.showModal();
@@ -897,14 +1013,19 @@ async function submitSale() {
     const currentProvider=selectedProvider();
     els.confirmPayment.textContent=state.payment==="Cash"
       ? "Confirm Cash Payment"
-      : currentProvider
-        ? "Confirm "+currentProvider+" Payment"
-        : "Choose Payment App";
+      : state.payment==="Pay Later"
+        ? "Save as Pay Later"
+        : currentProvider
+          ? "Confirm "+currentProvider+" Payment"
+          : "Choose Payment App";
     updatePaymentButtonState();
   }
 }
 
 function resetOrder() {
+  state.settlingUnpaidId=null;
+  document.querySelector('.payment-method[data-payment="Pay Later"]')?.classList.remove("hidden");
+  if(els.paymentTitle) els.paymentTitle.textContent="Complete transaction";
   state.cart = [];
   clearReceiptScan();
   state.paymentProvider=null;
@@ -1018,9 +1139,10 @@ async function completeOnlineQueue(id){
 }
 
 document.querySelectorAll(".category-tab").forEach(btn=>{
-  btn.addEventListener("click",()=>{
+  btn.addEventListener("click",async()=>{
     state.category=btn.dataset.category;
     document.querySelectorAll(".category-tab").forEach(b=>b.classList.toggle("active",b===btn));
+    if(state.category==="Unpaid") await loadUnpaidSales({quiet:true});
     renderProducts();
   });
 });
@@ -1036,6 +1158,9 @@ document.querySelectorAll(".provider-option").forEach(btn=>btn.addEventListener(
 }));
 els.clearCart.addEventListener("click",()=>{state.cart=[];renderCart();});
 els.checkoutBtn.addEventListener("click",()=>{
+  state.settlingUnpaidId=null;
+  document.querySelector('.payment-method[data-payment="Pay Later"]')?.classList.remove("hidden");
+  if(els.paymentTitle) els.paymentTitle.textContent="Complete transaction";
   const hasDelivery=state.cart.some(item=>item.category==="Delivery");
   if(hasDelivery && !state.deliveryRoomUnit.trim()){
     els.roomUnit.focus();
@@ -1045,7 +1170,15 @@ els.checkoutBtn.addEventListener("click",()=>{
   warmOcr().catch(()=>{});
   els.paymentDialog.showModal();
 });
-els.closePayment.addEventListener("click",()=>els.paymentDialog.close());
+els.closePayment.addEventListener("click",()=>{
+  els.paymentDialog.close();
+  if(state.settlingUnpaidId){
+    state.settlingUnpaidId=null;
+    document.querySelector('.payment-method[data-payment="Pay Later"]')?.classList.remove("hidden");
+    if(els.paymentTitle) els.paymentTitle.textContent="Complete transaction";
+    setPayment("Cash");
+  }
+});
 els.cameraInput.addEventListener("change",()=>{if(els.cameraInput.files[0])scanReceipt(els.cameraInput.files[0],{sourceType:"camera"});});
 els.receiptInput.addEventListener("change",()=>{if(els.receiptInput.files[0])scanReceipt(els.receiptInput.files[0],{sourceType:"upload"});});
 els.roomUnit.addEventListener("input",()=>{state.deliveryRoomUnit=els.roomUnit.value;});
@@ -1075,7 +1208,11 @@ els.refreshOnlineQueue.addEventListener("click",()=>loadOnlineQueue());
   renderProducts();
   renderCart();
   loadOnlineQueue({quiet:true});
-  setInterval(()=>loadOnlineQueue({quiet:true}),15000);
+  loadUnpaidSales({quiet:true});
+  setInterval(()=>{
+    loadOnlineQueue({quiet:true});
+    loadUnpaidSales({quiet:true});
+  },15000);
   const warm=()=>warmOcr().catch(()=>{});
   if("requestIdleCallback" in window) requestIdleCallback(warm,{timeout:2500});
   else setTimeout(warm,1800);
