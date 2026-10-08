@@ -22,7 +22,7 @@ button{cursor:pointer}
 .eyebrow{margin:0;color:var(--brand);font-size:.68rem;font-weight:850;letter-spacing:.13em}
 .admin-link{display:none;color:var(--brand);font-weight:750;text-decoration:none}
 .pos-shell{max-width:760px;margin:0 auto;padding:14px 14px 24px}
-.category-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;position:sticky;top:76px;z-index:15;padding:8px 0;background:linear-gradient(var(--bg) 72%,transparent)}
+.category-tabs{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;position:sticky;top:76px;z-index:15;padding:8px 0;background:linear-gradient(var(--bg) 72%,transparent)}
 .category-tab{border:1px solid var(--line);background:var(--surface);color:var(--muted);padding:12px 4px;border-radius:14px;font-size:.82rem;font-weight:800;box-shadow:0 4px 12px rgba(24,67,64,.04)}
 .category-tab.active{background:var(--brand);border-color:var(--brand);color:white}
 .catalog-card,.cart-card{margin-top:10px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:17px;box-shadow:var(--shadow)}
@@ -58,7 +58,7 @@ dialog::backdrop{background:rgba(8,27,26,.55);backdrop-filter:blur(4px)}
 .dialog-sheet{background:var(--surface);border-radius:28px 28px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom));max-height:92dvh;overflow:auto}
 .dialog-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px}
 .icon-button{width:38px;height:38px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2);font-size:1.5rem;line-height:1}
-.payment-methods{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.payment-methods{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
 .payment-method{display:flex;align-items:center;gap:10px;text-align:left;border:1px solid var(--line);background:#fff;border-radius:16px;padding:12px}
 .payment-method.active{border:2px solid var(--brand);background:var(--surface-2)}
 .payment-icon{display:grid;place-items:center;width:38px;height:38px;border-radius:12px;background:var(--brand);color:white;font-weight:900}
@@ -723,5 +723,120 @@ th{color:var(--muted);font-size:.68rem;text-transform:uppercase;letter-spacing:.
   }
   .queue-card-actions button{
     width:100%;
+  }
+}
+
+
+.unpaid-category-tab{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:5px;
+}
+.unpaid-tab-count{
+  display:grid;
+  place-items:center;
+  min-width:18px;
+  height:18px;
+  padding:0 4px;
+  border-radius:999px;
+  background:#edf3f2;
+  color:var(--muted);
+  font-size:.58rem;
+  font-weight:900;
+}
+.unpaid-tab-count.has-items{
+  background:#fff0d1;
+  color:#815b00;
+}
+.category-tab.active .unpaid-tab-count{
+  background:rgba(255,255,255,.78);
+  color:var(--brand);
+}
+.unpaid-grid{
+  display:grid!important;
+  grid-template-columns:1fr!important;
+  gap:10px!important;
+}
+.unpaid-card{
+  border:1px solid var(--line);
+  border-radius:16px;
+  background:#fff;
+  padding:13px;
+  text-align:left;
+  box-shadow:0 6px 18px rgba(24,67,64,.05);
+}
+.unpaid-card-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+}
+.unpaid-card-head>div{
+  display:grid;
+  gap:4px;
+}
+.unpaid-card-head strong{
+  font-size:1.35rem;
+  letter-spacing:-.03em;
+}
+.unpaid-series{
+  color:var(--muted);
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+  font-size:.66rem;
+}
+.unpaid-badge{
+  display:inline-flex;
+  padding:5px 8px;
+  border-radius:999px;
+  background:#fff3d8;
+  color:#7b5900;
+  font-size:.6rem;
+  font-weight:900;
+}
+.unpaid-items{
+  margin-top:10px;
+  color:var(--ink);
+  font-size:.78rem;
+  font-weight:750;
+  line-height:1.4;
+}
+.unpaid-meta{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  margin:9px 0 11px;
+  color:var(--muted);
+  font-size:.64rem;
+}
+.pay-later-info{
+  background:#fff8e6!important;
+  border-color:#efd89b!important;
+  color:#765700!important;
+}
+.pay-later-method .payment-icon{
+  background:#a66c00;
+}
+
+@media(max-width:767px){
+  .category-tabs{
+    gap:5px;
+  }
+  .category-tab{
+    padding:10px 2px;
+    font-size:.68rem;
+    border-radius:11px;
+  }
+  .unpaid-tab-count{
+    min-width:16px;
+    height:16px;
+    font-size:.54rem;
+  }
+  .payment-methods{
+    grid-template-columns:repeat(2,1fr);
+  }
+  .unpaid-meta{
+    flex-direction:column;
+    gap:3px;
   }
 }
