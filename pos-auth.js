@@ -125,7 +125,7 @@ const originalPatch = express.application.patch;
 const originalListen = express.application.listen;
 
 const guardedGet = new Set(["/api/pos/queue", "/api/pos/queue/:id/receipt", "/api/pos/unpaid"]);
-const guardedPost = new Set(["/api/sales", "/api/pos/queue/:id/complete", "/api/pos/unpaid/:id/settle"]);
+const guardedPost = new Set(["/api/sales", "/api/pos/queue/:id/complete", "/api/pos/unpaid/:id/settle", "/api/pos/unpaid/:id/cancel"]);
 
 express.application.get = function(path, ...handlers) {
   if (guardedGet.has(path)) handlers.unshift(posGuard);
