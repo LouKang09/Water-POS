@@ -68,7 +68,7 @@ function ensurePosAccountUi() {
   if (!document.querySelector('link[data-pos-account-style]')) {
     const link = document.createElement("link");
     link.rel = "stylesheet";
-    link.href = "/pos-account.css?v=20261011-1";
+    link.href = "/pos-account.css?v=20261011-3";
     link.dataset.posAccountStyle = "true";
     document.head.appendChild(link);
   }
@@ -78,8 +78,8 @@ function ensurePosAccountUi() {
     const button = document.createElement("button");
     button.id = "posAccountBtn";
     button.type = "button";
-    button.className = "admin-link pos-account-button";
-    button.textContent = "Update Password";
+    button.className = "pos-account-button";
+    button.textContent = "Change Password";
     const logout = document.querySelector("#posLogoutBtn");
     actions.insertBefore(button, logout || null);
   }
@@ -176,7 +176,7 @@ async function savePosAccount(event) {
     if (label) label.textContent = currentPosUser.name || currentPosUser.email || "POS User";
     document.querySelector("#posAccountDialog").close();
     if (typeof toast === "function") {
-      toast(data.passwordChanged ? "Email and password updated." : "Email updated.");
+      toast(data.passwordChanged ? "Password updated successfully." : "Account settings saved.");
     }
   } catch (error) {
     errorEl.textContent = error.message;
@@ -187,6 +187,12 @@ async function savePosAccount(event) {
 }
 
 ensurePosAccountUi();
+const posHeader = document.querySelector(".pos-header");
+if (posHeader && window.ResizeObserver) {
+  new ResizeObserver(() => {
+    document.documentElement.style.setProperty("--pos-header-height", Math.ceil(posHeader.getBoundingClientRect().height) + "px");
+  }).observe(posHeader);
+}
 document.querySelector("#posAccountForm")?.addEventListener("submit", savePosAccount);
 document.querySelector("#closePosAccount")?.addEventListener("click", () => document.querySelector("#posAccountDialog")?.close());
 document.querySelector("#cancelPosAccount")?.addEventListener("click", () => document.querySelector("#posAccountDialog")?.close());
