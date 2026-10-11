@@ -10,6 +10,7 @@ import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ResolveInfo;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.LinearGradient;
@@ -87,6 +88,12 @@ public class MainActivity extends Activity {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         window.setStatusBarColor(Color.rgb(13, 107, 105));
         window.setNavigationBarColor(Color.BLACK);
+        // Surface the INYOU identity in the Android recent-apps switcher.
+        setTaskDescription(new ActivityManager.TaskDescription(
+            getString(R.string.app_name),
+            BitmapFactory.decodeResource(getResources(), R.drawable.inyou_logo),
+            Color.rgb(13, 107, 105)
+        ));
 
         getWindow().getDecorView().setOnSystemUiVisibilityChangeListener(visibility -> {
             if (!exitRequested && !resumeKioskAfterChooser) {
@@ -223,7 +230,7 @@ public class MainActivity extends Activity {
         settings.setUseWideViewPort(true);
         settings.setMediaPlaybackRequiresUserGesture(true);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        settings.setUserAgentString(settings.getUserAgentString() + " WaterPOSAndroid/1.2.8");
+        settings.setUserAgentString(settings.getUserAgentString() + " WaterPOSAndroid/1.2.9");
 
         CookieManager cookieManager = CookieManager.getInstance();
         cookieManager.setAcceptCookie(true);
@@ -519,7 +526,7 @@ public class MainActivity extends Activity {
     }
 
     private void scheduleKioskRecovery(long delayMs) {
-        if (kioskHandler == null || exitRequested || resumeKioskAfterChooser) return;
+        if (kioskHandler == null || exitRequested || resumeKioskAfterChooser || !isDedicatedKiosk()) return;
         kioskHandler.removeCallbacks(kioskRecoveryRunnable);
         kioskHandler.postDelayed(kioskRecoveryRunnable, delayMs);
     }
@@ -536,27 +543,7 @@ public class MainActivity extends Activity {
                 requestLockTask();
                 hideSystemUi();
             }
-        } else if (!hasWindowFocus()) {
-            // Soft kiosk fallback: recover from Home/Recents without using Android screen
-            // pinning, which can force a PIN/lock screen when the app exits.
-            bringTaskToFront();
-            hideSystemUi();
         }
-    }
-
-    private void bringTaskToFront() {
-        try {
-            ActivityManager manager = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
-            if (manager != null) {
-                manager.moveTaskToFront(getTaskId(), ActivityManager.MOVE_TASK_WITH_HOME);
-            }
-        } catch (Exception ignored) {}
-
-        try {
-            Intent intent = new Intent(this, MainActivity.class);
-            intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            startActivity(intent);
-        } catch (Exception ignored) {}
     }
 
     private void leaveKioskTemporarily() {
@@ -716,7 +703,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onUserLeaveHint() {
         super.onUserLeaveHint();
-        if (!exitRequested && !resumeKioskAfterChooser) {
+        if (!exitRequested && !resumeKioskAfterChooser && isDedicatedKiosk()) {
             // Huawei/EMUI Home gesture reaches this callback before the task leaves the foreground.
             hideSystemUi();
             requestLockTask();
@@ -732,7 +719,7 @@ public class MainActivity extends Activity {
                 hideSystemUi();
                 requestLockTask();
                 scheduleKioskRecovery(220);
-            } else {
+            } else if (isDedicatedKiosk()) {
                 scheduleKioskRecovery(120);
             }
         }
