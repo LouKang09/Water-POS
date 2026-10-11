@@ -186,7 +186,7 @@ function addRoutes(app) {
       const id = Number(req.params.id);
       if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid transaction." });
       const { rows } = await pool.query(`
-        SELECT s.id,s.series_no,s.transaction_ref,s.payment_method,
+        SELECT s.id,s.series_no,s.transaction_ref,s.payment_status,s.cancelled_at,s.cancellation_reason,s.payment_method,
                COALESCE(s.payment_provider,CASE WHEN s.payment_method='GCash' THEN 'GCash' ELSE NULL END) AS payment_provider,
                COALESCE(s.payment_reference,s.gcash_reference) AS payment_reference,
                s.payment_reference_status,s.delivery_room_unit,s.total,s.created_at,
