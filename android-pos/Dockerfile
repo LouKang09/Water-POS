@@ -20,11 +20,11 @@ COPY android-pos/ /workspace/
 RUN mkdir -p /workspace/app/src/main/res/drawable-nodpi
 COPY branding/inyou-official-hd.png /workspace/app/src/main/res/drawable-nodpi/inyou_logo.png
 RUN gradle assembleDebug --no-daemon \
-    && cp app/build/outputs/apk/debug/app-debug.apk /tmp/INYOU-Water-POS-v1.2.8.apk
+    && cp app/build/outputs/apk/debug/app-debug.apk /tmp/INYOU-Water-POS-v1.2.9.apk
 
 FROM python:3.12-alpine
 WORKDIR /app
-COPY --from=build /tmp/INYOU-Water-POS-v1.2.8.apk /app/INYOU-Water-POS-v1.2.8.apk
-RUN printf '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Water POS APK</title></head><body style="font-family:sans-serif;padding:30px"><h1>INYOU Water POS Android v1.2.8</h1><p>Official INYOU Water POS app using the exact HD INYOU master logo, universal adaptive/round Android launcher icon, rounded 5-second water loading splash, session-safe startup, in-app password update, forgot-password OTP recovery, soft-kiosk exit without forced phone lock, logout, Exit App, and dedicated Device Owner lock.</p><p><a href="/INYOU-Water-POS-v1.2.8.apk">Download INYOU-Water-POS-v1.2.8.apk</a></p></body></html>' > /app/index.html
+COPY --from=build /tmp/INYOU-Water-POS-v1.2.9.apk /app/INYOU-Water-POS-v1.2.9.apk
+RUN printf '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Water POS APK</title></head><body style="font-family:sans-serif;padding:30px"><h1>INYOU Water POS Android v1.2.9</h1><p>Official INYOU Water POS app using the exact HD INYOU master logo, universal adaptive/round Android launcher icon, rounded 5-second water loading splash, session-safe startup, visible in-app password update, Android recent-apps icon, forgot-password OTP recovery, soft-kiosk exit without forced phone lock, logout, Exit App, and dedicated Device Owner lock.</p><p><a href="/INYOU-Water-POS-v1.2.9.apk">Download INYOU-Water-POS-v1.2.9.apk</a></p></body></html>' > /app/index.html
 EXPOSE 8080
 CMD ["python", "-m", "http.server", "8080", "--bind", "0.0.0.0"]

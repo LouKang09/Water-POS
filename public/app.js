@@ -284,12 +284,18 @@ function renderUnpaidSales(){
         <span>${sale.delivery_room_unit ? "Room / Unit "+escapeHtml(sale.delivery_room_unit) : "No room / unit"}</span>
         <span>${new Date(sale.created_at).toLocaleString("en-PH",{dateStyle:"medium",timeStyle:"short"})}</span>
       </div>
-      <button type="button" class="primary-button full settle-unpaid" data-id="${sale.id}">Settle Payment</button>
+      <div class="unpaid-card-actions">
+        <button type="button" class="primary-button settle-unpaid" data-id="${sale.id}">Settle Payment</button>
+        <button type="button" class="unpaid-cancel-button" data-id="${sale.id}">Cancel</button>
+      </div>
     </article>
   `).join("");
 
   els.productGrid.querySelectorAll(".settle-unpaid").forEach(button=>{
     button.addEventListener("click",()=>beginUnpaidSettlement(button.dataset.id));
+  });
+  els.productGrid.querySelectorAll(".unpaid-cancel-button").forEach(button=>{
+    button.addEventListener("click",()=>openCancelUnpaid(button.dataset.id));
   });
 }
 
@@ -308,6 +314,60 @@ async function loadUnpaidSales({quiet=false}={}){
     if(!quiet) toast(error.message);
   }
 }
+
+let pendingCancelUnpaidId=null;
+function openCancelUnpaid(id){
+  const sale=state.unpaidSales.find(row=>String(row.id)===String(id));
+  if(!sale) return toast("That unpaid transaction is no longer available.");
+  pendingCancelUnpaidId=sale.id;
+  document.querySelector("#cancelUnpaidSummary").textContent=
+    (sale.series || sale.transaction_ref) + " · " + money(sale.total);
+  document.querySelector("#cancelUnpaidReason").value="";
+  document.querySelector("#cancelUnpaidError").textContent="";
+  document.querySelector("#cancelUnpaidDialog").showModal();
+}
+
+function closeCancelUnpaid(){
+  pendingCancelUnpaidId=null;
+  document.querySelector("#cancelUnpaidDialog").close();
+}
+
+async function confirmCancelUnpaid(){
+  if(!pendingCancelUnpaidId) return;
+  const id=pendingCancelUnpaidId;
+  const button=document.querySelector("#confirmCancelUnpaid");
+  const errorEl=document.querySelector("#cancelUnpaidError");
+  button.disabled=true;
+  document.querySelector("#keepUnpaid").disabled=true;
+  button.textContent="Cancelling…";
+  errorEl.textContent="";
+  try{
+    const response=await fetch("/api/pos/unpaid/"+id+"/cancel",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({reason:document.querySelector("#cancelUnpaidReason").value.trim()})
+    });
+    const result=await response.json().catch(()=>({}));
+    if(!response.ok) throw new Error(result.error||"Unable to cancel this transaction.");
+    closeCancelUnpaid();
+    await loadUnpaidSales();
+    toast("Unpaid transaction cancelled.");
+  }catch(error){
+    errorEl.textContent=error.message;
+    if(/already settled|no longer unpaid|already cancelled/i.test(error.message)) await loadUnpaidSales({quiet:true});
+  }finally{
+    button.disabled=false;
+    document.querySelector("#keepUnpaid").disabled=false;
+    button.textContent="Cancel Transaction";
+  }
+}
+
+document.querySelector("#keepUnpaid").addEventListener("click",closeCancelUnpaid);
+document.querySelector("#confirmCancelUnpaid").addEventListener("click",confirmCancelUnpaid);
+document.querySelector("#cancelUnpaidDialog").addEventListener("cancel",event=>{
+  event.preventDefault();
+  if(!document.querySelector("#confirmCancelUnpaid").disabled) closeCancelUnpaid();
+});
 
 function beginUnpaidSettlement(id){
   const sale=state.unpaidSales.find(row=>String(row.id)===String(id));

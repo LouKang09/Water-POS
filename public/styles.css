@@ -954,3 +954,30 @@ th{color:var(--muted);font-size:.68rem;text-transform:uppercase;letter-spacing:.
   .pos-brand-block{gap:8px}
   .pos-header h1{font-size:1.18rem}
 }
+
+/* Mobile POS account access and non-overlapping sticky categories. */
+@media (max-width:600px) {
+  .pos-header{flex-wrap:wrap;row-gap:8px;padding:10px 12px 9px;}
+  .pos-brand-block{width:100%;}
+  .pos-header-actions{width:100%;justify-content:space-between;gap:6px;flex-wrap:wrap;}
+  .category-tabs{top:var(--pos-header-height,115px);}
+  .pos-header .pos-user-line{font-size:.68rem;}
+}
+.unpaid-card-actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.65fr);gap:8px;margin-top:10px;}
+.unpaid-card-actions .primary-button{min-height:42px;}
+.unpaid-cancel-button{
+  border:1px solid #e2a5a5;background:#fff5f5;color:#a63030;
+  border-radius:12px;min-height:42px;padding:8px;font-weight:800;font-size:.75rem;
+}
+.cancel-unpaid-dialog{width:min(94vw,440px);max-width:440px;border:0;padding:0;background:transparent;margin:auto;}
+.cancel-unpaid-dialog::backdrop{background:rgba(6,25,24,.58);}
+.cancel-unpaid-sheet{background:#fff;border-radius:20px;padding:20px;box-shadow:0 24px 60px rgba(5,40,36,.2);}
+.cancel-unpaid-sheet h2{font-size:1.25rem;margin:6px 0 10px;}
+.cancel-unpaid-sheet p{font-size:.78rem;line-height:1.45;}
+.cancel-unpaid-sheet textarea{width:100%;resize:vertical;min-height:68px;padding:10px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);}
+.cancel-unpaid-notice{color:#7c5151;background:#fff3f3;border:1px solid #f3d8d8;padding:9px;border-radius:10px;}
+.cancel-unpaid-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:12px;}
+.cancel-unpaid-actions button{min-height:44px;border-radius:11px;font-weight:800;}
+.cancel-unpaid-actions .danger-button{border:1px solid #ba3c3c;background:#ba3c3c;color:#fff;padding:8px;}
+.cancel-unpaid-actions button:disabled{opacity:.5;cursor:wait;}
+@media(max-width:390px){.unpaid-card-actions{grid-template-columns:1fr 1fr}.unpaid-card-actions button{font-size:.68rem}}
