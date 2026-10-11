@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0d6b69">
   <title>INYOU Water POS</title>
   <link rel="icon" type="image/png" href="/brand/inyou-official-hd.png?v=20261011-2">
-  <link rel="stylesheet" href="/styles.css?v=20261011-2">
+  <link rel="stylesheet" href="/styles.css?v=20261011-3">
 </head>
 <body class="pos-page">
   <header class="pos-header">
@@ -23,6 +23,7 @@
         Online Queue <span id="onlineQueueCount">0</span>
       </button>
       <a href="/admin.html" class="admin-link">Admin</a>
+      <button id="posAccountBtn" class="pos-account-button" type="button" aria-label="Change account password">Change Password</button>
       <button id="posLogoutBtn" class="admin-link pos-logout-button" type="button">Logout</button>
     </div>
   </header>
@@ -206,6 +207,24 @@
     </form>
   </dialog>
 
+  <dialog id="cancelUnpaidDialog" class="cancel-unpaid-dialog">
+    <div class="cancel-unpaid-sheet">
+      <p class="eyebrow">UNPAID TRANSACTION</p>
+      <h2>Cancel unpaid transaction?</h2>
+      <p id="cancelUnpaidSummary"></p>
+      <label class="field">
+        <span>Reason (optional)</span>
+        <textarea id="cancelUnpaidReason" maxlength="200" rows="2" placeholder="Example: Customer cancelled order"></textarea>
+      </label>
+      <p class="cancel-unpaid-notice">This removes the transaction from outstanding payments. The cancellation is saved for audit and cannot be settled afterward.</p>
+      <div class="cancel-unpaid-actions">
+        <button type="button" id="keepUnpaid" class="small-button">Keep Transaction</button>
+        <button type="button" id="confirmCancelUnpaid" class="danger-button">Cancel Transaction</button>
+      </div>
+      <p id="cancelUnpaidError" class="pos-account-error" role="alert"></p>
+    </div>
+  </dialog>
+
   <dialog id="successDialog" class="success-dialog">
     <div class="success-card">
       <div class="success-mark">✓</div>
@@ -218,8 +237,8 @@
   </dialog>
 
   <div id="toast" class="toast" role="status"></div>
-  <script src="/pos-auth.js?v=20261011-1"></script>
+  <script src="/pos-auth.js?v=20261011-3"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="/app.js?v=20261008-4"></script>
+  <script src="/app.js?v=20261011-3"></script>
 </body>
 </html>
