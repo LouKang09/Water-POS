@@ -126,6 +126,9 @@ async function initDb() {
     ALTER TABLE sales ADD COLUMN IF NOT EXISTS payment_status TEXT;
     ALTER TABLE sales ADD COLUMN IF NOT EXISTS was_pay_later BOOLEAN NOT NULL DEFAULT FALSE;
     ALTER TABLE sales ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ;
+    ALTER TABLE sales ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ;
+    ALTER TABLE sales ADD COLUMN IF NOT EXISTS cancelled_by_pos_user_id INTEGER;
+    ALTER TABLE sales ADD COLUMN IF NOT EXISTS cancellation_reason TEXT;
 
     UPDATE sales
     SET payment_provider = COALESCE(payment_provider, 'GCash'),
@@ -156,7 +159,7 @@ async function initDb() {
     ALTER TABLE sales DROP CONSTRAINT IF EXISTS sales_payment_status_check;
     ALTER TABLE sales
       ADD CONSTRAINT sales_payment_status_check
-      CHECK (payment_status IN ('paid','unpaid'));
+      CHECK (payment_status IN ('paid','unpaid','cancelled'));
 
     ALTER TABLE sales DROP CONSTRAINT IF EXISTS sales_payment_method_check;
     ALTER TABLE sales
@@ -753,7 +756,7 @@ app.get("/api/admin/summary", adminAuth, async (req,res,next) => {
               COALESCE(SUM(total) FILTER (WHERE payment_method='GCash'),0)::numeric AS gcash,
               COALESCE(SUM(total) FILTER (WHERE payment_method='Other'),0)::numeric AS other
        FROM sales
-       WHERE (created_at AT TIME ZONE 'Asia/Manila')::date BETWEEN $1::date AND $2::date`, [from,to]);
+       WHERE payment_status='paid' AND (created_at AT TIME ZONE 'Asia/Manila')::date BETWEEN $1::date AND $2::date`, [from,to]);
     const expenses = await pool.query(
       `SELECT COALESCE(SUM(amount),0)::numeric AS expenses
        FROM expenses WHERE expense_date BETWEEN $1::date AND $2::date`, [from,to]);
@@ -789,7 +792,7 @@ app.get("/api/admin/sales-trend", adminAuth, async (req,res,next) => {
                COALESCE(SUM(total) FILTER (WHERE payment_method='Other'),0)::numeric AS other,
                COUNT(*)::int AS transactions
         FROM sales
-        WHERE (created_at AT TIME ZONE 'Asia/Manila')::date BETWEEN $1::date AND $2::date
+        WHERE payment_status='paid' AND (created_at AT TIME ZONE 'Asia/Manila')::date BETWEEN $1::date AND $2::date
         GROUP BY (created_at AT TIME ZONE 'Asia/Manila')::date
       )
       SELECT to_char(days.day,'YYYY-MM-DD') AS date,
@@ -830,7 +833,7 @@ app.get("/api/admin/sales", adminAuth, async (req,res,next) => {
                'category',i.category,'label',i.label,'unitPrice',i.unit_price,'qty',i.qty,'lineTotal',i.line_total
              ) ORDER BY i.id) FILTER (WHERE i.id IS NOT NULL), '[]') AS items
       FROM sales s LEFT JOIN sale_items i ON i.sale_id=s.id
-      WHERE (s.created_at AT TIME ZONE 'Asia/Manila')::date BETWEEN $1::date AND $2::date
+      WHERE s.payment_status <> 'cancelled' AND (s.created_at AT TIME ZONE 'Asia/Manila')::date BETWEEN $1::date AND $2::date
       GROUP BY s.id ORDER BY s.created_at DESC LIMIT 500
     `, [from,to]);
     res.json(rows.map(r => ({...r,total:Number(r.total)})));
