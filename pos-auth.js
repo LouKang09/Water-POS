@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const express = require("express");
 const jwt = require("jsonwebtoken");
+const nodemailer = require("nodemailer");
 const { Pool } = require("pg");
 
 const secret = process.env.JWT_SECRET || "development-only-change-me";
@@ -25,13 +26,73 @@ function validEmail(email) {
   return email.includes("@") && !email.startsWith("@") && !email.endsWith("@") && email.slice(email.indexOf("@") + 1).includes(".");
 }
 
-function posGuard(req, res, next) {
+function resetCodeHash(userId, code) {
+  return crypto.createHmac("sha256", secret).update(String(userId) + ":" + String(code)).digest("hex");
+}
+
+function safeHashEqual(a, b) {
+  const left = Buffer.from(String(a || ""));
+  const right = Buffer.from(String(b || ""));
+  return left.length === right.length && crypto.timingSafeEqual(left, right);
+}
+
+let mailTransport = null;
+function getMailTransport() {
+  const user = process.env.SMTP_USER || process.env.ADMIN_EMAIL || "";
+  const pass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD || "";
+  if (!user || !pass) return null;
+  if (!mailTransport) {
+    const port = Number(process.env.SMTP_PORT || 465);
+    mailTransport = nodemailer.createTransport({
+      host: process.env.SMTP_HOST || "smtp.gmail.com",
+      port,
+      secure: String(process.env.SMTP_SECURE || (port === 465 ? "true" : "false")).toLowerCase() !== "false",
+      auth: { user, pass }
+    });
+  }
+  return mailTransport;
+}
+
+async function sendPasswordOtp(email, name, code) {
+  const transport = getMailTransport();
+  if (!transport) {
+    const error = new Error("Email OTP service is not configured.");
+    error.code = "MAIL_NOT_CONFIGURED";
+    throw error;
+  }
+  const fromAddress = process.env.SMTP_USER || process.env.ADMIN_EMAIL;
+  await transport.sendMail({
+    from: `"INYOU Water Supply Co." <${fromAddress}>`,
+    to: email,
+    subject: "INYOU Water POS password reset code",
+    text: `Hello ${name || "POS User"},\n\nYour INYOU Water POS password reset code is ${code}.\n\nThis code expires in 10 minutes. If you did not request this, you can ignore this email.\n\nINYOU Water Supply Co.`,
+    html: `<div style="font-family:Arial,sans-serif;color:#123;max-width:520px;margin:auto">
+      <h2 style="color:#0874b8">INYOU Water POS</h2>
+      <p>Hello ${String(name || "POS User").replace(/[<>&]/g, "")},</p>
+      <p>Your password reset code is:</p>
+      <div style="font-size:32px;font-weight:800;letter-spacing:8px;padding:18px 20px;background:#eef8fd;border-radius:14px;text-align:center;color:#075f98">${code}</div>
+      <p style="margin-top:18px">This code expires in <strong>10 minutes</strong>.</p>
+      <p>If you did not request this, you can ignore this email.</p>
+      <p style="color:#688">INYOU Water Supply Co.</p>
+    </div>`
+  });
+}
+
+async function posGuard(req, res, next) {
   const auth = req.headers.authorization || "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
   try {
     const user = jwt.verify(token, secret);
-    if (user.role !== "pos") throw new Error("role");
-    req.posUser = user;
+    if (user.role !== "pos" || !user.id) throw new Error("role");
+    const result = await pool.query(
+      "SELECT active,auth_version FROM pos_users WHERE id=$1 LIMIT 1",
+      [user.id]
+    );
+    if (!result.rows.length || !result.rows[0].active) throw new Error("inactive");
+    const currentVersion = Number(result.rows[0].auth_version || 1);
+    const tokenVersion = Number(user.authVersion || 1);
+    if (tokenVersion !== currentVersion) throw new Error("revoked");
+    req.posUser = { ...user, authVersion: currentVersion };
     next();
   } catch {
     res.status(401).json({ error: "POS login required." });
@@ -66,8 +127,24 @@ async function ensureTable() {
       salt TEXT NOT NULL,
       active BOOLEAN NOT NULL DEFAULT TRUE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      last_login_at TIMESTAMPTZ
+      last_login_at TIMESTAMPTZ,
+      auth_version INTEGER NOT NULL DEFAULT 1
     );
+
+    ALTER TABLE pos_users ADD COLUMN IF NOT EXISTS auth_version INTEGER NOT NULL DEFAULT 1;
+
+    CREATE TABLE IF NOT EXISTS pos_password_reset_codes (
+      id BIGSERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES pos_users(id) ON DELETE CASCADE,
+      code_hash TEXT NOT NULL,
+      expires_at TIMESTAMPTZ NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      consumed_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_pos_password_reset_user_created
+      ON pos_password_reset_codes(user_id, created_at DESC);
   `);
 }
 
@@ -92,21 +169,155 @@ function addRoutes(app) {
       [name, email, secure.hash, secure.salt]
     );
     const user = created.rows[0];
-    const token = jwt.sign({ role: "pos", id: user.id, name: user.name, email: user.email }, secret, { expiresIn: "12h" });
+    const token = jwt.sign({ role: "pos", id: user.id, name: user.name, email: user.email, authVersion: 1 }, secret, { expiresIn: "12h" });
     res.status(201).json({ token, user });
   });
 
   originalPost.call(app, "/api/pos/login", async (req, res) => {
     const email = String(req.body.email || "").trim().toLowerCase();
     const password = String(req.body.password || "");
-    const result = await pool.query("SELECT id,name,email,password_hash,salt FROM pos_users WHERE email=$1 AND active=TRUE LIMIT 1", [email]);
+    const result = await pool.query("SELECT id,name,email,password_hash,salt,auth_version FROM pos_users WHERE email=$1 AND active=TRUE LIMIT 1", [email]);
     if (!result.rows.length || !passwordMatches(password, result.rows[0].salt, result.rows[0].password_hash)) {
       return res.status(401).json({ error: "Invalid POS email or password." });
     }
     const row = result.rows[0];
     await pool.query("UPDATE pos_users SET last_login_at=NOW() WHERE id=$1", [row.id]);
-    const token = jwt.sign({ role: "pos", id: row.id, name: row.name, email: row.email }, secret, { expiresIn: "12h" });
+    const token = jwt.sign({ role: "pos", id: row.id, name: row.name, email: row.email, authVersion: Number(row.auth_version || 1) }, secret, { expiresIn: "12h" });
     res.json({ token, user: { id: row.id, name: row.name, email: row.email } });
+  });
+
+  originalPost.call(app, "/api/pos/forgot-password/request", async (req, res) => {
+    try {
+      const email = String(req.body.email || "").trim().toLowerCase();
+      if (!validEmail(email)) return res.status(400).json({ error: "Enter a valid registered email." });
+
+      const result = await pool.query(
+        "SELECT id,name,email FROM pos_users WHERE email=$1 AND active=TRUE LIMIT 1",
+        [email]
+      );
+
+      // Do not reveal whether an account exists.
+      if (!result.rows.length) {
+        return res.json({ ok: true, message: "If that email is registered, a reset code has been sent." });
+      }
+
+      const user = result.rows[0];
+      const recent = await pool.query(
+        `SELECT created_at
+         FROM pos_password_reset_codes
+         WHERE user_id=$1 AND created_at > NOW() - INTERVAL '60 seconds'
+         ORDER BY created_at DESC LIMIT 1`,
+        [user.id]
+      );
+      if (recent.rows.length) {
+        return res.status(429).json({ error: "Please wait 60 seconds before requesting another code." });
+      }
+
+      const code = String(crypto.randomInt(0, 1000000)).padStart(6, "0");
+      const codeHash = resetCodeHash(user.id, code);
+
+      await pool.query(
+        "UPDATE pos_password_reset_codes SET consumed_at=NOW() WHERE user_id=$1 AND consumed_at IS NULL",
+        [user.id]
+      );
+      const created = await pool.query(
+        `INSERT INTO pos_password_reset_codes(user_id,code_hash,expires_at)
+         VALUES($1,$2,NOW() + INTERVAL '10 minutes')
+         RETURNING id`,
+        [user.id, codeHash]
+      );
+
+      try {
+        await sendPasswordOtp(user.email, user.name, code);
+      } catch (mailError) {
+        await pool.query("DELETE FROM pos_password_reset_codes WHERE id=$1", [created.rows[0].id]);
+        console.error("POS reset OTP email failed:", mailError.message);
+        return res.status(503).json({ error: "Email OTP service is not available right now. Contact the administrator." });
+      }
+
+      res.json({ ok: true, expiresMinutes: 10, message: "A 6-digit OTP was sent to your registered email." });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: "Unable to send a password reset code." });
+    }
+  });
+
+  originalPost.call(app, "/api/pos/forgot-password/reset", async (req, res) => {
+    const client = await pool.connect();
+    try {
+      const email = String(req.body.email || "").trim().toLowerCase();
+      const code = String(req.body.code || "").replace(/\D/g, "").slice(0, 6);
+      const newPassword = String(req.body.newPassword || "");
+
+      if (!validEmail(email)) return res.status(400).json({ error: "Enter a valid registered email." });
+      if (code.length !== 6) return res.status(400).json({ error: "Enter the 6-digit OTP." });
+      if (newPassword.length < 8) return res.status(400).json({ error: "Use at least 8 characters for the new password." });
+
+      await client.query("BEGIN");
+      const userResult = await client.query(
+        "SELECT id,name,email,auth_version FROM pos_users WHERE email=$1 AND active=TRUE LIMIT 1 FOR UPDATE",
+        [email]
+      );
+      if (!userResult.rows.length) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "The OTP is invalid or expired." });
+      }
+
+      const user = userResult.rows[0];
+      const codeResult = await client.query(
+        `SELECT id,code_hash,attempts
+         FROM pos_password_reset_codes
+         WHERE user_id=$1 AND consumed_at IS NULL AND expires_at > NOW()
+         ORDER BY created_at DESC LIMIT 1
+         FOR UPDATE`,
+        [user.id]
+      );
+      if (!codeResult.rows.length) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "The OTP is invalid or expired. Request a new code." });
+      }
+
+      const reset = codeResult.rows[0];
+      if (Number(reset.attempts || 0) >= 5) {
+        await client.query(
+          "UPDATE pos_password_reset_codes SET consumed_at=NOW() WHERE id=$1",
+          [reset.id]
+        );
+        await client.query("COMMIT");
+        return res.status(400).json({ error: "Too many incorrect attempts. Request a new OTP." });
+      }
+
+      const matches = safeHashEqual(resetCodeHash(user.id, code), reset.code_hash);
+      if (!matches) {
+        await client.query(
+          "UPDATE pos_password_reset_codes SET attempts=attempts+1 WHERE id=$1",
+          [reset.id]
+        );
+        await client.query("COMMIT");
+        return res.status(400).json({ error: "The OTP is invalid or expired." });
+      }
+
+      const secure = passwordData(newPassword);
+      const nextVersion = Number(user.auth_version || 1) + 1;
+      await client.query(
+        `UPDATE pos_users
+         SET password_hash=$1,salt=$2,auth_version=$3
+         WHERE id=$4`,
+        [secure.hash, secure.salt, nextVersion, user.id]
+      );
+      await client.query(
+        "UPDATE pos_password_reset_codes SET consumed_at=NOW() WHERE user_id=$1 AND consumed_at IS NULL",
+        [user.id]
+      );
+      await client.query("COMMIT");
+      res.json({ ok: true, message: "Password updated. You can now sign in with your new password." });
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch {}
+      console.error(error);
+      res.status(500).json({ error: "Unable to reset the POS password." });
+    } finally {
+      client.release();
+    }
   });
 
   originalGet.call(app, "/api/pos/me", posGuard, async (req, res) => {
@@ -125,7 +336,7 @@ function addRoutes(app) {
   originalPatch.call(app, "/api/pos/account", posGuard, async (req, res) => {
     try {
       const existing = await pool.query(
-        "SELECT id,name,email,password_hash,salt,active FROM pos_users WHERE id=$1 AND active=TRUE LIMIT 1",
+        "SELECT id,name,email,password_hash,salt,active,auth_version FROM pos_users WHERE id=$1 AND active=TRUE LIMIT 1",
         [req.posUser.id]
       );
       if (!existing.rows.length) return res.status(404).json({ error: "POS account not found." });
@@ -157,15 +368,16 @@ function addRoutes(app) {
         salt = secure.salt;
       }
 
+      const authVersion = newPassword ? Number(row.auth_version || 1) + 1 : Number(row.auth_version || 1);
       const updated = await pool.query(
         `UPDATE pos_users
-         SET email=$1,password_hash=$2,salt=$3
-         WHERE id=$4
-         RETURNING id,name,email`,
-        [email, passwordHash, salt, row.id]
+         SET email=$1,password_hash=$2,salt=$3,auth_version=$4
+         WHERE id=$5
+         RETURNING id,name,email,auth_version`,
+        [email, passwordHash, salt, authVersion, row.id]
       );
       const user = updated.rows[0];
-      const token = jwt.sign({ role: "pos", id: user.id, name: user.name, email: user.email }, secret, { expiresIn: "12h" });
+      const token = jwt.sign({ role: "pos", id: user.id, name: user.name, email: user.email, authVersion: Number(user.auth_version || authVersion) }, secret, { expiresIn: "12h" });
       res.json({ token, user, passwordChanged: Boolean(newPassword) });
     } catch (error) {
       console.error(error);
