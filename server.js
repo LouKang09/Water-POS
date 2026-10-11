@@ -4,7 +4,6 @@ const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 const multer = require("multer");
 const { Pool } = require("pg");
-const { S3Client, PutObjectCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -15,86 +14,12 @@ const pool = new Pool({
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
 
 app.use(express.json({ limit: "1mb" }));
-const brandS3Enabled = Boolean(
-  process.env.RECEIPT_S3_ENDPOINT &&
-  process.env.RECEIPT_S3_BUCKET &&
-  process.env.RECEIPT_S3_ACCESS_KEY_ID &&
-  process.env.RECEIPT_S3_SECRET_ACCESS_KEY
-);
-const brandS3 = brandS3Enabled ? new S3Client({
-  endpoint: process.env.RECEIPT_S3_ENDPOINT,
-  region: process.env.RECEIPT_S3_REGION || "auto",
-  forcePathStyle: false,
-  credentials: {
-    accessKeyId: process.env.RECEIPT_S3_ACCESS_KEY_ID,
-    secretAccessKey: process.env.RECEIPT_S3_SECRET_ACCESS_KEY
-  }
-}) : null;
-const BRAND_LOGO_KEY = "branding/inyou-official-hd.png";
-let cachedBrandLogo = null;
-
-async function readS3Body(body) {
-  if (!body) return null;
-  if (typeof body.transformToByteArray === "function") {
-    return Buffer.from(await body.transformToByteArray());
-  }
-  const chunks = [];
-  for await (const chunk of body) chunks.push(Buffer.from(chunk));
-  return Buffer.concat(chunks);
-}
-
 app.get("/brand/inyou-official.webp", (req,res) => res.redirect(302,"/brand/inyou-official-hd.png"));
 app.get("/brand/inyou-official.png", (req,res) => res.redirect(302,"/brand/inyou-official-hd.png"));
 app.get("/brand/inyou-official.jpg", (req,res) => res.redirect(302,"/brand/inyou-official-hd.png"));
-app.get("/brand/inyou-official-hd.png", async (req,res) => {
-  try {
-    if (!cachedBrandLogo && brandS3) {
-      const stored = await brandS3.send(new GetObjectCommand({
-        Bucket: process.env.RECEIPT_S3_BUCKET,
-        Key: BRAND_LOGO_KEY
-      }));
-      cachedBrandLogo = await readS3Body(stored.Body);
-    }
-    if (cachedBrandLogo) {
-      res.setHeader("Cache-Control","public, max-age=86400");
-      return res.type("image/png").send(cachedBrandLogo);
-    }
-  } catch (error) {
-    console.warn("HD brand logo unavailable, using repository fallback:", error.message);
-  }
-  res.setHeader("Cache-Control","public, max-age=3600");
-  res.type("image/jpeg").sendFile(path.join(__dirname,"branding","inyou-official.jpg"));
-});
-
-// One-time internal upload path used only when BRAND_UPLOAD_TOKEN is configured.
-// Removing that environment variable disables uploads while the stored logo remains available.
-app.post("/api/internal/brand-logo", upload.single("logo"), async (req,res) => {
-  try {
-    const expected = String(process.env.BRAND_UPLOAD_TOKEN || "");
-    const provided = String(req.headers["x-brand-upload-token"] || "");
-    if (!expected || !provided || !crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(provided))) {
-      return res.status(404).end();
-    }
-    if (!brandS3) return res.status(503).json({error:"Brand object storage is unavailable."});
-    if (!req.file || req.file.mimetype !== "image/png") {
-      return res.status(400).json({error:"Upload the approved PNG logo."});
-    }
-    if (req.file.size > 5 * 1024 * 1024) {
-      return res.status(413).json({error:"Logo file is too large."});
-    }
-    await brandS3.send(new PutObjectCommand({
-      Bucket: process.env.RECEIPT_S3_BUCKET,
-      Key: BRAND_LOGO_KEY,
-      Body: req.file.buffer,
-      ContentType: "image/png",
-      CacheControl: "public, max-age=86400"
-    }));
-    cachedBrandLogo = Buffer.from(req.file.buffer);
-    res.json({ok:true,key:BRAND_LOGO_KEY,bytes:req.file.size});
-  } catch (error) {
-    console.error("Brand logo upload failed:", error);
-    res.status(500).json({error:"Unable to save the brand logo."});
-  }
+app.get("/brand/inyou-official-hd.png", (req,res) => {
+  res.setHeader("Cache-Control","public, max-age=86400");
+  res.type("image/png").sendFile(path.join(__dirname,"branding","inyou-official-hd.png"));
 });
 const SITE_MODE = process.env.SITE_MODE || "pos";
 app.use(express.static(path.join(__dirname, "public"), {
