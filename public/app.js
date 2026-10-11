@@ -338,6 +338,7 @@ async function confirmCancelUnpaid(){
   const button=document.querySelector("#confirmCancelUnpaid");
   const errorEl=document.querySelector("#cancelUnpaidError");
   button.disabled=true;
+  document.querySelector("#keepUnpaid").disabled=true;
   button.textContent="Cancelling…";
   errorEl.textContent="";
   try{
@@ -356,6 +357,7 @@ async function confirmCancelUnpaid(){
     if(/already settled|no longer unpaid|already cancelled/i.test(error.message)) await loadUnpaidSales({quiet:true});
   }finally{
     button.disabled=false;
+    document.querySelector("#keepUnpaid").disabled=false;
     button.textContent="Cancel Transaction";
   }
 }
