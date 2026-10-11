@@ -1,7 +1,6 @@
 const crypto = require("crypto");
 const express = require("express");
 const jwt = require("jsonwebtoken");
-const nodemailer = require("nodemailer");
 const { Pool } = require("pg");
 
 const secret = process.env.JWT_SECRET || "development-only-change-me";
@@ -36,46 +35,67 @@ function safeHashEqual(a, b) {
   return left.length === right.length && crypto.timingSafeEqual(left, right);
 }
 
-let mailTransport = null;
-function getMailTransport() {
-  const user = process.env.SMTP_USER || process.env.ADMIN_EMAIL || "";
-  const pass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD || "";
-  if (!user || !pass) return null;
-  if (!mailTransport) {
-    const port = Number(process.env.SMTP_PORT || 465);
-    mailTransport = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || "smtp.gmail.com",
-      port,
-      secure: String(process.env.SMTP_SECURE || (port === 465 ? "true" : "false")).toLowerCase() !== "false",
-      auth: { user, pass }
-    });
-  }
-  return mailTransport;
-}
-
+// Password reset emails use Resend's HTTPS API (no outbound SMTP required).
+// For initial testing, onboarding@resend.dev can only send to the Resend account owner's email.
+// Set RESEND_FROM_EMAIL to an address on a verified domain for production.
 async function sendPasswordOtp(email, name, code) {
-  const transport = getMailTransport();
-  if (!transport) {
-    const error = new Error("Email OTP service is not configured.");
+  const apiKey = String(process.env.RESEND_API_KEY || "").trim();
+  if (!apiKey) {
+    const error = new Error("Resend API key is not configured (RESEND_API_KEY).");
     error.code = "MAIL_NOT_CONFIGURED";
     throw error;
   }
-  const fromAddress = process.env.SMTP_USER || process.env.ADMIN_EMAIL;
-  await transport.sendMail({
-    from: `"INYOU Water Supply Co." <${fromAddress}>`,
-    to: email,
-    subject: "INYOU Water POS password reset code",
-    text: `Hello ${name || "POS User"},\n\nYour INYOU Water POS password reset code is ${code}.\n\nThis code expires in 10 minutes. If you did not request this, you can ignore this email.\n\nINYOU Water Supply Co.`,
-    html: `<div style="font-family:Arial,sans-serif;color:#123;max-width:520px;margin:auto">
-      <h2 style="color:#0874b8">INYOU Water POS</h2>
-      <p>Hello ${String(name || "POS User").replace(/[<>&]/g, "")},</p>
-      <p>Your password reset code is:</p>
-      <div style="font-size:32px;font-weight:800;letter-spacing:8px;padding:18px 20px;background:#eef8fd;border-radius:14px;text-align:center;color:#075f98">${code}</div>
-      <p style="margin-top:18px">This code expires in <strong>10 minutes</strong>.</p>
-      <p>If you did not request this, you can ignore this email.</p>
-      <p style="color:#688">INYOU Water Supply Co.</p>
-    </div>`
-  });
+
+  const from = String(process.env.RESEND_FROM_EMAIL || "INYOU Water POS <onboarding@resend.dev>").trim();
+  const plainName = String(name || "POS User");
+  const safeName = plainName.replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  })[character]);
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        from,
+        to: [email],
+        subject: "INYOU Water POS password reset code",
+        text: `Hello ${plainName},\n\nYour INYOU Water POS password reset code is ${code}.\n\nThis code expires in 10 minutes. If you did not request this, you can ignore this email.\n\nINYOU Water Supply Co.`,
+        html: `<div style="font-family:Arial,sans-serif;color:#123;max-width:520px;margin:auto">
+          <h2 style="color:#0874b8">INYOU Water POS</h2>
+          <p>Hello ${safeName},</p>
+          <p>Your password reset code is:</p>
+          <div style="font-size:32px;font-weight:800;letter-spacing:8px;padding:18px 20px;background:#eef8fd;border-radius:14px;text-align:center;color:#075f98">${code}</div>
+          <p style="margin-top:18px">This code expires in <strong>10 minutes</strong>.</p>
+          <p>If you did not request this, you can ignore this email.</p>
+          <p style="color:#688">INYOU Water Supply Co.</p>
+        </div>`
+      })
+    });
+
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.id) {
+      const reason = String(result.message || result.name || "No details").slice(0, 250);
+      const error = new Error(`Resend API error (${response.status}): ${reason}`);
+      error.code = "RESEND_DELIVERY_FAILED";
+      throw error;
+    }
+  } catch (error) {
+    if (error.name === "AbortError") {
+      const timeoutError = new Error("Resend API connection timed out after 10 seconds.");
+      timeoutError.code = "RESEND_TIMEOUT";
+      throw timeoutError;
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function posGuard(req, res, next) {
@@ -232,7 +252,7 @@ function addRoutes(app) {
       } catch (mailError) {
         await pool.query("DELETE FROM pos_password_reset_codes WHERE id=$1", [created.rows[0].id]);
         console.error("POS reset OTP email failed:", mailError.message);
-        return res.status(503).json({ error: "Email OTP service is not available right now. Contact the administrator." });
+        return res.status(503).json({ error: mailError.code === "MAIL_NOT_CONFIGURED" ? "Email OTP setup is incomplete. Ask the administrator to configure Resend." : "Unable to send OTP email. Please try again or contact the administrator." });
       }
 
       res.json({ ok: true, expiresMinutes: 10, message: "A 6-digit OTP was sent to your registered email." });
