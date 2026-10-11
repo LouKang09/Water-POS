@@ -21,3 +21,27 @@
   .pos-login-brand{align-items:center;gap:16px}
   .pos-login-logo{width:96px;height:96px;border-radius:20px}
 }
+
+.login-row-between{display:flex;justify-content:flex-end;align-items:center;margin:2px 0 0}
+.forgot-password-link{border:0;background:transparent;color:var(--brand);font-size:.72rem;font-weight:850;padding:7px 2px;cursor:pointer}
+.forgot-password-link:hover,.forgot-password-link:focus-visible{text-decoration:underline;outline:none}
+.login-success{min-height:0;color:#137a52;font-size:.72rem;margin:2px 0 5px;line-height:1.4}
+.login-success:empty{display:none}
+.forgot-password-dialog{width:min(92vw,430px);max-width:430px;border:0;padding:0;border-radius:24px;background:transparent}
+.forgot-password-dialog::backdrop{background:rgba(8,32,40,.55);backdrop-filter:blur(4px)}
+.forgot-password-card{background:#fff;border:1px solid var(--line);border-radius:24px;padding:20px;box-shadow:0 22px 60px rgba(10,52,66,.22)}
+.forgot-password-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+.forgot-password-head h2{margin:2px 0 4px;font-size:1.35rem}
+.forgot-password-head p:last-child{margin:0;color:var(--muted);font-size:.72rem;line-height:1.4}
+.forgot-close{width:38px;height:38px;border:1px solid var(--line);border-radius:12px;background:#f6fbfb;color:var(--ink);font-size:1.35rem;line-height:1;cursor:pointer}
+.forgot-password-form{display:grid;gap:3px;padding-top:14px}
+.otp-sent-note{display:grid;gap:3px;margin-bottom:8px;padding:11px 12px;border-radius:13px;background:#eef8fd;border:1px solid #c8e7f6}
+.otp-sent-note strong{font-size:.78rem;color:#0874b8}
+.otp-sent-note span{font-size:.72rem;color:var(--ink);font-weight:750;word-break:break-all}
+.otp-sent-note small{font-size:.65rem;color:var(--muted)}
+.otp-input{text-align:center!important;font-size:1.35rem!important;font-weight:900!important;letter-spacing:.28em!important}
+.forgot-secondary{border:0;background:transparent;color:var(--brand);font-size:.7rem;font-weight:850;padding:10px;cursor:pointer}
+@media(max-width:480px){
+  .forgot-password-dialog{width:100%;max-width:none;margin:auto 0 0;border-radius:24px 24px 0 0}
+  .forgot-password-card{border-radius:24px 24px 0 0;padding:18px 16px calc(20px + env(safe-area-inset-bottom))}
+}
