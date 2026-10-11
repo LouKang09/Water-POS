@@ -88,12 +88,14 @@ public class MainActivity extends Activity {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         window.setStatusBarColor(Color.rgb(13, 107, 105));
         window.setNavigationBarColor(Color.BLACK);
-        // Surface the INYOU identity in the Android recent-apps switcher.
-        setTaskDescription(new ActivityManager.TaskDescription(
-            getString(R.string.app_name),
-            BitmapFactory.decodeResource(getResources(), R.drawable.inyou_logo),
-            Color.rgb(13, 107, 105)
-        ));
+        // Keep the Android Recents task icon small to avoid oversized Bitmap parceling.
+        android.graphics.Bitmap logoBitmap = BitmapFactory.decodeResource(getResources(), R.drawable.inyou_logo);
+        if (logoBitmap != null) {
+            android.graphics.Bitmap recentIcon = android.graphics.Bitmap.createScaledBitmap(logoBitmap, dp(96), dp(96), true);
+            setTaskDescription(new ActivityManager.TaskDescription(
+                getString(R.string.app_name), recentIcon, Color.rgb(13, 107, 105)
+            ));
+        }
 
         getWindow().getDecorView().setOnSystemUiVisibilityChangeListener(visibility -> {
             if (!exitRequested && !resumeKioskAfterChooser) {
