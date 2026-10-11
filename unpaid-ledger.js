@@ -16,6 +16,9 @@ function ensureSchema() {
     ALTER TABLE sales ADD COLUMN IF NOT EXISTS payment_status TEXT;
     ALTER TABLE sales ADD COLUMN IF NOT EXISTS was_pay_later BOOLEAN NOT NULL DEFAULT FALSE;
     ALTER TABLE sales ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ;
+    ALTER TABLE sales ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ;
+    ALTER TABLE sales ADD COLUMN IF NOT EXISTS cancelled_by_pos_user_id INTEGER;
+    ALTER TABLE sales ADD COLUMN IF NOT EXISTS cancellation_reason TEXT;
 
     UPDATE sales
     SET payment_status = CASE WHEN payment_method='Pay Later' THEN 'unpaid' ELSE 'paid' END
@@ -30,7 +33,7 @@ function ensureSchema() {
 
     ALTER TABLE sales DROP CONSTRAINT IF EXISTS sales_payment_status_check;
     ALTER TABLE sales ADD CONSTRAINT sales_payment_status_check
-      CHECK (payment_status IN ('paid','unpaid'));
+      CHECK (payment_status IN ('paid','unpaid','cancelled'));
 
     ALTER TABLE sales DROP CONSTRAINT IF EXISTS sales_payment_method_check;
     ALTER TABLE sales ADD CONSTRAINT sales_payment_method_check
@@ -114,7 +117,34 @@ async function addRoutes(app) {
     } catch (error) { next(error); }
   });
 
-  app.post("/api/pos/unpaid/:id/settle", upload.single("receipt"), async (req, res, next) => {
+  app.post("/api/pos/unpaid/:id/cancel", async (req, res, next) => {
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id <= 0) {
+      return res.status(400).json({error:"Invalid unpaid transaction."});
+    }
+    try {
+      await ensureSchema();
+      const reason = String(req.body?.reason || "").trim().slice(0,200);
+      // Atomic conditional update prevents cancellation after another cashier settles.
+      const {rows} = await pool.query(`
+        UPDATE sales
+        SET payment_status='cancelled', cancelled_at=NOW(),
+            cancelled_by_pos_user_id=$2, cancellation_reason=$3
+        WHERE id=$1 AND payment_status='unpaid'
+        RETURNING id,transaction_ref,total,series_no,cancelled_at
+      `,[id,req.posUser.id,reason||null]);
+      if (!rows.length) {
+        const existing = await pool.query("SELECT payment_status FROM sales WHERE id=$1",[id]);
+        if (!existing.rows.length) return res.status(404).json({error:"Unpaid transaction not found."});
+        return res.status(409).json({error:existing.rows[0].payment_status === "paid"
+          ? "This transaction has already been settled."
+          : "This transaction is no longer unpaid."});
+      }
+      res.json({ok:true,transactionRef:rows[0].transaction_ref,status:"cancelled"});
+    } catch(error) { next(error); }
+  });
+
+    app.post("/api/pos/unpaid/:id/settle", upload.single("receipt"), async (req, res, next) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid unpaid transaction." });
 
