@@ -200,7 +200,7 @@ function addRoutes(app) {
       if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid POS user." });
 
       const existing = await pool.query(
-        "SELECT id,name,email,password_hash,salt,active FROM pos_users WHERE id=$1 LIMIT 1",
+        "SELECT id,name,email,password_hash,salt,active,auth_version FROM pos_users WHERE id=$1 LIMIT 1",
         [id]
       );
       if (!existing.rows.length) return res.status(404).json({ error: "POS user not found." });
@@ -230,12 +230,13 @@ function addRoutes(app) {
         salt = secure.salt;
       }
 
+      const authVersion = newPassword ? Number(current.auth_version || 1) + 1 : Number(current.auth_version || 1);
       const { rows } = await pool.query(
         `UPDATE pos_users
-         SET name=$1,email=$2,password_hash=$3,salt=$4
-         WHERE id=$5
+         SET name=$1,email=$2,password_hash=$3,salt=$4,auth_version=$5
+         WHERE id=$6
          RETURNING id,name,email,active,created_at,last_login_at`,
-        [name, email, passwordHash, salt, id]
+        [name, email, passwordHash, salt, authVersion, id]
       );
       res.json({ ...rows[0], passwordChanged: Boolean(newPassword) });
     } catch (error) {
