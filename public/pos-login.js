@@ -64,18 +64,24 @@ async function sendForgotOtp(event){
   $("#forgotRequestError").textContent="";
   button.disabled=true;
   button.textContent="Sending OTP…";
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),15000);
   try{
     const result=await api("/api/pos/forgot-password/request",{
       method:"POST",
-      body:JSON.stringify({email})
+      body:JSON.stringify({email}),
+      signal:controller.signal
     });
     $("#forgotRequestForm").classList.add("hidden");
     $("#forgotResetForm").classList.remove("hidden");
     $("#forgotSentTo").textContent=email;
     $("#forgotOtp").focus();
   }catch(error){
-    $("#forgotRequestError").textContent=error.message;
+    $("#forgotRequestError").textContent=error.name==="AbortError" || error.name==="TimeoutError"
+      ? "The email request timed out. Please try again."
+      : error.message;
   }finally{
+    clearTimeout(timeout);
     button.disabled=false;
     button.textContent="Send OTP";
   }
