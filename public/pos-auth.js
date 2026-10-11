@@ -68,7 +68,7 @@ function ensurePosAccountUi() {
   if (!document.querySelector('link[data-pos-account-style]')) {
     const link = document.createElement("link");
     link.rel = "stylesheet";
-    link.href = "/pos-account.css?v=20261006-1";
+    link.href = "/pos-account.css?v=20261011-1";
     link.dataset.posAccountStyle = "true";
     document.head.appendChild(link);
   }
@@ -79,7 +79,7 @@ function ensurePosAccountUi() {
     button.id = "posAccountBtn";
     button.type = "button";
     button.className = "admin-link pos-account-button";
-    button.textContent = "Account";
+    button.textContent = "Update Password";
     const logout = document.querySelector("#posLogoutBtn");
     actions.insertBefore(button, logout || null);
   }
@@ -93,8 +93,8 @@ function ensurePosAccountUi() {
         <div class="pos-account-head">
           <div>
             <p class="eyebrow">POS ACCOUNT</p>
-            <h2>Update Login</h2>
-            <p>Change the email or password used to sign in to Water POS.</p>
+            <h2>Update Password & Email</h2>
+            <p>Update your password or registered sign-in email.</p>
           </div>
           <button id="closePosAccount" class="icon-button" type="button" aria-label="Close">×</button>
         </div>
@@ -182,7 +182,7 @@ async function savePosAccount(event) {
     errorEl.textContent = error.message;
   } finally {
     button.disabled = false;
-    button.textContent = "Save Login";
+    button.textContent = "Save Changes";
   }
 }
 
