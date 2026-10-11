@@ -144,7 +144,7 @@ async function addRoutes(app) {
     } catch(error) { next(error); }
   });
 
-    app.post("/api/pos/unpaid/:id/settle", upload.single("receipt"), async (req, res, next) => {
+  app.post("/api/pos/unpaid/:id/settle", upload.single("receipt"), async (req, res, next) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid unpaid transaction." });
 
