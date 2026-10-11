@@ -6,14 +6,14 @@
   <meta name="theme-color" content="#0d6b69">
   <title>INYOU Water POS Login</title>
   <link rel="icon" type="image/jpeg" href="/brand/inyou-official.jpg">
-  <link rel="stylesheet" href="/styles.css?v=20261008-7">
-  <link rel="stylesheet" href="/pos-login.css?v=20261008-7">
+  <link rel="stylesheet" href="/styles.css?v=20261011-1">
+  <link rel="stylesheet" href="/pos-login.css?v=20261011-1">
 </head>
 <body class="pos-login-page">
   <main class="pos-login-shell">
     <section class="pos-login-card">
       <div class="pos-login-brand">
-        <img class="pos-login-logo" src="/brand/inyou-official.jpg?v=20261008-7" alt="INYOU Water Supply Co.">
+        <img class="pos-login-logo" src="/brand/inyou-official.jpg?v=20261011-1" alt="INYOU Water Supply Co.">
         <div>
           <p class="eyebrow">INYOU WATER SUPPLY CO.</p>
           <h1>Water POS</h1>
@@ -53,7 +53,13 @@
           </div>
         </label>
 
+        <div class="login-row-between">
+          <span></span>
+          <button id="forgotPasswordButton" class="forgot-password-link" type="button">Forgot password?</button>
+        </div>
+
         <div id="posLoginError" class="login-error"></div>
+        <div id="posLoginSuccess" class="login-success"></div>
         <button id="posLoginButton" class="primary-button full" type="submit">Log in to POS</button>
       </form>
 
@@ -61,6 +67,61 @@
     </section>
   </main>
 
-  <script src="/pos-login.js?v=20261006-2"></script>
+  <dialog id="forgotPasswordDialog" class="forgot-password-dialog">
+    <div class="forgot-password-card">
+      <div class="forgot-password-head">
+        <div>
+          <p class="eyebrow">ACCOUNT RECOVERY</p>
+          <h2>Reset Password</h2>
+          <p id="forgotPasswordIntro">We’ll send a 6-digit OTP to the registered POS email.</p>
+        </div>
+        <button id="closeForgotPassword" class="forgot-close" type="button" aria-label="Close">×</button>
+      </div>
+
+      <form id="forgotRequestForm" class="forgot-password-form">
+        <label class="field">
+          <span>Registered Email</span>
+          <input id="forgotEmail" type="email" autocomplete="email" required placeholder="name@example.com">
+        </label>
+        <div id="forgotRequestError" class="login-error"></div>
+        <button id="sendForgotOtp" class="primary-button full" type="submit">Send OTP</button>
+      </form>
+
+      <form id="forgotResetForm" class="forgot-password-form hidden">
+        <div class="otp-sent-note">
+          <strong>OTP sent</strong>
+          <span id="forgotSentTo"></span>
+          <small>The code expires in 10 minutes.</small>
+        </div>
+
+        <label class="field">
+          <span>6-digit OTP</span>
+          <input id="forgotOtp" class="otp-input" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required placeholder="000000">
+        </label>
+
+        <label class="field">
+          <span>New Password</span>
+          <div class="pos-password-control">
+            <input id="forgotNewPassword" type="password" minlength="8" autocomplete="new-password" required placeholder="At least 8 characters">
+            <button class="pos-password-toggle" type="button" data-target="forgotNewPassword" aria-label="Show password">Show</button>
+          </div>
+        </label>
+
+        <label class="field">
+          <span>Confirm New Password</span>
+          <div class="pos-password-control">
+            <input id="forgotConfirmPassword" type="password" minlength="8" autocomplete="new-password" required placeholder="Repeat new password">
+            <button class="pos-password-toggle" type="button" data-target="forgotConfirmPassword" aria-label="Show password">Show</button>
+          </div>
+        </label>
+
+        <div id="forgotResetError" class="login-error"></div>
+        <button id="resetForgotPassword" class="primary-button full" type="submit">Update Password</button>
+        <button id="resendForgotOtp" class="forgot-secondary" type="button">Send a new OTP</button>
+      </form>
+    </div>
+  </dialog>
+
+  <script src="/pos-login.js?v=20261011-1"></script>
 </body>
 </html>
