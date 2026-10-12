@@ -997,3 +997,182 @@ th{color:var(--muted);font-size:.68rem;text-transform:uppercase;letter-spacing:.
     line-height:1.2;
   }
 }
+
+
+/* Daily Sales Trend — precise hover, legible values, accessible series controls. */
+.admin-page .chart-panel{
+  background:linear-gradient(165deg,#ffffff 0%,#fcfefe 100%);
+  border:1px solid #e1ebee;
+  border-radius:21px;
+  box-shadow:0 12px 34px rgba(14,51,64,.065);
+}
+.admin-page .chart-panel .panel-header{
+  padding:21px 23px 16px;
+  gap:16px;
+  align-items:center;
+  border-color:#edf1f3;
+}
+.admin-page .chart-panel .panel-header h2{
+  margin:3px 0 0;
+  font-size:1.11rem;
+  font-weight:850;
+  letter-spacing:-.025em;
+  color:#172f39;
+}
+.admin-page .chart-panel .panel-header .panel-header-copy p:last-child{
+  color:#6b808a;
+  font-size:.78rem;
+  line-height:1.5;
+}
+.admin-page .chart-panel .trend-eyebrow{
+  margin:0 0 4px;
+  color:#167a79;
+  font-size:.61rem;
+  font-weight:850;
+  letter-spacing:.14em;
+}
+.admin-page .trend-range{
+  flex-shrink:0;
+  padding:8px 11px;
+  border:1px solid #dbe8eb;
+  background:#f3f8fa;
+  color:#46626d;
+  border-radius:11px;
+  font-size:.71rem;
+  font-weight:750;
+  letter-spacing:.005em;
+}
+.admin-page .trend-toolbar{
+  display:flex;
+  gap:14px;
+  align-items:center;
+  justify-content:space-between;
+  padding:15px 23px 7px;
+}
+.admin-page .trend-series-controls{
+  display:flex;
+  flex-wrap:wrap;
+  gap:7px;
+  min-width:0;
+}
+.admin-page .trend-series-toggle{
+  --trend-color:#2785e7;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  min-height:36px;
+  padding:8px 11px;
+  border:1px solid #e2ebef;
+  border-radius:999px;
+  background:#ffffff;
+  color:#344d5a;
+  box-shadow:0 2px 8px rgba(32,67,80,.035);
+  font-size:.73rem;
+  font-weight:800;
+  line-height:1.2;
+  white-space:nowrap;
+  cursor:pointer;
+  transition:background .16s,border-color .16s,opacity .16s,box-shadow .16s,transform .16s;
+}
+.admin-page .trend-series-toggle:hover{
+  background:#f5f9fa;
+  border-color:#b8d2da;
+  box-shadow:0 3px 10px rgba(32,67,80,.09);
+  transform:translateY(-1px);
+}
+.admin-page .trend-series-toggle:focus-visible,.admin-page .trend-show-all:focus-visible{
+  outline:3px solid #4bbaa7;
+  outline-offset:2px;
+}
+.admin-page .trend-series-toggle[aria-pressed="false"]{
+  color:#84969d;
+  background:#f8fafb;
+  box-shadow:none;
+  border-color:#edf1f3;
+}
+.admin-page .trend-series-toggle[aria-pressed="false"] .trend-dot{
+  background:transparent;
+  border:2px solid #aebfc7;
+  box-shadow:none;
+}
+.admin-page .trend-dot{
+  width:9px;
+  height:9px;
+  display:inline-block;
+  flex-shrink:0;
+  border-radius:50%;
+  background:var(--trend-color);
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--trend-color) 14%,transparent);
+}
+.admin-page .trend-show-all{
+  flex-shrink:0;
+  padding:8px 10px;
+  border:0;
+  border-radius:9px;
+  background:#eaf6f4;
+  color:#126f6a;
+  font-size:.72rem;
+  font-weight:850;
+  cursor:pointer;
+  white-space:nowrap;
+}
+.admin-page .trend-show-all:hover:not(:disabled){background:#d5eee9}
+.admin-page .trend-show-all:disabled{
+  opacity:.43;
+  cursor:default;
+  background:#f1f5f6;
+  color:#84949c;
+}
+.admin-page .trend-chart-wrap{
+  height:365px;
+  padding:4px 23px 8px 12px;
+}
+.admin-page .trend-chart-wrap canvas{
+  display:block;
+  width:100%!important;
+  height:100%!important;
+  touch-action:pan-y;
+}
+.admin-page .trend-chart-help{
+  display:flex;
+  align-items:center;
+  gap:9px;
+  margin:0;
+  padding:2px 23px 19px;
+  font-size:.72rem;
+  line-height:1.45;
+  color:#738b95;
+}
+.admin-page .trend-help-icon{
+  display:grid;
+  place-items:center;
+  width:22px;height:22px;
+  flex-shrink:0;
+  border-radius:7px;
+  font-size:1rem;
+  font-weight:900;
+  color:#227e8b;
+  background:#eaf6f6;
+}
+@media(max-width:1100px){
+  .admin-page .trend-chart-wrap{height:325px}
+}
+@media(max-width:900px){
+  .admin-page .chart-panel .panel-header{padding:17px 18px 15px}
+  .admin-page .trend-toolbar{padding:13px 18px 6px}
+  .admin-page .trend-chart-wrap{height:320px;padding:4px 15px 8px 7px}
+  .admin-page .trend-chart-help{padding:0 18px 17px}
+}
+@media(max-width:670px){
+  .admin-page .chart-panel .panel-header{align-items:flex-start;flex-direction:column}
+  .admin-page .trend-range{white-space:normal}
+  .admin-page .trend-toolbar{align-items:flex-start;flex-direction:column;gap:9px}
+  .admin-page .trend-series-controls{width:100%}
+  .admin-page .trend-series-toggle{min-height:37px}
+  .admin-page .trend-show-all{align-self:flex-end}
+  .admin-page .trend-chart-wrap{height:290px}
+}
+@media(prefers-reduced-motion:reduce){
+  .admin-page .trend-series-toggle{transition:none}
+}

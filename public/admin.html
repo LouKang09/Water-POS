@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#092f2e">
   <title>INYOU Water POS Admin</title>
   <link rel="icon" type="image/png" href="/brand/inyou-official-hd.png?v=20261011-2">
-  <link rel="stylesheet" href="/styles.css?v=20261011-2">
+  <link rel="stylesheet" href="/styles.css?v=20261012-chart1">
   <link rel="stylesheet" href="/admin-enhancements.css?v=20261006-2">
   <link rel="stylesheet" href="/admin-refinements.css?v=20261006-2">
 </head>
@@ -77,14 +77,25 @@
         <div class="panel chart-panel">
           <div class="panel-header">
             <div class="panel-header-copy">
+              <p class="trend-eyebrow">SALES ANALYTICS</p>
               <h2>Daily Sales Trend</h2>
-              <p>Connected day-to-day sales, split by Cash, GCash, and Other digital payments.</p>
+              <p>Explore day-to-day revenue and payment methods.</p>
             </div>
-            <span id="chartRange" class="badge">Last 14 days</span>
+            <span id="chartRange" class="badge trend-range">Last 14 days</span>
           </div>
-          <div class="chart-wrap">
-            <canvas id="salesTrendChart" aria-label="Daily sales trend chart"></canvas>
+          <div class="trend-toolbar">
+            <div id="trendSeriesControls" class="trend-series-controls" role="group" aria-label="Show or hide sales trend lines">
+              <button type="button" class="trend-series-toggle" data-series-index="0" aria-pressed="true" style="--trend-color:#2785E7"><span class="trend-dot" aria-hidden="true"></span>Total Sales</button>
+              <button type="button" class="trend-series-toggle" data-series-index="1" aria-pressed="true" style="--trend-color:#ED5F83"><span class="trend-dot" aria-hidden="true"></span>Cash</button>
+              <button type="button" class="trend-series-toggle" data-series-index="2" aria-pressed="true" style="--trend-color:#E59A33"><span class="trend-dot" aria-hidden="true"></span>GCash</button>
+              <button type="button" class="trend-series-toggle" data-series-index="3" aria-pressed="true" style="--trend-color:#8C75E6"><span class="trend-dot" aria-hidden="true"></span>Other Digital</button>
+            </div>
+            <button type="button" id="trendShowAll" class="trend-show-all" disabled>Show all</button>
           </div>
+          <div class="chart-wrap trend-chart-wrap">
+            <canvas id="salesTrendChart" role="img" aria-label="Daily sales trend with four selectable lines: Total Sales, Cash, GCash, and Other Digital. Hover or tap an individual data point to see only that series' exact amount."></canvas>
+          </div>
+          <p class="trend-chart-help"><span class="trend-help-icon" aria-hidden="true">◎</span> Hover or tap a data point to see its exact amount. Use the legend to focus on a line.</p>
         </div>
 
         <div class="report-toolbar">
@@ -199,7 +210,7 @@
   <section id="printReport" class="print-report" aria-hidden="true"></section>
   <div id="toast" class="toast"></div>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-  <script src="/admin.js?v=20261006-2"></script>
+  <script src="/admin.js?v=20261012-chart1"></script>
   <script src="/admin-enhancements.js?v=20261012-retail1"></script>
   <script src="/admin-refinements.js?v=20261012-retail1"></script>
 </body>

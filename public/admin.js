@@ -48,41 +48,200 @@ async function loadSummary(){
   $("#statNet").textContent=money(d.net);
   $("#txCount").textContent=d.transactions+" transaction"+(d.transactions===1?"":"s");
 }
+// Stable chart metadata: keep color, label and data mapping aligned with the legend.
+const TREND_SERIES = [
+  { key:"sales", label:"Total Sales", color:"#2785E7", weight:3.2 },
+  { key:"cash", label:"Cash", color:"#ED5F83", weight:2.5 },
+  { key:"gcash", label:"GCash", color:"#E59A33", weight:2.5 },
+  { key:"other", label:"Other Digital", color:"#8C75E6", weight:2.5 }
+];
+
+function compactTrendMoney(value) {
+  const n=Number(value)||0;
+  if(Math.abs(n)<1000) return money(n);
+  return "₱"+Intl.NumberFormat("en-PH",{
+    notation:"compact",maximumFractionDigits:1
+  }).format(n);
+}
+
+function syncTrendLegend() {
+  if(!salesChart) return;
+  document.querySelectorAll(".trend-series-toggle").forEach(button=>{
+    const index=Number(button.dataset.seriesIndex);
+    const visible=salesChart.isDatasetVisible(index);
+    button.setAttribute("aria-pressed",String(visible));
+    button.title=(visible?"Hide ":"Show ")+TREND_SERIES[index].label+" series";
+  });
+  const all=document.querySelector("#trendShowAll");
+  if(all) all.disabled=TREND_SERIES.every((_,index)=>salesChart.isDatasetVisible(index));
+}
+
+// A subtle guide emphasizes only the active point, never an entire date column.
+const trendFocusGuide={
+  id:"waterPosTrendFocusGuide",
+  afterDatasetsDraw(chart){
+    const active=chart.getActiveElements();
+    if(active.length!==1) return;
+    const point=active[0].element;
+    if(!point || !Number.isFinite(point.x)) return;
+    const {ctx,chartArea}=chart;
+    ctx.save();
+    ctx.strokeStyle="rgba(92,123,142,.27)";
+    ctx.lineWidth=1;
+    ctx.setLineDash([4,5]);
+    ctx.beginPath();
+    ctx.moveTo(point.x,chartArea.top);
+    ctx.lineTo(point.x,chartArea.bottom);
+    ctx.stroke();
+    ctx.restore();
+  }
+};
+
 async function loadTrend(){
   const rows=await api("/api/admin/sales-trend?"+queryDates());
-  $("#chartRange").textContent=($("#fromDate").value||"")+" to "+($("#toDate").value||"");
+  const from=$("#fromDate").value;
+  const to=$("#toDate").value;
+  $("#chartRange").textContent=from&&to
+    ? (from===to?displayDate(from):shortDate(from)+" – "+displayDate(to))
+    : "Selected period";
   const canvas=$("#salesTrendChart");
   if(!window.Chart){
     canvas.parentElement.innerHTML='<div class="empty-state">Chart library could not load. Sales data is still available below.</div>';
     return;
   }
-  if(salesChart)salesChart.destroy();
+
+  const labels=rows.map(r=>shortDate(r.date));
+  // Reuse the instance on refresh: preserve hovered positions, hidden series and smooth interaction.
+  if(salesChart){
+    salesChart.$trendRows=rows;
+    salesChart.data.labels=labels;
+    TREND_SERIES.forEach((series,index)=>{
+      salesChart.data.datasets[index].data=rows.map(r=>Number(r[series.key])||0);
+    });
+    salesChart.update("none");
+    syncTrendLegend();
+    return;
+  }
+
+  const datasets=TREND_SERIES.map((series,index)=>({
+    label:series.label,
+    data:rows.map(r=>Number(r[series.key])||0),
+    borderColor:series.color,
+    backgroundColor:series.color,
+    borderWidth:series.weight,
+    tension:.32,
+    cubicInterpolationMode:"monotone",
+    fill:index===0?{target:"origin",above:"rgba(39,133,231,.065)"}:false,
+    pointStyle:"circle",
+    pointRadius:rows.length>75?1:3.6,
+    pointHitRadius:12,
+    pointHoverRadius:7,
+    pointHoverBorderWidth:2.8,
+    pointBackgroundColor:"#fff",
+    pointBorderColor:series.color,
+    pointBorderWidth:2.4,
+    pointHoverBackgroundColor:series.color,
+    pointHoverBorderColor:"#fff",
+    spanGaps:false
+  }));
+
   salesChart=new Chart(canvas,{
     type:"line",
-    data:{
-      labels:rows.map(r=>shortDate(r.date)),
-      datasets:[
-        {label:"Total Sales",data:rows.map(r=>r.sales),borderWidth:3,pointRadius:4,pointHoverRadius:6,tension:.28},
-        {label:"Cash",data:rows.map(r=>r.cash),borderWidth:2,pointRadius:3,pointHoverRadius:5,tension:.28},
-        {label:"GCash",data:rows.map(r=>r.gcash),borderWidth:2,pointRadius:3,pointHoverRadius:5,tension:.28},
-        {label:"Other Digital",data:rows.map(r=>r.other),borderWidth:2,pointRadius:3,pointHoverRadius:5,tension:.28}
-      ]
-    },
+    data:{labels,datasets},
+    plugins:[trendFocusGuide],
     options:{
       responsive:true,
       maintainAspectRatio:false,
-      interaction:{mode:"index",intersect:false},
+      animation:{duration:320,easing:"easeOutQuart"},
+      interaction:{mode:"nearest",axis:"xy",intersect:true},
+      hover:{mode:"nearest",intersect:true},
+      onHover:(event,elements,chart)=>{
+        chart.canvas.style.cursor=elements.length?"crosshair":"default";
+      },
+      layout:{padding:{top:10,right:14,bottom:2,left:4}},
       plugins:{
-        legend:{position:"top",align:"end"},
-        tooltip:{callbacks:{label:ctx=>ctx.dataset.label+": "+money(ctx.parsed.y)}}
+        legend:{display:false},
+        tooltip:{
+          enabled:true,
+          mode:"nearest",
+          intersect:true,
+          position:"nearest",
+          displayColors:false,
+          backgroundColor:"rgba(13,28,43,.97)",
+          titleColor:"#BCCDD9",
+          bodyColor:"#FFFFFF",
+          borderColor:"rgba(210,233,244,.2)",
+          borderWidth:1,
+          padding:{top:12,right:16,bottom:12,left:16},
+          cornerRadius:12,
+          caretSize:6,
+          caretPadding:9,
+          titleSpacing:3,
+          bodySpacing:4,
+          titleFont:{family:"Inter,system-ui,sans-serif",size:12,weight:"500"},
+          bodyFont:{family:"Inter,system-ui,sans-serif",size:14,weight:"bold"},
+          callbacks:{
+            title:items=>{
+              const item=items[0];
+              const date=item&&salesChart.$trendRows?.[item.dataIndex]?.date;
+              return date?displayDate(date):"";
+            },
+            label:ctx=>ctx.dataset.label+"  ·  "+money(ctx.parsed.y)
+          }
+        }
       },
       scales:{
-        x:{grid:{display:false},ticks:{maxRotation:0,autoSkip:true,maxTicksLimit:14}},
-        y:{beginAtZero:true,ticks:{callback:value=>money(value)}}
+        x:{
+          offset:false,
+          grid:{display:false},
+          border:{display:false},
+          ticks:{
+            color:"#8192A0",
+            font:{family:"Inter,system-ui,sans-serif",size:11,weight:"500"},
+            autoSkip:true,maxRotation:0,maxTicksLimit:10,padding:12
+          }
+        },
+        y:{
+          beginAtZero:true,
+          border:{display:false,dash:[4,6]},
+          grid:{
+            color:ctx=>ctx.tick.value===0?"rgba(102,133,148,.2)":"rgba(102,133,148,.1)",
+            lineWidth:1,
+            drawTicks:false
+          },
+          ticks:{
+            color:"#8192A0",
+            font:{family:"Inter,system-ui,sans-serif",size:11},
+            padding:12,maxTicksLimit:6,
+            callback:value=>compactTrendMoney(value)
+          }
+        }
       }
     }
   });
+  salesChart.$trendRows=rows;
+  syncTrendLegend();
 }
+
+document.querySelector("#trendSeriesControls")?.addEventListener("click",event=>{
+  const button=event.target.closest(".trend-series-toggle");
+  if(!button||!salesChart)return;
+  const index=Number(button.dataset.seriesIndex);
+  if(!Number.isInteger(index)||index<0||index>=TREND_SERIES.length)return;
+  if(salesChart.isDatasetVisible(index)&&TREND_SERIES.filter((_,i)=>salesChart.isDatasetVisible(i)).length===1){
+    toast("Keep at least one series visible.");
+    return;
+  }
+  salesChart.setDatasetVisibility(index,!salesChart.isDatasetVisible(index));
+  salesChart.update();
+  syncTrendLegend();
+});
+document.querySelector("#trendShowAll")?.addEventListener("click",()=>{
+  if(!salesChart)return;
+  TREND_SERIES.forEach((_,index)=>salesChart.setDatasetVisibility(index,true));
+  salesChart.update();
+  syncTrendLegend();
+});
 
 function serviceQuantityBreakdown(sales){
   const buckets={Delivery:{}, "Pick-Up":{}, Overall:{}};
