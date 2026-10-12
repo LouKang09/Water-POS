@@ -246,7 +246,7 @@ function saleEditItemRow(item = {}) {
   const row = document.createElement("div");
   row.className = "sale-edit-item";
   row.innerHTML = `
-    <label><span>Category</span><select class="sale-edit-category"><option>Delivery</option><option>Pick-Up</option><option>New</option><option>Used</option><option>Other</option></select></label>
+    <label><span>Category</span><select class="sale-edit-category"><option>Delivery</option><option>Pick-Up</option><option>New</option><option>Used</option><option>Retail</option><option>Other</option></select></label>
     <label><span>Label</span><input class="sale-edit-label" maxlength="120" required value="${ledgerEscape(item.label || "")}"></label>
     <label><span>Unit Price</span><input class="sale-edit-price" type="number" min="0.01" step="0.01" required value="${Number(item.unitPrice ?? item.unit_price ?? 0) || ""}"></label>
     <label><span>Qty</span><input class="sale-edit-qty" type="number" min="1" max="1000" step="1" required value="${Number(item.qty || 1)}"></label>
