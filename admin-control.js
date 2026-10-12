@@ -104,7 +104,7 @@ function cleanManualReference(value, provider) {
 function normalizeManualItems(value) {
   if (!Array.isArray(value) || value.length < 1) throw new Error("Add at least one transaction item.");
   if (value.length > 30) throw new Error("A manual transaction can contain up to 30 item rows.");
-  const allowedCategories = new Set(["Delivery", "Pick-Up", "New", "Used"]);
+  const allowedCategories = new Set(["Delivery", "Pick-Up", "New", "Used", "Retail"]);
   return value.map((raw, index) => {
     const category = String(raw.category || "").trim();
     const price = Number(raw.unitPrice);
@@ -113,6 +113,10 @@ function normalizeManualItems(value) {
     if (!allowedCategories.has(category)) throw new Error("Choose a valid category for item " + (index + 1) + ".");
     if (!(price > 0) || price > 100000) throw new Error("Enter a valid price for item " + (index + 1) + ".");
     if (!Number.isInteger(qty) || qty < 1 || qty > 500) throw new Error("Enter a valid quantity for item " + (index + 1) + ".");
+    if (category === "Retail") {
+      if (price !== 9 && price !== 15) throw new Error("Retail items must be ₱9 or ₱15.");
+      label = price === 9 ? "Reseller" : "Retail direct to consumer";
+    }
     if (!label) label = category === "New" ? "New Gallon" : category + " ₱" + price;
     return { category, label, unitPrice: price, qty, lineTotal: price * qty };
   });

@@ -102,11 +102,12 @@ function cleanReference(value, provider) {
 function normalizeItems(value) {
   if (!Array.isArray(value) || !value.length) throw new Error("Add at least one transaction item.");
   if (value.length > 50) throw new Error("A transaction can contain up to 50 item rows.");
-  const allowed = new Set(["Delivery", "Pick-Up", "New", "Used", "Other"]);
+  const allowed = new Set(["Delivery", "Pick-Up", "New", "Used", "Retail", "Other"]);
   const fixed = {
     Delivery: new Set([25, 35, 45]),
     "Pick-Up": new Set([20, 30, 40]),
     New: new Set([200]),
+    Retail: new Set([9, 15]),
   };
 
   return value.map((raw, index) => {
@@ -125,6 +126,7 @@ function normalizeItems(value) {
     if (category === "Other" && !label) {
       throw new Error("Enter what the Other item is for item " + (index + 1) + ".");
     }
+    if (category === "Retail") label = price === 9 ? "Reseller" : "Retail direct to consumer";
     if (!label) {
       label = category === "New" ? "New Gallon" : category + " ₱" + price;
     }

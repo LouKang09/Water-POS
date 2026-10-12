@@ -314,6 +314,7 @@ function manualDefaults(category) {
   if (category === "Delivery") return { label: "Delivery ₱25", price: 25 };
   if (category === "Pick-Up") return { label: "Pick-Up ₱20", price: 20 };
   if (category === "New") return { label: "New Gallon", price: 200 };
+  if (category === "Retail") return { label: "Reseller", price: 9 };
   return { label: "Used Gallon", price: "" };
 }
 
@@ -330,6 +331,7 @@ function addManualItemRow(values = {}) {
       <option value="Pick-Up">Pick-Up</option>
       <option value="New">New</option>
       <option value="Used">Used</option>
+      <option value="Retail">Retail</option>
     </select></label>
     <label class="manual-item-label-wrap"><span>Label</span><input class="manual-item-label" maxlength="120" value="${escapeHtml(values.label || defaults.label)}"></label>
     <label><span>Unit Price</span><input class="manual-item-price" type="number" min="0.01" step="0.01" value="${values.unitPrice ?? defaults.price}" required></label>

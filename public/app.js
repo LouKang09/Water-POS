@@ -92,6 +92,7 @@ function presets(category) {
   if (category === "Delivery") return [25,35,45].map(p=>({category,label:`Delivery ₱${p}`,unitPrice:p}));
   if (category === "Pick-Up") return [5,10,20,30,40].map(p=>({category,label:`Pick-Up ₱${p}`,unitPrice:p}));
   if (category === "New") return [{category,label:"New Gallon",unitPrice:200}];
+  if (category === "Retail") return [{category,label:"Reseller",unitPrice:9},{category,label:"Retail direct to consumer",unitPrice:15}];
   return state.usedProducts.map(p=>({category:"Used",productId:p.id,label:p.label,unitPrice:p.price}));
 }
 
@@ -117,7 +118,7 @@ function renderProducts() {
 
   const items = presets(state.category);
   els.categoryHint.textContent = state.category.toUpperCase();
-  els.categoryTitle.textContent = state.category === "New" ? "New gallon" : state.category === "Used" ? "Used items" : "Choose a price";
+  els.categoryTitle.textContent = state.category === "New" ? "New gallon" : state.category === "Used" ? "Used items" : state.category === "Retail" ? "Retail price" : "Choose a price";
   if(els.tapTip) els.tapTip.textContent="Tap to add";
   renderDeliveryRoomField();
   els.productGrid.classList.toggle("one", items.length === 1);
@@ -133,7 +134,7 @@ function renderProducts() {
   els.productGrid.querySelectorAll(".product-button").forEach(btn=>{
     btn.addEventListener("click",()=>{
       const item=items[Number(btn.dataset.index)];
-      if(item.category==="Delivery" || item.category==="Pick-Up") openQuantityDialog(item);
+      if(item.category==="Delivery" || item.category==="Pick-Up" || item.category==="Retail") openQuantityDialog(item);
       else addToCart(item,1);
     });
   });

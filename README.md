@@ -3,11 +3,12 @@
 Mobile-first point-of-sale web application for a water refilling business, with a desktop/tablet admin dashboard.
 
 ## POS
-- Top categories: Delivery, Pick-Up, New, Used
+- Top categories: Delivery, Pick-Up, New, Used, Retail, Unpaid
 - Delivery: ₱25 / ₱35 / ₱45
 - Pick-Up: ₱20 / ₱30 / ₱40
 - New: ₱200 per gallon
 - Used: admin-configurable price buttons
+- Retail: ₱9 Reseller and ₱15 Retail direct to consumer (selectable quantity)
 - Multiple quantities and mixed items in one transaction
 - Cash and GCash payment
 - Automatic Water POS transaction reference

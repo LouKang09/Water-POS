@@ -13,6 +13,10 @@ const MANUAL_POS_PRESETS = {
   ],
   New: [
     { label: "New Gallon", price: 200 }
+  ],
+  Retail: [
+    { label: "Reseller", price: 9 },
+    { label: "Retail direct to consumer", price: 15 }
   ]
 };
 
