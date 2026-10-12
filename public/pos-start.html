@@ -5,12 +5,25 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#ffffff">
   <title>INYOU Water POS</title>
+  <script>
+    try {
+      const choice = localStorage.getItem("water_pos_appearance") || "system";
+      const dark = choice === "dark" || (choice === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
+      if (dark) {
+        document.documentElement.setAttribute("data-pos-theme", "dark");
+        document.querySelector('meta[name="theme-color"]').setAttribute("content", "#08141e");
+      }
+    } catch (error) {}
+  </script>
   <style>
     html,body{margin:0;width:100%;height:100%;background:#fff;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
     body{display:grid;place-items:center;color:#0a3145}
     .gate{display:grid;justify-items:center;gap:12px;padding:24px}
     .gate img{width:132px;height:132px;object-fit:contain}
     .gate span{font-size:12px;font-weight:800;letter-spacing:.14em;color:#397493}
+    html[data-pos-theme="dark"],html[data-pos-theme="dark"] body{background:#08141e;color:#e8f9f6}
+    html[data-pos-theme="dark"] .gate span{color:#8be9d4}
+    html[data-pos-theme="dark"] .gate img{background:#fff;border-radius:22px;padding:5px}
   </style>
 </head>
 <body>
