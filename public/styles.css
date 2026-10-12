@@ -22,7 +22,7 @@ button{cursor:pointer}
 .eyebrow{margin:0;color:var(--brand);font-size:.68rem;font-weight:850;letter-spacing:.13em}
 .admin-link{display:none;color:var(--brand);font-weight:750;text-decoration:none}
 .pos-shell{max-width:760px;margin:0 auto;padding:14px 14px 24px}
-.category-tabs{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;position:sticky;top:76px;z-index:15;padding:8px 0;background:linear-gradient(var(--bg) 72%,transparent)}
+.category-tabs{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:7px;position:sticky;top:76px;z-index:15;padding:8px 0;background:linear-gradient(var(--bg) 72%,transparent)}
 .category-tab{position:relative;overflow:visible;border:1px solid var(--line);background:var(--surface);color:var(--muted);padding:12px 4px;border-radius:14px;font-size:.82rem;font-weight:800;box-shadow:0 4px 12px rgba(24,67,64,.04)}
 .category-tab.active{background:var(--brand);border-color:var(--brand);color:white}
 .catalog-card,.cart-card{margin-top:10px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:17px;box-shadow:var(--shadow)}
@@ -981,3 +981,19 @@ th{color:var(--muted);font-size:.68rem;text-transform:uppercase;letter-spacing:.
 .cancel-unpaid-actions .danger-button{border:1px solid #ba3c3c;background:#ba3c3c;color:#fff;padding:8px;}
 .cancel-unpaid-actions button:disabled{opacity:.5;cursor:wait;}
 @media(max-width:390px){.unpaid-card-actions{grid-template-columns:1fr 1fr}.unpaid-card-actions button{font-size:.68rem}}
+
+/* Six legible POS categories: 3 columns × 2 rows on narrow phones. */
+@media (max-width: 767px) {
+  .category-tabs{
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    column-gap:7px;
+    row-gap:7px;
+  }
+  .category-tab{
+    min-width:0;
+    min-height:44px;
+    padding:10px 5px;
+    font-size:.76rem;
+    line-height:1.2;
+  }
+}
