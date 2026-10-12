@@ -253,3 +253,34 @@ html[data-pos-theme="dark"] .appearance-close{background:#234350;border-color:#4
 @media(prefers-reduced-motion:reduce){
   .pos-theme-trigger,.theme-choice{transition:none!important}
 }
+/* Finish controls generated dynamically by the existing Android wrapper. */
+html[data-pos-theme="dark"] .pos-login-theme{
+  background:#17323f;color:#b9fff0;border-color:#365965;
+  box-shadow:0 10px 24px rgba(0,0,0,.25);
+}
+html[data-pos-theme="dark"] #waterPosNativeExit{
+  color:#ffb5bc!important;background:#3c2630!important;border-color:#7b4b58!important;
+}
+html[data-pos-theme="dark"] .pos-account-button{
+  color:#b7ffed!important;background:#1b3845!important;border-color:#385e66!important;
+}
+html[data-pos-theme="dark"] .pos-account-dialog .small-button{
+  color:#d5f0ed;background:#224350;border-color:#43656d;
+}
+html[data-pos-theme="dark"] .pos-logout-keep{color:#e4f8f4;background:#203b48;border-color:#41606e}
+html[data-pos-theme="dark"] .pos-logout-confirm{background:#a93e53;border-color:#a93e53}
+html[data-pos-theme="dark"] .pos-logout-card .eyebrow,
+html[data-pos-theme="dark"] .pos-appearance-card .eyebrow{color:#85ebd5}
+html[data-pos-theme="light"] .pos-page{
+  background:radial-gradient(ellipse at 50% 0%,#e2f7f2 0%,#f3f9f8 44%,#f2f7f6 100%);
+}
+html[data-pos-theme="light"] .catalog-card,
+html[data-pos-theme="light"] .cart-card{box-shadow:0 15px 35px rgba(16,73,66,.075)}
+html[data-pos-theme="light"] .category-tab.active{
+  background:linear-gradient(125deg,#0c786f,#0a5e66);
+  box-shadow:0 6px 18px rgba(8,108,100,.19);
+}
+html[data-pos-theme="light"] .primary-button{
+  background:linear-gradient(120deg,#0c786e,#086a67);
+}
+html[data-pos-theme="light"] .pos-header{background:rgba(246,251,249,.96)}
