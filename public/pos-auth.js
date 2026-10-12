@@ -186,6 +186,61 @@ async function savePosAccount(event) {
   }
 }
 
+function createPosLogoutDialog() {
+  let dialog = document.getElementById("posLogoutDialog");
+  if (dialog) return dialog;
+  dialog = document.createElement("dialog");
+  dialog.id = "posLogoutDialog";
+  dialog.className = "pos-logout-dialog";
+  dialog.setAttribute("aria-labelledby", "posLogoutHeading");
+  dialog.innerHTML =
+    '<div class="pos-logout-card">' +
+    ' <p class="eyebrow">END POS SESSION</p>' +
+    ' <h2 id="posLogoutHeading">Log out of Water POS?</h2>' +
+    ' <p>You will return to the sign-in screen. Your saved transactions will remain in Water POS.</p>' +
+    ' <p id="posLogoutPendingNote" class="pos-logout-note"></p>' +
+    ' <div class="pos-logout-actions">' +
+    '   <button type="button" class="pos-logout-keep" id="posLogoutKeep">Keep Working</button>' +
+    '   <button type="button" class="pos-logout-confirm" id="posLogoutConfirm">Log Out</button>' +
+    ' </div>' +
+    '</div>';
+  document.body.appendChild(dialog);
+  dialog.querySelector("#posLogoutKeep").addEventListener("click", function () {
+    dialog.close();
+  });
+  dialog.querySelector("#posLogoutConfirm").addEventListener("click", function () {
+    // Android native bridge clears the WebView session and opens the sign-in page.
+    if (window.AndroidPos && typeof window.AndroidPos.logoutApp === "function") {
+      window.AndroidPos.logoutApp();
+      return;
+    }
+    posToken = "";
+    localStorage.removeItem(POS_TOKEN_KEY);
+    location.replace("/pos-login.html");
+  });
+  return dialog;
+}
+function showPosLogoutDialog() {
+  const dialog = createPosLogoutDialog();
+  const hasDraft = !!document.querySelector("#cartItems .cart-row");
+  const warning = dialog.querySelector("#posLogoutPendingNote");
+  warning.textContent = hasDraft
+    ? "You have an unfinished order. Its items will be lost when you log out."
+    : "You can sign in again at any time with your POS credentials.";
+  if (!dialog.open) dialog.showModal();
+}
+
+// Run during capture so older Android APKs cannot bypass confirmation with their
+// injected #posLogoutBtn onclick handler (which stops event propagation).
+document.addEventListener("click", function (event) {
+  const target = event.target;
+  const logout = target && target.closest && target.closest("#posLogoutBtn");
+  if (!logout) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  showPosLogoutDialog();
+}, true);
+
 ensurePosAccountUi();
 const posHeader = document.querySelector(".pos-header");
 if (posHeader && window.ResizeObserver) {
@@ -203,10 +258,7 @@ document.addEventListener("click", event => {
     openPosAccount();
     return;
   }
-  const logoutButton = event.target.closest("#posLogoutBtn");
-  if (!logoutButton) return;
-  localStorage.removeItem(POS_TOKEN_KEY);
-  location.replace("/pos-login.html");
+
 });
 
 (async function verifyPosSession(){
