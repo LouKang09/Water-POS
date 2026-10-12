@@ -292,6 +292,7 @@ async function validatedItems(items) {
     Delivery: [25,35,45],
     "Pick-Up": [5,10,20,30,40],
     New: [200],
+    Retail: [9,15],
   };
   const usedRows = await pool.query("SELECT id, label, price FROM used_products WHERE active = TRUE");
   const usedMap = new Map(usedRows.rows.map(r => [String(r.id), { label:r.label, price:Number(r.price) }]));
@@ -319,6 +320,8 @@ async function validatedItems(items) {
           throw new Error("Choose Tumbler or Bottled Water for Pick-Up ₱" + price + ".");
         }
         label = variant + " · Pick-Up ₱" + price;
+      } else if (category === "Retail") {
+        label = price === 9 ? "Reseller" : "Retail direct to consumer";
       } else {
         label = category === "New" ? "New Gallon" : category + " ₱" + price;
       }
