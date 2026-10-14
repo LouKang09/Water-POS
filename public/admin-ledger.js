@@ -120,6 +120,27 @@ function ensureLedgerAdminUi() {
     document.body.appendChild(dialog);
   }
 
+  if (!document.querySelector("#saleHistoryDialog")) {
+    const dialog = document.createElement("dialog");
+    dialog.id = "saleHistoryDialog";
+    dialog.className = "sale-edit-dialog sale-history-dialog";
+    dialog.innerHTML = `
+      <div class="sale-edit-shell">
+        <div class="sale-edit-head">
+          <div>
+            <p class="eyebrow">TRANSACTION FOOTPRINT</p>
+            <h2>Sale Edit History</h2>
+            <div id="saleHistorySeries" class="sale-edit-series"></div>
+          </div>
+          <button id="closeSaleHistory" type="button" class="icon-button">×</button>
+        </div>
+        <div id="saleHistoryBody" class="sale-history-body">
+          <div class="empty-state">Loading history…</div>
+        </div>
+      </div>`;
+    document.body.appendChild(dialog);
+  }
+
   const salesHead = document.querySelector("#salesSection table thead tr");
   if (salesHead && !salesHead.querySelector('[data-ledger-series="true"]')) {
     const series = document.createElement("th");
@@ -128,7 +149,7 @@ function ensureLedgerAdminUi() {
     salesHead.insertBefore(series, salesHead.firstElementChild);
     const edit = document.createElement("th");
     edit.dataset.ledgerEdit = "true";
-    edit.textContent = "Edit";
+    edit.textContent = "Actions";
     salesHead.appendChild(edit);
   }
 
@@ -218,10 +239,17 @@ async function refreshSeriesAndEditButtons() {
       seriesCell.textContent = ledgerSeriesMap.get(String(sale.id)) || "—";
       tr.insertBefore(seriesCell, tr.firstElementChild);
       const editCell = document.createElement("td");
-      editCell.innerHTML = `<button type="button" class="small-button ledger-edit-button" data-id="${sale.id}">Edit</button>`;
+      editCell.innerHTML = `
+        <div class="ledger-action-group">
+          <button type="button" class="small-button ledger-edit-button" data-id="${sale.id}">Edit</button>
+          <button type="button" class="small-button ledger-history-button" data-id="${sale.id}">History</button>
+          <button type="button" class="small-button ledger-delete-button" data-id="${sale.id}">Delete</button>
+        </div>`;
       tr.appendChild(editCell);
     });
     document.querySelectorAll(".ledger-edit-button").forEach(button => button.addEventListener("click", () => openSaleEdit(button.dataset.id)));
+    document.querySelectorAll(".ledger-history-button").forEach(button => button.addEventListener("click", () => openSaleHistory(button.dataset.id)));
+    document.querySelectorAll(".ledger-delete-button").forEach(button => button.addEventListener("click", () => deleteSaleTransaction(button.dataset.id)));
   } catch (error) {
     console.warn("Unable to load sales series", error);
   }
@@ -233,6 +261,132 @@ if (ledgerBaseLoadSales) {
     await ledgerBaseLoadSales();
     await refreshSeriesAndEditButtons();
   };
+}
+
+function historyDate(value) {
+  if (!value) return "—";
+  return new Date(value).toLocaleString("en-PH", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Manila"
+  });
+}
+
+function snapshotItemText(snapshot) {
+  const items = snapshot?.items || [];
+  return items.length
+    ? items.map(item => `${Number(item.qty)}× ${ledgerEscape(item.label)} @ ${ledgerMoney(item.unitPrice)}`).join("<br>")
+    : "—";
+}
+
+function snapshotCard(snapshot, title, meta = "") {
+  if (!snapshot) return "";
+  const payment = snapshot.payment_provider || snapshot.payment_method || "—";
+  const status = snapshot.payment_status || "paid";
+  return `
+    <article class="sale-history-card">
+      <div class="sale-history-card-head">
+        <div><strong>${ledgerEscape(title)}</strong>${meta ? `<small>${ledgerEscape(meta)}</small>` : ""}</div>
+        <span class="badge">${ledgerEscape(status)}</span>
+      </div>
+      <div class="sale-history-grid">
+        <div><span>Transaction Date</span><strong>${ledgerEscape(historyDate(snapshot.created_at))}</strong></div>
+        <div><span>Cash Flow / Paid Date</span><strong>${ledgerEscape(snapshot.paid_at ? historyDate(snapshot.paid_at) : "Unpaid")}</strong></div>
+        <div><span>Payment</span><strong>${ledgerEscape(payment)}</strong></div>
+        <div><span>Total</span><strong>${ledgerMoney(snapshot.total)}</strong></div>
+        <div><span>Room / Unit</span><strong>${ledgerEscape(snapshot.delivery_room_unit || "—")}</strong></div>
+        <div><span>Reference</span><strong>${ledgerEscape(snapshot.payment_reference || "—")}</strong></div>
+      </div>
+      <div class="sale-history-items"><span>Items</span><div>${snapshotItemText(snapshot)}</div></div>
+    </article>`;
+}
+
+function snapshotChanges(before, after) {
+  if (!before || !after) return [];
+  const changes = [];
+  const add = (label, a, b) => {
+    const av = String(a ?? "");
+    const bv = String(b ?? "");
+    if (av !== bv) changes.push(label);
+  };
+  add("Transaction date", before.created_at, after.created_at);
+  add("Paid date", before.paid_at, after.paid_at);
+  add("Payment", before.payment_method, after.payment_method);
+  add("Provider", before.payment_provider, after.payment_provider);
+  add("Reference", before.payment_reference, after.payment_reference);
+  add("Room / Unit", before.delivery_room_unit, after.delivery_room_unit);
+  add("Total", before.total, after.total);
+  add("Items", JSON.stringify(before.items || []), JSON.stringify(after.items || []));
+  return changes;
+}
+
+async function openSaleHistory(id) {
+  const dialog = document.querySelector("#saleHistoryDialog");
+  const body = document.querySelector("#saleHistoryBody");
+  body.innerHTML = '<div class="empty-state">Loading history…</div>';
+  dialog.showModal();
+  try {
+    const data = await api("/api/admin/ledger/sales/" + id + "/history");
+    document.querySelector("#saleHistorySeries").textContent =
+      (data.series ? "Series " + data.series : "Transaction") +
+      (data.transactionRef ? " · " + data.transactionRef : "");
+
+    const history = data.history || [];
+    if (!history.length) {
+      body.innerHTML = `
+        <div class="sale-history-empty">
+          <strong>No edits yet</strong>
+          <p>This transaction is still in its original recorded state.</p>
+          ${snapshotCard(data.current, "Current / Original Record")}
+        </div>`;
+      return;
+    }
+
+    const cards = [];
+    const original = history[0]?.before_snapshot;
+    if (original) cards.push(snapshotCard(original, "Original Record", "Before the first Admin edit"));
+
+    let editNo = 0;
+    for (const entry of history) {
+      if (entry.action === "edit" && entry.after_snapshot) {
+        editNo += 1;
+        const changed = snapshotChanges(entry.before_snapshot, entry.after_snapshot);
+        cards.push(snapshotCard(
+          entry.after_snapshot,
+          "Edit " + editNo,
+          historyDate(entry.changed_at) + (changed.length ? " · Changed: " + changed.join(", ") : "")
+        ));
+      } else if (entry.action === "delete") {
+        cards.push(snapshotCard(entry.before_snapshot, "Deleted Record", historyDate(entry.changed_at)));
+      }
+    }
+    body.innerHTML = cards.join("");
+  } catch (error) {
+    body.innerHTML = '<div class="error-text">' + ledgerEscape(error.message) + '</div>';
+  }
+}
+
+async function deleteSaleTransaction(id) {
+  const sale = currentSales.find(row => String(row.id) === String(id));
+  const series = ledgerSeriesMap.get(String(id)) || "";
+  const description = [
+    series ? "Series " + series : "",
+    sale?.transaction_ref || ""
+  ].filter(Boolean).join(" · ");
+
+  const confirmed = window.confirm(
+    "Delete this sale transaction" + (description ? "\n\n" + description : "") +
+    "?\n\nThis removes it from Sales, reports, and Cash Flow. An audit footprint will be retained."
+  );
+  if (!confirmed) return;
+
+  try {
+    const result = await api("/api/admin/ledger/sales/" + id, { method: "DELETE" });
+    toast("Deleted " + (result.series ? "Series " + result.series : "sale transaction") + ".");
+    await Promise.all([loadSummary(), loadTrend(), loadSales()]);
+  } catch (error) {
+    toast(error.message);
+  }
 }
 
 function saleEditPaymentFields() {
@@ -322,7 +476,10 @@ async function saveSaleEdit(event) {
     });
     document.querySelector("#saleEditDialog").close();
     activeLedgerSaleId = null;
-    toast("Series " + result.series + " updated.");
+    toast(
+      "Series " + result.series + " updated." +
+      (result.settlementDatePreserved ? " Pay Later settlement date was preserved." : "")
+    );
     await Promise.all([loadSummary(), loadTrend(), loadSales()]);
   } catch (err) {
     error.textContent = err.message;
@@ -471,6 +628,7 @@ function bindLedgerUi() {
   document.querySelector("#cashFlowPrint")?.addEventListener("click", printCashFlow);
   document.querySelector('[data-section="cashflow"]')?.addEventListener("click", () => setTimeout(loadCashFlow, 0));
 
+  document.querySelector("#closeSaleHistory")?.addEventListener("click", () => document.querySelector("#saleHistoryDialog").close());
   document.querySelector("#saleEditPayment")?.addEventListener("change", saleEditPaymentFields);
   document.querySelector("#closeSaleEdit")?.addEventListener("click", () => document.querySelector("#saleEditDialog").close());
   document.querySelector("#cancelSaleEdit")?.addEventListener("click", () => document.querySelector("#saleEditDialog").close());
