@@ -102,7 +102,7 @@ function ensureLedgerAdminUi() {
         </div>
         <div class="sale-edit-meta">
           <label class="field"><span>Date & Time</span><input id="saleEditDateTime" type="datetime-local" required></label>
-          <label class="field"><span>Payment</span><select id="saleEditPayment"><option>Cash</option><option>GCash</option><option value="Other">Other Digital</option></select></label>
+          <label class="field"><span>Payment</span><select id="saleEditPayment"><option>Cash</option><option>GCash</option><option value="Other">Other Digital</option><option value="Pay Later">Pay Later</option></select></label>
           <label id="saleEditProviderWrap" class="field hidden"><span>Provider</span><select id="saleEditProvider"><option>Maya</option><option>MariBank</option><option>GoTyme</option><option>VYBE by BPI</option></select></label>
           <label id="saleEditReferenceWrap" class="field hidden"><span>Payment Reference</span><input id="saleEditReference" maxlength="60"></label>
           <label class="field"><span>Room / Unit</span><input id="saleEditRoom" maxlength="100" placeholder="Optional"></label>
@@ -237,9 +237,10 @@ if (ledgerBaseLoadSales) {
 
 function saleEditPaymentFields() {
   const method = document.querySelector("#saleEditPayment").value;
+  const noReference = method === "Cash" || method === "Pay Later";
   document.querySelector("#saleEditProviderWrap").classList.toggle("hidden", method !== "Other");
-  document.querySelector("#saleEditReferenceWrap").classList.toggle("hidden", method === "Cash");
-  if (method === "Cash") document.querySelector("#saleEditReference").value = "";
+  document.querySelector("#saleEditReferenceWrap").classList.toggle("hidden", noReference);
+  if (noReference) document.querySelector("#saleEditReference").value = "";
 }
 
 function saleEditItemRow(item = {}) {
