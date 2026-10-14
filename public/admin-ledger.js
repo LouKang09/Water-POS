@@ -3,6 +3,8 @@ const ledgerEscape = value => String(value ?? "").replace(/[&<>"']/g, ch => ({"&
 let ledgerSeriesMap = new Map();
 let ledgerEditCountMap = new Map();
 let ledgerSalesFilter = "all";
+let ledgerSalesDateMode = "main";
+let ledgerSelectedSaleIds = new Set();
 let activeLedgerSaleId = null;
 
 function manilaYmd(date = new Date()) {
@@ -150,16 +152,48 @@ function ensureLedgerAdminUi() {
     filters.id = "salesTransactionFilters";
     filters.className = "sales-transaction-filters";
     filters.innerHTML = `
-      <div class="sales-filter-buttons" role="group" aria-label="Filter sales transactions">
-        <button type="button" class="sales-filter-button active" data-sales-filter="all">All</button>
-        <button type="button" class="sales-filter-button" data-sales-filter="Cash">Cash</button>
-        <button type="button" class="sales-filter-button" data-sales-filter="GCash">GCash</button>
-        <button type="button" class="sales-filter-button" data-sales-filter="Other">Other Digital</button>
-        <button type="button" class="sales-filter-button" data-sales-filter="Pay Later">Pay Later</button>
-        <button type="button" class="sales-filter-button sales-filter-edited" data-sales-filter="edited">Edited</button>
+      <div class="sales-mini-date-filter">
+        <div class="sales-mini-date-copy">
+          <strong>Transactions date</strong>
+          <small>Independent from the main dashboard date filter.</small>
+        </div>
+        <div class="sales-mini-date-modes" role="group" aria-label="Sales transaction date mode">
+          <button type="button" class="sales-date-mode active" data-sales-date-mode="main">Main Range</button>
+          <button type="button" class="sales-date-mode" data-sales-date-mode="day">One Day</button>
+          <button type="button" class="sales-date-mode" data-sales-date-mode="custom">Custom Range</button>
+        </div>
+        <div id="salesMiniDayWrap" class="sales-mini-date-input hidden">
+          <label><span>Date</span><input id="salesMiniDay" type="date"></label>
+        </div>
+        <div id="salesMiniCustomWrap" class="sales-mini-date-custom hidden">
+          <label><span>From</span><input id="salesMiniFrom" type="date"></label>
+          <label><span>To</span><input id="salesMiniTo" type="date"></label>
+        </div>
+        <button id="applySalesMiniDate" type="button" class="small-button">Use Main Range</button>
       </div>
-      <span id="salesFilterResult" class="sales-filter-result">Showing all transactions</span>`;
+      <div class="sales-filter-row">
+        <div class="sales-filter-buttons" role="group" aria-label="Filter sales transactions">
+          <button type="button" class="sales-filter-button active" data-sales-filter="all">All</button>
+          <button type="button" class="sales-filter-button" data-sales-filter="Cash">Cash</button>
+          <button type="button" class="sales-filter-button" data-sales-filter="GCash">GCash</button>
+          <button type="button" class="sales-filter-button" data-sales-filter="Other">Other Digital</button>
+          <button type="button" class="sales-filter-button" data-sales-filter="Pay Later">Pay Later</button>
+          <button type="button" class="sales-filter-button sales-filter-edited" data-sales-filter="edited">Edited</button>
+        </div>
+        <span id="salesFilterResult" class="sales-filter-result">Showing all transactions</span>
+      </div>
+      <div id="salesBulkActions" class="sales-bulk-actions hidden">
+        <strong id="salesSelectedCount">0 selected</strong>
+        <button id="clearSalesSelection" type="button" class="small-button">Clear</button>
+        <button id="deleteSelectedSales" type="button" class="small-button sales-bulk-delete">Delete Selected</button>
+      </div>`;
     salesTableWrap.parentElement.insertBefore(filters, salesTableWrap);
+    const todayValue = manilaYmd();
+    const mainFrom = document.querySelector("#fromDate")?.value || todayValue;
+    const mainTo = document.querySelector("#toDate")?.value || todayValue;
+    document.querySelector("#salesMiniDay").value = mainTo;
+    document.querySelector("#salesMiniFrom").value = mainFrom;
+    document.querySelector("#salesMiniTo").value = mainTo;
   }
 
   const salesHead = document.querySelector("#salesSection table thead tr");
@@ -168,6 +202,11 @@ function ensureLedgerAdminUi() {
     series.dataset.ledgerSeries = "true";
     series.textContent = "Series";
     salesHead.insertBefore(series, salesHead.firstElementChild);
+    const select = document.createElement("th");
+    select.dataset.ledgerSelect = "true";
+    select.className = "ledger-select-cell";
+    select.innerHTML = '<input id="selectAllSales" type="checkbox" aria-label="Select all visible transactions">';
+    salesHead.insertBefore(select, salesHead.firstElementChild);
     const edit = document.createElement("th");
     edit.dataset.ledgerEdit = "true";
     edit.textContent = "Actions";
@@ -240,6 +279,73 @@ function renderServiceBreakdown(sales) {
   document.querySelector("#overallBreakdown").innerHTML = paymentAwareBreakdownHtml(breakdown.Overall);
 }
 
+function ledgerSalesQueryDates() {
+  if (ledgerSalesDateMode === "day") {
+    const day = document.querySelector("#salesMiniDay")?.value || manilaYmd();
+    return "from=" + encodeURIComponent(day) + "&to=" + encodeURIComponent(day);
+  }
+  if (ledgerSalesDateMode === "custom") {
+    const from = document.querySelector("#salesMiniFrom")?.value || manilaYmd();
+    const to = document.querySelector("#salesMiniTo")?.value || from;
+    return "from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to);
+  }
+  return queryDates();
+}
+
+function updateSalesDateModeUi() {
+  document.querySelectorAll(".sales-date-mode").forEach(button => {
+    const active = button.dataset.salesDateMode === ledgerSalesDateMode;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  document.querySelector("#salesMiniDayWrap")?.classList.toggle("hidden", ledgerSalesDateMode !== "day");
+  document.querySelector("#salesMiniCustomWrap")?.classList.toggle("hidden", ledgerSalesDateMode !== "custom");
+  const apply = document.querySelector("#applySalesMiniDate");
+  if (apply) apply.textContent = ledgerSalesDateMode === "main" ? "Use Main Range" : "Apply";
+}
+
+function clearSalesSelection() {
+  ledgerSelectedSaleIds.clear();
+  document.querySelectorAll(".ledger-sale-select").forEach(box => { box.checked = false; });
+  updateSalesSelectionUi();
+}
+
+function visibleSalesRows() {
+  return [...document.querySelectorAll("#salesBody tr[data-sale-id]")].filter(row => !row.hidden);
+}
+
+function updateSalesSelectionUi() {
+  const count = ledgerSelectedSaleIds.size;
+  document.querySelector("#salesBulkActions")?.classList.toggle("hidden", count === 0);
+  const label = document.querySelector("#salesSelectedCount");
+  if (label) label.textContent = count + " selected";
+  const visible = visibleSalesRows();
+  const visibleSelected = visible.filter(row => ledgerSelectedSaleIds.has(Number(row.dataset.saleId)));
+  const selectAll = document.querySelector("#selectAllSales");
+  if (selectAll) {
+    selectAll.checked = visible.length > 0 && visibleSelected.length === visible.length;
+    selectAll.indeterminate = visibleSelected.length > 0 && visibleSelected.length < visible.length;
+  }
+}
+
+async function deleteSelectedSales() {
+  const ids = [...ledgerSelectedSaleIds];
+  if (!ids.length) return;
+  if (!window.confirm("Delete " + ids.length + " selected transaction" + (ids.length === 1 ? "" : "s") + "?\n\nThey will be removed from Sales, reports, and Cash Flow. Audit footprints will be retained.")) return;
+  const button = document.querySelector("#deleteSelectedSales");
+  if (button) { button.disabled = true; button.textContent = "Deleting…"; }
+  try {
+    const result = await api("/api/admin/ledger/sales/bulk-delete", { method: "POST", body: { ids } });
+    ledgerSelectedSaleIds.clear();
+    toast(result.deletedCount + " transaction" + (result.deletedCount === 1 ? "" : "s") + " deleted.");
+    await Promise.all([loadSummary(), loadTrend(), loadSales()]);
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    if (button) { button.disabled = false; button.textContent = "Delete Selected"; }
+  }
+}
+
 function applySalesTransactionFilter() {
   const rows = [...document.querySelectorAll("#salesBody tr[data-sale-id]")];
   let visible = 0;
@@ -272,18 +378,19 @@ function applySalesTransactionFilter() {
       ledgerSalesFilter + " transactions";
     result.textContent = "Showing " + visible + " of " + total + " · " + label;
   }
+  updateSalesSelectionUi();
 }
 
-async function refreshSeriesAndEditButtons() {
+async function refreshSeriesAndEditButtons(qs = ledgerSalesQueryDates()) {
   if (!token) return;
   try {
-    const seriesRows = await api("/api/admin/ledger/series?" + queryDates());
+    const seriesRows = await api("/api/admin/ledger/series?" + qs);
     ledgerSeriesMap = new Map(seriesRows.map(row => [String(row.id), row.series]));
     ledgerEditCountMap = new Map(seriesRows.map(row => [String(row.id), Number(row.editCount || 0)]));
     const trs = [...document.querySelectorAll("#salesBody tr")];
     if (!currentSales.length) {
       const td = trs[0]?.querySelector("td");
-      if (td) td.colSpan = 11;
+      if (td) td.colSpan = 12;
       return;
     }
     currentSales.forEach((sale, index) => {
@@ -314,6 +421,10 @@ async function refreshSeriesAndEditButtons() {
       seriesCell.className = "ledger-series";
       seriesCell.textContent = ledgerSeriesMap.get(String(sale.id)) || "—";
       tr.insertBefore(seriesCell, tr.firstElementChild);
+      const selectCell = document.createElement("td");
+      selectCell.className = "ledger-select-cell";
+      selectCell.innerHTML = '<input class="ledger-sale-select" type="checkbox" data-id="' + sale.id + '" aria-label="Select transaction">';
+      tr.insertBefore(selectCell, tr.firstElementChild);
       const editCell = document.createElement("td");
       editCell.innerHTML = `
         <div class="ledger-action-group">
@@ -322,6 +433,14 @@ async function refreshSeriesAndEditButtons() {
           <button type="button" class="small-button ledger-delete-button" data-id="${sale.id}">Delete</button>
         </div>`;
       tr.appendChild(editCell);
+    });
+    document.querySelectorAll(".ledger-sale-select").forEach(box => {
+      box.addEventListener("change", () => {
+        const id = Number(box.dataset.id);
+        if (box.checked) ledgerSelectedSaleIds.add(id);
+        else ledgerSelectedSaleIds.delete(id);
+        updateSalesSelectionUi();
+      });
     });
     document.querySelectorAll(".ledger-edit-button").forEach(button => button.addEventListener("click", () => openSaleEdit(button.dataset.id)));
     document.querySelectorAll(".ledger-history-button").forEach(button => button.addEventListener("click", () => openSaleHistory(button.dataset.id)));
@@ -335,8 +454,10 @@ async function refreshSeriesAndEditButtons() {
 const ledgerBaseLoadSales = typeof loadSales === "function" ? loadSales : null;
 if (ledgerBaseLoadSales) {
   window.loadSales = async function() {
-    await ledgerBaseLoadSales();
-    await refreshSeriesAndEditButtons();
+    const qs = ledgerSalesQueryDates();
+    ledgerSelectedSaleIds.clear();
+    await ledgerBaseLoadSales(qs);
+    await refreshSeriesAndEditButtons(qs);
   };
 }
 
@@ -724,9 +845,46 @@ function bindLedgerUi() {
   document.querySelectorAll(".sales-filter-button").forEach(button => {
     button.addEventListener("click", () => {
       ledgerSalesFilter = button.dataset.salesFilter || "all";
+      clearSalesSelection();
       applySalesTransactionFilter();
     });
   });
+  document.querySelectorAll(".sales-date-mode").forEach(button => {
+    button.addEventListener("click", () => {
+      ledgerSalesDateMode = button.dataset.salesDateMode || "main";
+      updateSalesDateModeUi();
+    });
+  });
+  updateSalesDateModeUi();
+
+  document.querySelector("#applySalesMiniDate")?.addEventListener("click", async () => {
+    if (ledgerSalesDateMode === "custom") {
+      const from = document.querySelector("#salesMiniFrom")?.value;
+      const to = document.querySelector("#salesMiniTo")?.value;
+      if (!from || !to) return toast("Choose both Sales transaction dates.");
+      if (from > to) return toast("Sales transaction From date cannot be after To date.");
+    }
+    if (ledgerSalesDateMode === "day" && !document.querySelector("#salesMiniDay")?.value) return toast("Choose a Sales transaction date.");
+    clearSalesSelection();
+    try {
+      await loadSales();
+      if (typeof markAdminRefreshed === "function") markAdminRefreshed();
+    } catch (error) { toast(error.message); }
+  });
+
+  document.querySelector("#selectAllSales")?.addEventListener("change", event => {
+    const checked = event.target.checked;
+    visibleSalesRows().forEach(row => {
+      const id = Number(row.dataset.saleId);
+      const box = row.querySelector(".ledger-sale-select");
+      if (box) box.checked = checked;
+      if (checked) ledgerSelectedSaleIds.add(id);
+      else ledgerSelectedSaleIds.delete(id);
+    });
+    updateSalesSelectionUi();
+  });
+  document.querySelector("#clearSalesSelection")?.addEventListener("click", clearSalesSelection);
+  document.querySelector("#deleteSelectedSales")?.addEventListener("click", deleteSelectedSales);
 
   document.querySelector("#closeSaleHistory")?.addEventListener("click", () => document.querySelector("#saleHistoryDialog").close());
   document.querySelector("#saleEditPayment")?.addEventListener("change", saleEditPaymentFields);
