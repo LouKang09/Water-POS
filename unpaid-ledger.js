@@ -99,20 +99,26 @@ async function addRoutes(app) {
     try {
       await ensureSchema();
       const { rows } = await pool.query(`
-        SELECT s.id,s.transaction_ref,s.delivery_room_unit,s.total,s.created_at,s.series_no,
+        SELECT s.id,s.transaction_ref,s.delivery_room_unit,s.total,s.created_at,
+               numbered.display_series_no AS series_no,
                COALESCE(json_agg(json_build_object(
                  'category',i.category,'label',i.label,'unitPrice',i.unit_price,'qty',i.qty,'lineTotal',i.line_total
                ) ORDER BY i.id) FILTER (WHERE i.id IS NOT NULL),'[]') AS items
         FROM sales s
+        JOIN (
+          SELECT id,ROW_NUMBER() OVER (ORDER BY series_no ASC NULLS LAST,id ASC)::bigint AS display_series_no
+          FROM sales
+          WHERE payment_status <> 'cancelled'
+        ) numbered ON numbered.id=s.id
         LEFT JOIN sale_items i ON i.sale_id=s.id
         WHERE s.payment_status='unpaid'
-        GROUP BY s.id
+        GROUP BY s.id,numbered.display_series_no
         ORDER BY s.created_at ASC,s.id ASC
       `);
       res.json(rows.map(row => ({
         ...row,
         total: Number(row.total),
-        series: row.series_no == null ? null : String(Number(row.series_no)).padStart(7,"0")
+        series: row.series_no == null ? null : String(Number(row.series_no)).padStart(6,"0")
       })));
     } catch (error) { next(error); }
   });
