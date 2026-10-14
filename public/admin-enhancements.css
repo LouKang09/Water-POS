@@ -250,3 +250,18 @@
   .manual-form-footer{grid-template-columns:1fr;}
   .manual-form-footer .primary-button{justify-self:end;}
 }
+
+.manual-refresh-dot{
+  width:7px;
+  height:7px;
+  border-radius:50%;
+  background:#6d8290;
+  box-shadow:0 0 0 3px rgba(109,130,144,.12);
+}
+.admin-manual-refresh{
+  height:30px!important;
+  min-height:30px!important;
+  padding:0 10px!important;
+  border-radius:9px!important;
+  font-size:.64rem!important;
+}
