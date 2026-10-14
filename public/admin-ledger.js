@@ -2,6 +2,7 @@ const ledgerMoney = value => "₱" + Number(value || 0).toLocaleString("en-PH", 
 const ledgerEscape = value => String(value ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[ch]));
 let ledgerSeriesMap = new Map();
 let ledgerEditCountMap = new Map();
+let ledgerSalesFilter = "all";
 let activeLedgerSaleId = null;
 
 function manilaYmd(date = new Date()) {
@@ -142,6 +143,25 @@ function ensureLedgerAdminUi() {
     document.body.appendChild(dialog);
   }
 
+  const salesBody = document.querySelector("#salesBody");
+  const salesTableWrap = salesBody?.closest(".table-wrap");
+  if (salesTableWrap && !document.querySelector("#salesTransactionFilters")) {
+    const filters = document.createElement("div");
+    filters.id = "salesTransactionFilters";
+    filters.className = "sales-transaction-filters";
+    filters.innerHTML = `
+      <div class="sales-filter-buttons" role="group" aria-label="Filter sales transactions">
+        <button type="button" class="sales-filter-button active" data-sales-filter="all">All</button>
+        <button type="button" class="sales-filter-button" data-sales-filter="Cash">Cash</button>
+        <button type="button" class="sales-filter-button" data-sales-filter="GCash">GCash</button>
+        <button type="button" class="sales-filter-button" data-sales-filter="Other">Other Digital</button>
+        <button type="button" class="sales-filter-button" data-sales-filter="Pay Later">Pay Later</button>
+        <button type="button" class="sales-filter-button sales-filter-edited" data-sales-filter="edited">Edited</button>
+      </div>
+      <span id="salesFilterResult" class="sales-filter-result">Showing all transactions</span>`;
+    salesTableWrap.parentElement.insertBefore(filters, salesTableWrap);
+  }
+
   const salesHead = document.querySelector("#salesSection table thead tr");
   if (salesHead && !salesHead.querySelector('[data-ledger-series="true"]')) {
     const series = document.createElement("th");
@@ -220,6 +240,40 @@ function renderServiceBreakdown(sales) {
   document.querySelector("#overallBreakdown").innerHTML = paymentAwareBreakdownHtml(breakdown.Overall);
 }
 
+function applySalesTransactionFilter() {
+  const rows = [...document.querySelectorAll("#salesBody tr[data-sale-id]")];
+  let visible = 0;
+
+  rows.forEach(row => {
+    const method = row.dataset.paymentMethod || "";
+    const editCount = Number(row.dataset.editCount || 0);
+    const show =
+      ledgerSalesFilter === "all" ||
+      ledgerSalesFilter === method ||
+      (ledgerSalesFilter === "edited" && editCount > 0);
+
+    row.hidden = !show;
+    if (show) visible += 1;
+  });
+
+  document.querySelectorAll(".sales-filter-button").forEach(button => {
+    const active = button.dataset.salesFilter === ledgerSalesFilter;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+
+  const result = document.querySelector("#salesFilterResult");
+  if (result) {
+    const total = rows.length;
+    const label =
+      ledgerSalesFilter === "all" ? "all transactions" :
+      ledgerSalesFilter === "edited" ? "edited records" :
+      ledgerSalesFilter === "Other" ? "Other Digital transactions" :
+      ledgerSalesFilter + " transactions";
+    result.textContent = "Showing " + visible + " of " + total + " · " + label;
+  }
+}
+
 async function refreshSeriesAndEditButtons() {
   if (!token) return;
   try {
@@ -236,11 +290,16 @@ async function refreshSeriesAndEditButtons() {
       const tr = trs[index];
       if (!tr) return;
       const editCount = ledgerEditCountMap.get(String(sale.id)) || 0;
+      tr.dataset.saleId = String(sale.id);
+      tr.dataset.paymentMethod = sale.payment_method || "";
+      tr.dataset.editCount = String(editCount);
       const historyBadge = editCount > 0
         ? `<span class="ledger-history-count" aria-label="${editCount} edits">${editCount > 99 ? "99+" : editCount}</span>`
         : "";
 
       if (tr.dataset.ledgerEnhanced === "true") {
+        tr.dataset.editCount = String(editCount);
+        tr.dataset.paymentMethod = sale.payment_method || "";
         const historyButton = tr.querySelector(".ledger-history-button");
         if (historyButton) {
           historyButton.querySelector(".ledger-history-count")?.remove();
@@ -267,6 +326,7 @@ async function refreshSeriesAndEditButtons() {
     document.querySelectorAll(".ledger-edit-button").forEach(button => button.addEventListener("click", () => openSaleEdit(button.dataset.id)));
     document.querySelectorAll(".ledger-history-button").forEach(button => button.addEventListener("click", () => openSaleHistory(button.dataset.id)));
     document.querySelectorAll(".ledger-delete-button").forEach(button => button.addEventListener("click", () => deleteSaleTransaction(button.dataset.id)));
+    applySalesTransactionFilter();
   } catch (error) {
     console.warn("Unable to load sales series", error);
   }
@@ -350,16 +410,32 @@ async function openSaleHistory(id) {
 
     const history = data.history || [];
     if (!history.length) {
-      body.innerHTML = `
-        <div class="sale-history-empty">
-          <strong>No edits yet</strong>
-          <p>This transaction is still in its original recorded state.</p>
-          ${snapshotCard(data.current, "Current / Original Record")}
-        </div>`;
+      if (Number(data.editCount || 0) > 0) {
+        body.innerHTML = `
+          <div class="sale-history-empty legacy-edit-notice">
+            <strong>${Number(data.editCount)} earlier edit${Number(data.editCount) === 1 ? "" : "s"} detected</strong>
+            <p>This record was changed before detailed audit snapshots were enabled. The current record is shown below; the older pre-edit values cannot be fully reconstructed.</p>
+            ${snapshotCard(data.current, "Current Record")}
+          </div>`;
+      } else {
+        body.innerHTML = `
+          <div class="sale-history-empty">
+            <strong>No edits yet</strong>
+            <p>This transaction is still in its original recorded state.</p>
+            ${snapshotCard(data.current, "Current / Original Record")}
+          </div>`;
+      }
       return;
     }
 
     const cards = [];
+    if (Number(data.legacyEditCount || 0) > 0) {
+      cards.push(`
+        <div class="legacy-edit-banner">
+          <strong>${Number(data.legacyEditCount)} earlier edit${Number(data.legacyEditCount) === 1 ? "" : "s"} detected before detailed history tracking</strong>
+          <span>Later edits below include complete before/after snapshots.</span>
+        </div>`);
+    }
     const original = history[0]?.before_snapshot;
     if (original) cards.push(snapshotCard(original, "Original Record", "Before the first Admin edit"));
 
@@ -644,6 +720,13 @@ function bindLedgerUi() {
   document.querySelector("#cashFlowView")?.addEventListener("click", loadCashFlow);
   document.querySelector("#cashFlowPrint")?.addEventListener("click", printCashFlow);
   document.querySelector('[data-section="cashflow"]')?.addEventListener("click", () => setTimeout(loadCashFlow, 0));
+
+  document.querySelectorAll(".sales-filter-button").forEach(button => {
+    button.addEventListener("click", () => {
+      ledgerSalesFilter = button.dataset.salesFilter || "all";
+      applySalesTransactionFilter();
+    });
+  });
 
   document.querySelector("#closeSaleHistory")?.addEventListener("click", () => document.querySelector("#saleHistoryDialog").close());
   document.querySelector("#saleEditPayment")?.addEventListener("change", saleEditPaymentFields);

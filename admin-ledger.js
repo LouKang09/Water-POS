@@ -76,6 +76,35 @@ async function ensureSchema() {
       );
       CREATE INDEX IF NOT EXISTS sale_change_history_sale_idx
         ON sale_change_history(sale_id, changed_at ASC, id ASC);
+
+      ALTER TABLE sales ADD COLUMN IF NOT EXISTS admin_edit_count INTEGER NOT NULL DEFAULT 0;
+
+      UPDATE sales s
+      SET admin_edit_count = GREATEST(s.admin_edit_count, h.edit_count)
+      FROM (
+        SELECT sale_id, COUNT(*) FILTER (WHERE action='edit')::int AS edit_count
+        FROM sale_change_history
+        GROUP BY sale_id
+      ) h
+      WHERE h.sale_id=s.id AND h.edit_count > s.admin_edit_count;
+
+      -- Older edits made before transaction-history tracking cannot be reconstructed
+      -- fully. A changed reference date is a reliable signal for historical date
+      -- corrections such as Oct 11 -> Oct 9, so preserve at least a 1-edit marker.
+      UPDATE sales
+      SET admin_edit_count=1
+      WHERE admin_edit_count=0
+        AND (
+          (
+            transaction_ref ~ '^WP-[0-9]{8}-'
+            AND substring(transaction_ref,4,8) <> to_char(created_at AT TIME ZONE 'Asia/Manila','YYYYMMDD')
+          )
+          OR
+          (
+            transaction_ref ~ '^MAN-[0-9]{8}'
+            AND substring(transaction_ref,5,8) <> to_char(created_at AT TIME ZONE 'Asia/Manila','YYYYMMDD')
+          )
+        );
     `);
   })().catch(error => {
     schemaPromise = null;
@@ -234,16 +263,9 @@ function addRoutes(app) {
       const from = cleanDate(req.query.from) || "2000-01-01";
       const to = cleanDate(req.query.to) || "2999-12-31";
       const { rows } = await pool.query(`
-        SELECT
-          s.id,
-          s.series_no,
-          COUNT(h.id) FILTER (WHERE h.action='edit')::int AS edit_count
+        SELECT s.id,s.series_no,s.admin_edit_count
         FROM sales s
-        LEFT JOIN sale_change_history h
-          ON h.sale_id=s.id
-         AND h.action='edit'
         WHERE (s.created_at AT TIME ZONE 'Asia/Manila')::date BETWEEN $1::date AND $2::date
-        GROUP BY s.id,s.series_no,s.created_at
         ORDER BY s.created_at DESC,s.id DESC
         LIMIT 500
       `, [from, to]);
@@ -251,7 +273,7 @@ function addRoutes(app) {
         id: row.id,
         seriesNo: Number(row.series_no),
         series: formatSeries(row.series_no),
-        editCount: Number(row.edit_count || 0),
+        editCount: Number(row.admin_edit_count || 0),
       })));
     } catch (error) { next(error); }
   });
@@ -294,10 +316,16 @@ function addRoutes(app) {
         ORDER BY changed_at ASC,id ASC
       `, [id]);
       const current = await loadSaleSnapshot(pool, id);
+      const countResult = current
+        ? await pool.query("SELECT admin_edit_count FROM sales WHERE id=$1", [id])
+        : { rows: [] };
+      const editCount = Number(countResult.rows[0]?.admin_edit_count || historyResult.rows.filter(row => row.action === "edit").length || 0);
       res.json({
         saleId: id,
         series: current ? formatSeries(current.series_no) : (historyResult.rows[0] ? formatSeries(historyResult.rows[0].series_no) : null),
         transactionRef: current?.transaction_ref || historyResult.rows[0]?.transaction_ref || null,
+        editCount,
+        legacyEditCount: Math.max(0, editCount - historyResult.rows.filter(row => row.action === "edit").length),
         history: historyResult.rows,
         current,
       });
@@ -353,7 +381,7 @@ function addRoutes(app) {
       const id = Number(req.params.id);
       if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid transaction." });
       const existing = await client.query(
-        `SELECT id,series_no,transaction_ref,payment_status,was_pay_later,paid_at,created_at
+        `SELECT id,series_no,transaction_ref,payment_status,was_pay_later,paid_at,created_at,admin_edit_count
          FROM sales WHERE id=$1 LIMIT 1`,
         [id]
       );
@@ -390,7 +418,8 @@ function addRoutes(app) {
         UPDATE sales
         SET payment_method=$1,payment_provider=$2,payment_reference=$3,payment_reference_status=$4,
             gcash_reference=$5,delivery_room_unit=$6,total=$7,created_at=$8::timestamptz,
-            payment_status=$9,was_pay_later=$10,paid_at=$11
+            payment_status=$9,was_pay_later=$10,paid_at=$11,
+            admin_edit_count=admin_edit_count+1
         WHERE id=$12
       `, [
         payment.paymentMethod,
