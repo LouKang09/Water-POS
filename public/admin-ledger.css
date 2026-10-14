@@ -101,3 +101,125 @@
   .sale-edit-meta{grid-template-columns:1fr 1fr}
   .sale-edit-item{grid-template-columns:120px 1fr 110px 80px 38px}
 }
+
+
+.ledger-action-group{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  flex-wrap:nowrap;
+  white-space:nowrap;
+}
+.ledger-action-group .small-button{
+  min-height:30px;
+  height:30px;
+  padding:0 9px;
+  border-radius:8px;
+  font-size:.64rem;
+}
+.ledger-history-button{
+  background:#f4f8fb;
+  border-color:#cfdde5;
+  color:#31586c;
+}
+.ledger-delete-button{
+  background:#fff4f4!important;
+  border-color:#efc1c1!important;
+  color:#a92f2f!important;
+}
+.ledger-delete-button:hover{
+  background:#ffe9e9!important;
+  border-color:#e69c9c!important;
+}
+.sale-history-dialog{
+  width:min(94vw,960px);
+}
+.sale-history-body{
+  display:grid;
+  gap:12px;
+  padding-top:14px;
+}
+.sale-history-card{
+  border:1px solid var(--line);
+  border-radius:15px;
+  background:#fbfdfd;
+  padding:13px;
+}
+.sale-history-card-head{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  align-items:flex-start;
+  padding-bottom:10px;
+  border-bottom:1px solid var(--line);
+}
+.sale-history-card-head>div{
+  display:grid;
+  gap:3px;
+}
+.sale-history-card-head strong{
+  font-size:.84rem;
+}
+.sale-history-card-head small{
+  color:var(--muted);
+  font-size:.64rem;
+  line-height:1.4;
+}
+.sale-history-grid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:9px;
+  margin-top:10px;
+}
+.sale-history-grid>div{
+  display:grid;
+  gap:3px;
+  min-width:0;
+  padding:9px 10px;
+  border-radius:10px;
+  background:var(--surface);
+  border:1px solid var(--line);
+}
+.sale-history-grid span,
+.sale-history-items>span{
+  color:var(--muted);
+  font-size:.58rem;
+  font-weight:800;
+  text-transform:uppercase;
+  letter-spacing:.06em;
+}
+.sale-history-grid strong{
+  font-size:.72rem;
+  overflow-wrap:anywhere;
+}
+.sale-history-items{
+  margin-top:9px;
+  padding:10px;
+  border-radius:10px;
+  border:1px solid var(--line);
+  background:var(--surface);
+}
+.sale-history-items>div{
+  margin-top:5px;
+  font-size:.7rem;
+  line-height:1.5;
+}
+.sale-history-empty{
+  display:grid;
+  gap:6px;
+}
+.sale-history-empty>strong{
+  font-size:.88rem;
+}
+.sale-history-empty>p{
+  margin:0 0 4px;
+  color:var(--muted);
+  font-size:.68rem;
+}
+@media(max-width:900px){
+  .ledger-action-group{flex-wrap:wrap}
+  .sale-history-grid{grid-template-columns:1fr 1fr}
+}
+@media(max-width:640px){
+  .sale-history-grid{grid-template-columns:1fr}
+}
