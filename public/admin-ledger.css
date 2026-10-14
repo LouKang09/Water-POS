@@ -332,3 +332,105 @@
   .sales-transaction-filters{align-items:flex-start}
   .sales-filter-result{width:100%}
 }
+
+.sales-mini-date-filter{
+  display:grid;
+  grid-template-columns:minmax(180px,1fr) auto auto auto;
+  gap:9px;
+  align-items:end;
+  width:100%;
+}
+.sales-mini-date-copy{
+  display:grid;
+  gap:2px;
+  align-self:center;
+}
+.sales-mini-date-copy strong{font-size:.72rem}
+.sales-mini-date-copy small{font-size:.61rem;color:var(--muted)}
+.sales-mini-date-modes{
+  display:flex;
+  gap:5px;
+  flex-wrap:wrap;
+  align-items:center;
+}
+.sales-date-mode{
+  min-height:32px;
+  padding:0 10px;
+  border:1px solid var(--line);
+  border-radius:9px;
+  background:var(--surface,#fff);
+  color:var(--ink);
+  font-size:.64rem;
+  font-weight:800;
+  cursor:pointer;
+}
+.sales-date-mode.active{
+  background:#eaf6fb;
+  border-color:#8fc8df;
+  color:#0a648d;
+}
+.sales-mini-date-input,
+.sales-mini-date-custom{
+  display:flex;
+  gap:7px;
+  align-items:end;
+}
+.sales-mini-date-input label,
+.sales-mini-date-custom label{
+  display:grid;
+  gap:3px;
+}
+.sales-mini-date-input span,
+.sales-mini-date-custom span{
+  font-size:.58rem;
+  font-weight:800;
+  color:var(--muted);
+}
+.sales-mini-date-input input,
+.sales-mini-date-custom input{
+  height:34px;
+  padding:0 8px;
+  border:1px solid var(--line);
+  border-radius:9px;
+  background:#fff;
+  color:var(--ink);
+  font-size:.68rem;
+}
+.sales-filter-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  width:100%;
+  flex-wrap:wrap;
+}
+.sales-bulk-actions{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  width:100%;
+  padding-top:8px;
+  border-top:1px dashed var(--line);
+}
+.sales-bulk-actions strong{font-size:.68rem}
+.sales-bulk-delete{
+  background:#b92d34!important;
+  border-color:#b92d34!important;
+  color:#fff!important;
+}
+.ledger-select-cell{
+  width:38px;
+  min-width:38px;
+  text-align:center!important;
+}
+.ledger-select-cell input{
+  width:16px;
+  height:16px;
+  accent-color:#0b719e;
+  cursor:pointer;
+}
+@media(max-width:980px){
+  .sales-mini-date-filter{grid-template-columns:1fr}
+  .sales-mini-date-modes{justify-content:flex-start}
+  .sales-mini-date-input,.sales-mini-date-custom{justify-content:flex-start}
+}
