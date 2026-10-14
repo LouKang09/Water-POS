@@ -137,7 +137,7 @@ function normalizeItems(value) {
 
 function paymentFields(body) {
   const paymentMethod = String(body.paymentMethod || "Cash");
-  if (!["Cash", "GCash", "Other"].includes(paymentMethod)) throw new Error("Choose a valid payment method.");
+  if (!["Cash", "GCash", "Other", "Pay Later"].includes(paymentMethod)) throw new Error("Choose a valid payment method.");
   const allowedOtherProviders = ["Maya", "MariBank", "GoTyme", "VYBE by BPI"];
   const paymentProvider = paymentMethod === "GCash"
     ? "GCash"
@@ -147,12 +147,15 @@ function paymentFields(body) {
   if (paymentMethod === "Other" && !allowedOtherProviders.includes(paymentProvider)) {
     throw new Error("Choose the payment provider.");
   }
-  const paymentReference = paymentMethod === "Cash" ? null : cleanReference(body.paymentReference, paymentProvider);
+  const noReference = paymentMethod === "Cash" || paymentMethod === "Pay Later";
+  const paymentReference = noReference ? null : cleanReference(body.paymentReference, paymentProvider);
   return {
     paymentMethod,
     paymentProvider,
     paymentReference,
-    referenceStatus: paymentMethod === "Cash" ? null : "manual",
+    referenceStatus: noReference ? null : "manual",
+    paymentStatus: paymentMethod === "Pay Later" ? "unpaid" : "paid",
+    wasPayLater: paymentMethod === "Pay Later",
   };
 }
 
@@ -230,8 +233,10 @@ function addRoutes(app) {
       await client.query(`
         UPDATE sales
         SET payment_method=$1,payment_provider=$2,payment_reference=$3,payment_reference_status=$4,
-            gcash_reference=$5,delivery_room_unit=$6,total=$7,created_at=$8::timestamptz
-        WHERE id=$9
+            gcash_reference=$5,delivery_room_unit=$6,total=$7,created_at=$8::timestamptz,
+            payment_status=$9,was_pay_later=$10,
+            paid_at=CASE WHEN $9='unpaid' THEN NULL ELSE COALESCE(paid_at,$8::timestamptz) END
+        WHERE id=$11
       `, [
         payment.paymentMethod,
         payment.paymentProvider,
@@ -241,6 +246,8 @@ function addRoutes(app) {
         roomUnit,
         total,
         parsedDate.text + ":00+08:00",
+        payment.paymentStatus,
+        payment.wasPayLater,
         id,
       ]);
       await client.query("DELETE FROM sale_items WHERE sale_id=$1", [id]);
@@ -283,10 +290,12 @@ function addRoutes(app) {
       const created = await client.query(`
         INSERT INTO sales(
           transaction_ref,payment_method,payment_provider,payment_reference,payment_reference_status,
-          gcash_reference,delivery_room_unit,total,receipt_mime,receipt_image,created_at
+          gcash_reference,delivery_room_unit,total,receipt_mime,receipt_image,created_at,
+          payment_status,was_pay_later,paid_at
         )
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,NULL,NULL,$9::timestamptz)
-        RETURNING id,series_no,transaction_ref,total,created_at
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,NULL,NULL,$9::timestamptz,$10,$11,
+               CASE WHEN $10='unpaid' THEN NULL ELSE $9::timestamptz END)
+        RETURNING id,series_no,transaction_ref,total,created_at,payment_status
       `, [
         reference,
         payment.paymentMethod,
@@ -297,6 +306,8 @@ function addRoutes(app) {
         roomUnit,
         total,
         parsedDate.text + ":00+08:00",
+        payment.paymentStatus,
+        payment.wasPayLater,
       ]);
       for (const item of items) {
         await client.query(`
