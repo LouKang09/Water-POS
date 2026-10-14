@@ -232,7 +232,7 @@ public class MainActivity extends Activity {
         settings.setUseWideViewPort(true);
         settings.setMediaPlaybackRequiresUserGesture(true);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        settings.setUserAgentString(settings.getUserAgentString() + " WaterPOSAndroid/1.2.9");
+        settings.setUserAgentString(settings.getUserAgentString() + " WaterPOSAndroid/1.2.10");
 
         CookieManager cookieManager = CookieManager.getInstance();
         cookieManager.setAcceptCookie(true);
@@ -415,6 +415,19 @@ public class MainActivity extends Activity {
         return devicePolicyManager != null && devicePolicyManager.isDeviceOwnerApp(getPackageName());
     }
 
+    private boolean isHuaweiP30Lite() {
+        String manufacturer = Build.MANUFACTURER == null ? "" : Build.MANUFACTURER.toLowerCase();
+        String model = Build.MODEL == null ? "" : Build.MODEL.toLowerCase();
+
+        // Huawei P30 Lite variants commonly use MAR-LX* model identifiers.
+        return manufacturer.contains("huawei")
+            && (model.contains("p30 lite") || model.startsWith("mar-") || model.startsWith("mar_"));
+    }
+
+    private boolean shouldUsePinnedKiosk() {
+        return isDedicatedKiosk() || isHuaweiP30Lite();
+    }
+
     private void configureDedicatedKiosk() {
         if (!isDedicatedKiosk()) return;
         try {
@@ -504,14 +517,16 @@ public class MainActivity extends Activity {
             return;
         }
 
-        // Only a Device Owner is allowed to enter true Android kiosk mode.
-        // Normal phones use soft kiosk recovery instead of screen pinning so Exit App
-        // returns to the phone normally instead of triggering a lock screen.
-        if (!isDedicatedKiosk()) return;
+        // Device Owner uses true kiosk LockTask. Huawei P30 Lite uses Android
+        // screen-pinning LockTask so Home/Recents/app switching stay blocked.
+        if (!shouldUsePinnedKiosk()) return;
 
-        try {
-            startLockTask();
-        } catch (Exception ignored) {}
+        if (isDedicatedKiosk() || !pinningRequested || lockTaskObserved) {
+            try {
+                pinningRequested = true;
+                startLockTask();
+            } catch (Exception ignored) {}
+        }
 
         if (isLockTaskActive()) lockTaskObserved = true;
     }
@@ -528,7 +543,7 @@ public class MainActivity extends Activity {
     }
 
     private void scheduleKioskRecovery(long delayMs) {
-        if (kioskHandler == null || exitRequested || resumeKioskAfterChooser || !isDedicatedKiosk()) return;
+        if (kioskHandler == null || exitRequested || resumeKioskAfterChooser || !shouldUsePinnedKiosk()) return;
         kioskHandler.removeCallbacks(kioskRecoveryRunnable);
         kioskHandler.postDelayed(kioskRecoveryRunnable, delayMs);
     }
@@ -540,11 +555,9 @@ public class MainActivity extends Activity {
         configureDedicatedKiosk();
         requestLockTask();
 
-        if (isDedicatedKiosk()) {
-            if (!isLockTaskActive()) {
-                requestLockTask();
-                hideSystemUi();
-            }
+        if (shouldUsePinnedKiosk() && !isLockTaskActive()) {
+            requestLockTask();
+            hideSystemUi();
         }
     }
 
@@ -554,6 +567,9 @@ public class MainActivity extends Activity {
             try {
                 stopLockTask();
             } catch (Exception ignored) {}
+        }
+        if (isHuaweiP30Lite()) {
+            pinningRequested = false;
         }
     }
 
@@ -603,18 +619,34 @@ public class MainActivity extends Activity {
         exitRequested = true;
         resumeKioskAfterChooser = false;
         if (kioskHandler != null) kioskHandler.removeCallbacks(kioskRecoveryRunnable);
-        if (isDedicatedKiosk() && isLockTaskActive()) {
+
+        // Release both Device Owner LockTask and Huawei P30 Lite screen pinning
+        // before finishing. This avoids closing while Android still considers
+        // the task pinned, which previously could fall through to the lock screen.
+        if (isLockTaskActive()) {
             try {
                 stopLockTask();
             } catch (Exception ignored) {}
         }
+        pinningRequested = false;
+        lockTaskObserved = false;
+
         if (isDedicatedKiosk()) {
             try {
                 devicePolicyManager.setStatusBarDisabled(adminComponent, false);
             } catch (Exception ignored) {}
         }
+
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
-        finishAndRemoveTask();
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
+        if (kioskHandler != null) {
+            kioskHandler.postDelayed(() -> {
+                if (!isFinishing()) finishAndRemoveTask();
+            }, 220);
+        } else {
+            finishAndRemoveTask();
+        }
     }
 
     private Intent buildCameraIntent() {
@@ -705,7 +737,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onUserLeaveHint() {
         super.onUserLeaveHint();
-        if (!exitRequested && !resumeKioskAfterChooser && isDedicatedKiosk()) {
+        if (!exitRequested && !resumeKioskAfterChooser && shouldUsePinnedKiosk()) {
             // Huawei/EMUI Home gesture reaches this callback before the task leaves the foreground.
             hideSystemUi();
             requestLockTask();
@@ -721,7 +753,7 @@ public class MainActivity extends Activity {
                 hideSystemUi();
                 requestLockTask();
                 scheduleKioskRecovery(220);
-            } else if (isDedicatedKiosk()) {
+            } else if (shouldUsePinnedKiosk()) {
                 scheduleKioskRecovery(120);
             }
         }
