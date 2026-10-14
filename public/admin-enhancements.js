@@ -118,6 +118,7 @@ function ensureAdminSections() {
                 <option value="Cash">Cash</option>
                 <option value="GCash">GCash</option>
                 <option value="Other">Other Digital</option>
+                <option value="Pay Later">Pay Later</option>
               </select>
             </label>
             <label id="manualProviderField" class="field hidden">
@@ -353,10 +354,11 @@ function updateManualTotal() {
 
 function updateManualPaymentFields() {
   const method = document.querySelector("#manualPaymentMethod")?.value || "Cash";
+  const noReference = method === "Cash" || method === "Pay Later";
   document.querySelector("#manualProviderField")?.classList.toggle("hidden", method !== "Other");
-  document.querySelector("#manualReferenceField")?.classList.toggle("hidden", method === "Cash");
+  document.querySelector("#manualReferenceField")?.classList.toggle("hidden", noReference);
   const ref = document.querySelector("#manualPaymentReference");
-  if (ref && method === "Cash") ref.value = "";
+  if (ref && noReference) ref.value = "";
 }
 
 function collectManualItems() {
@@ -536,7 +538,7 @@ function bindAdminEnhancements() {
           items: collectManualItems()
         }
       });
-      toast("Historical transaction saved · " + result.transaction_ref);
+      toast((method === "Pay Later" ? "Historical unpaid transaction saved · " : "Historical transaction saved · ") + result.transaction_ref);
       document.querySelector("#manualPaymentReference").value = "";
       document.querySelector("#manualRoomUnit").value = "";
       document.querySelector("#manualItemList").innerHTML = "";
