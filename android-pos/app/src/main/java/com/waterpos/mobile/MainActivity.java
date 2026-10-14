@@ -24,6 +24,7 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.UserManager;
 import android.provider.MediaStore;
 import android.view.Gravity;
 import android.view.View;
@@ -83,6 +84,14 @@ public class MainActivity extends Activity {
         adminComponent = new ComponentName(this, KioskDeviceAdminReceiver.class);
         kioskHandler = new Handler(Looper.getMainLooper());
         configureDedicatedKiosk();
+
+        if (isHuaweiP30Lite() && !isDedicatedKiosk()) {
+            Toast.makeText(
+                this,
+                "Full kiosk requires one-time Device Owner setup. Screen pinning is active until then.",
+                Toast.LENGTH_LONG
+            ).show();
+        }
 
         Window window = getWindow();
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -232,7 +241,7 @@ public class MainActivity extends Activity {
         settings.setUseWideViewPort(true);
         settings.setMediaPlaybackRequiresUserGesture(true);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        settings.setUserAgentString(settings.getUserAgentString() + " WaterPOSAndroid/1.2.10");
+        settings.setUserAgentString(settings.getUserAgentString() + " WaterPOSAndroid/1.2.11");
 
         CookieManager cookieManager = CookieManager.getInstance();
         cookieManager.setAcceptCookie(true);
@@ -432,10 +441,21 @@ public class MainActivity extends Activity {
         if (!isDedicatedKiosk()) return;
         try {
             devicePolicyManager.setLockTaskPackages(adminComponent, new String[]{getPackageName()});
+
+            // LOCK_TASK_FEATURE_NONE is the strict dedicated-device mode:
+            // no Home, no Overview/Recents, no notifications, no global actions.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                devicePolicyManager.setLockTaskFeatures(adminComponent, DevicePolicyManager.LOCK_TASK_FEATURE_NONE);
+                devicePolicyManager.setLockTaskFeatures(
+                    adminComponent,
+                    DevicePolicyManager.LOCK_TASK_FEATURE_NONE
+                );
             }
+
             devicePolicyManager.setStatusBarDisabled(adminComponent, true);
+            devicePolicyManager.setKeyguardDisabled(adminComponent, true);
+
+            // Prevent system escape paths that are not needed on a dedicated POS.
+            devicePolicyManager.addUserRestriction(adminComponent, UserManager.DISALLOW_SAFE_BOOT);
         } catch (Exception ignored) {}
     }
 
@@ -634,6 +654,8 @@ public class MainActivity extends Activity {
         if (isDedicatedKiosk()) {
             try {
                 devicePolicyManager.setStatusBarDisabled(adminComponent, false);
+                devicePolicyManager.setKeyguardDisabled(adminComponent, false);
+                devicePolicyManager.clearUserRestriction(adminComponent, UserManager.DISALLOW_SAFE_BOOT);
             } catch (Exception ignored) {}
         }
 
