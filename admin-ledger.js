@@ -10,6 +10,24 @@ const pool = new Pool({
 
 let schemaPromise = null;
 
+// Series is a flexible display label, not the immutable sale id or payment reference.
+// Rank *all* active sales before applying date filters so every screen agrees.
+const activeSalesSeriesSql = `
+  SELECT id,
+         ROW_NUMBER() OVER (ORDER BY series_no ASC NULLS LAST, id ASC)::bigint AS display_series_no
+  FROM sales
+  WHERE payment_status <> 'cancelled'
+`;
+
+async function getDisplaySeries(db, id) {
+  const { rows } = await db.query(`
+    SELECT display_series_no
+    FROM (${activeSalesSeriesSql}) AS numbered
+    WHERE numbered.id=$1
+  `, [id]);
+  return rows.length ? Number(rows[0].display_series_no) : null;
+}
+
 async function ensureSchema() {
   if (schemaPromise) return schemaPromise;
   schemaPromise = (async () => {
@@ -248,7 +266,7 @@ async function recordSaleChange(db, action, beforeSnapshot, afterSnapshot = null
 }
 
 function formatSeries(value) {
-  return String(Number(value || 0)).padStart(7, "0");
+  return String(Number(value || 0)).padStart(6, "0");
 }
 
 function numberOrZero(value) {
@@ -263,8 +281,9 @@ function addRoutes(app) {
       const from = cleanDate(req.query.from) || "2000-01-01";
       const to = cleanDate(req.query.to) || "2999-12-31";
       const { rows } = await pool.query(`
-        SELECT s.id,s.series_no,s.admin_edit_count
-        FROM sales s
+        SELECT s.id,numbered.display_series_no AS series_no,s.admin_edit_count
+        FROM (${activeSalesSeriesSql}) AS numbered
+        JOIN sales s ON s.id=numbered.id
         WHERE (s.created_at AT TIME ZONE 'Asia/Manila')::date BETWEEN $1::date AND $2::date
         ORDER BY s.created_at DESC,s.id DESC
         LIMIT 500
@@ -298,7 +317,9 @@ function addRoutes(app) {
       `, [id]);
       if (!rows.length) return res.status(404).json({ error: "Transaction not found." });
       const row = rows[0];
-      res.json({ ...row, series: formatSeries(row.series_no), total: Number(row.total) });
+      const displaySeries = await getDisplaySeries(pool, id);
+      const seriesNo = displaySeries ?? Number(row.series_no);
+      res.json({ ...row, series_no: seriesNo, series: formatSeries(seriesNo), total: Number(row.total) });
     } catch (error) { next(error); }
   });
 
@@ -320,9 +341,10 @@ function addRoutes(app) {
         ? await pool.query("SELECT admin_edit_count FROM sales WHERE id=$1", [id])
         : { rows: [] };
       const editCount = Number(countResult.rows[0]?.admin_edit_count || historyResult.rows.filter(row => row.action === "edit").length || 0);
+      const currentDisplaySeries = current ? await getDisplaySeries(pool, id) : null;
       res.json({
         saleId: id,
-        series: current ? formatSeries(current.series_no) : (historyResult.rows[0] ? formatSeries(historyResult.rows[0].series_no) : null),
+        series: current ? formatSeries(currentDisplaySeries ?? current.series_no) : (historyResult.rows[0] ? formatSeries(historyResult.rows[0].series_no) : null),
         transactionRef: current?.transaction_ref || historyResult.rows[0]?.transaction_ref || null,
         editCount,
         legacyEditCount: Math.max(0, editCount - historyResult.rows.filter(row => row.action === "edit").length),
@@ -343,6 +365,13 @@ function addRoutes(app) {
       if (ids.length > 100) return res.status(400).json({ error: "You can delete up to 100 transactions at once." });
 
       await client.query("BEGIN");
+      // Capture the original labels once; they must not shift midway through a bulk deletion.
+      const initialSeriesRows = await client.query(`
+        SELECT id,display_series_no
+        FROM (${activeSalesSeriesSql}) AS numbered
+        WHERE numbered.id=ANY($1::int[])
+      `, [ids]);
+      const initialSeries = new Map(initialSeriesRows.rows.map(row => [Number(row.id), Number(row.display_series_no)]));
       const deleted = [];
       for (const id of ids) {
         const beforeSnapshot = await loadSaleSnapshot(client, id);
@@ -350,7 +379,7 @@ function addRoutes(app) {
         await recordSaleChange(client, "delete", beforeSnapshot, null);
         if (beforeSnapshot.receipt_key) receiptKeys.push(beforeSnapshot.receipt_key);
         await client.query("DELETE FROM sales WHERE id=$1", [id]);
-        deleted.push({ id, series: formatSeries(beforeSnapshot.series_no), transactionRef: beforeSnapshot.transaction_ref });
+        deleted.push({ id, series: formatSeries(initialSeries.get(id) ?? beforeSnapshot.series_no), transactionRef: beforeSnapshot.transaction_ref });
       }
       await client.query("COMMIT");
 
@@ -384,6 +413,7 @@ function addRoutes(app) {
         return res.status(404).json({ error: "Transaction not found." });
       }
 
+      const oldDisplaySeries = await getDisplaySeries(client, id);
       receiptKey = beforeSnapshot.receipt_key || null;
       await recordSaleChange(client, "delete", beforeSnapshot, null);
       await client.query("DELETE FROM sales WHERE id=$1", [id]);
@@ -398,7 +428,7 @@ function addRoutes(app) {
       res.json({
         deleted: true,
         id,
-        series: formatSeries(beforeSnapshot.series_no),
+        series: formatSeries(oldDisplaySeries ?? beforeSnapshot.series_no),
         transactionRef: beforeSnapshot.transaction_ref,
       });
     } catch (error) {
@@ -479,10 +509,11 @@ function addRoutes(app) {
       }
       const afterSnapshot = await loadSaleSnapshot(client, id);
       await recordSaleChange(client, "edit", beforeSnapshot, afterSnapshot);
+      const currentDisplaySeries = await getDisplaySeries(client, id);
       await client.query("COMMIT");
       res.json({
         id,
-        series: formatSeries(existing.rows[0].series_no),
+        series: formatSeries(currentDisplaySeries ?? existing.rows[0].series_no),
         total,
         cashFlowDate: nextPaidAt || correctedDate,
         settlementDatePreserved: preserveRealSettlement,
@@ -543,10 +574,12 @@ function addRoutes(app) {
           VALUES($1,$2,$3,$4,$5,$6)
         `, [created.rows[0].id, item.category, item.label, item.unitPrice, item.qty, item.lineTotal]);
       }
+      const displaySeries = await getDisplaySeries(client, created.rows[0].id);
       await client.query("COMMIT");
       res.status(201).json({
         ...created.rows[0],
-        series: formatSeries(created.rows[0].series_no),
+        series_no: displaySeries ?? Number(created.rows[0].series_no),
+        series: formatSeries(displaySeries ?? created.rows[0].series_no),
         total: Number(created.rows[0].total),
         itemCount: items.length,
       });
