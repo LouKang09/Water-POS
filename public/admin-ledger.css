@@ -223,3 +223,28 @@
 @media(max-width:640px){
   .sale-history-grid{grid-template-columns:1fr}
 }
+
+.ledger-history-button{
+  position:relative;
+  overflow:visible!important;
+}
+.ledger-history-count{
+  position:absolute;
+  right:-7px;
+  bottom:-8px;
+  min-width:18px;
+  height:18px;
+  padding:0 4px;
+  border-radius:999px;
+  background:#e51e25;
+  color:#fff;
+  border:2px solid var(--surface,#fff);
+  display:grid;
+  place-items:center;
+  font-size:.58rem;
+  line-height:1;
+  font-weight:900;
+  box-shadow:0 2px 5px rgba(104,18,18,.28);
+  pointer-events:none;
+  z-index:3;
+}

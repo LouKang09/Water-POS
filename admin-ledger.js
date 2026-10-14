@@ -234,13 +234,25 @@ function addRoutes(app) {
       const from = cleanDate(req.query.from) || "2000-01-01";
       const to = cleanDate(req.query.to) || "2999-12-31";
       const { rows } = await pool.query(`
-        SELECT id,series_no
-        FROM sales
-        WHERE (created_at AT TIME ZONE 'Asia/Manila')::date BETWEEN $1::date AND $2::date
-        ORDER BY created_at DESC,id DESC
+        SELECT
+          s.id,
+          s.series_no,
+          COUNT(h.id) FILTER (WHERE h.action='edit')::int AS edit_count
+        FROM sales s
+        LEFT JOIN sale_change_history h
+          ON h.sale_id=s.id
+         AND h.action='edit'
+        WHERE (s.created_at AT TIME ZONE 'Asia/Manila')::date BETWEEN $1::date AND $2::date
+        GROUP BY s.id,s.series_no,s.created_at
+        ORDER BY s.created_at DESC,s.id DESC
         LIMIT 500
       `, [from, to]);
-      res.json(rows.map(row => ({ id: row.id, seriesNo: Number(row.series_no), series: formatSeries(row.series_no) })));
+      res.json(rows.map(row => ({
+        id: row.id,
+        seriesNo: Number(row.series_no),
+        series: formatSeries(row.series_no),
+        editCount: Number(row.edit_count || 0),
+      })));
     } catch (error) { next(error); }
   });
 

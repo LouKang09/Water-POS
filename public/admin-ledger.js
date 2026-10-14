@@ -1,6 +1,7 @@
 const ledgerMoney = value => "₱" + Number(value || 0).toLocaleString("en-PH", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 const ledgerEscape = value => String(value ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[ch]));
 let ledgerSeriesMap = new Map();
+let ledgerEditCountMap = new Map();
 let activeLedgerSaleId = null;
 
 function manilaYmd(date = new Date()) {
@@ -224,6 +225,7 @@ async function refreshSeriesAndEditButtons() {
   try {
     const seriesRows = await api("/api/admin/ledger/series?" + queryDates());
     ledgerSeriesMap = new Map(seriesRows.map(row => [String(row.id), row.series]));
+    ledgerEditCountMap = new Map(seriesRows.map(row => [String(row.id), Number(row.editCount || 0)]));
     const trs = [...document.querySelectorAll("#salesBody tr")];
     if (!currentSales.length) {
       const td = trs[0]?.querySelector("td");
@@ -232,7 +234,22 @@ async function refreshSeriesAndEditButtons() {
     }
     currentSales.forEach((sale, index) => {
       const tr = trs[index];
-      if (!tr || tr.dataset.ledgerEnhanced === "true") return;
+      if (!tr) return;
+      const editCount = ledgerEditCountMap.get(String(sale.id)) || 0;
+      const historyBadge = editCount > 0
+        ? `<span class="ledger-history-count" aria-label="${editCount} edits">${editCount > 99 ? "99+" : editCount}</span>`
+        : "";
+
+      if (tr.dataset.ledgerEnhanced === "true") {
+        const historyButton = tr.querySelector(".ledger-history-button");
+        if (historyButton) {
+          historyButton.querySelector(".ledger-history-count")?.remove();
+          if (editCount > 0) historyButton.insertAdjacentHTML("beforeend", historyBadge);
+          historyButton.title = editCount > 0 ? editCount + " edit" + (editCount === 1 ? "" : "s") : "No edits yet";
+        }
+        return;
+      }
+
       tr.dataset.ledgerEnhanced = "true";
       const seriesCell = document.createElement("td");
       seriesCell.className = "ledger-series";
@@ -242,7 +259,7 @@ async function refreshSeriesAndEditButtons() {
       editCell.innerHTML = `
         <div class="ledger-action-group">
           <button type="button" class="small-button ledger-edit-button" data-id="${sale.id}">Edit</button>
-          <button type="button" class="small-button ledger-history-button" data-id="${sale.id}">History</button>
+          <button type="button" class="small-button ledger-history-button" data-id="${sale.id}" title="${editCount > 0 ? editCount + " edit" + (editCount === 1 ? "" : "s") : "No edits yet"}">History${historyBadge}</button>
           <button type="button" class="small-button ledger-delete-button" data-id="${sale.id}">Delete</button>
         </div>`;
       tr.appendChild(editCell);
