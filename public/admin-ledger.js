@@ -456,7 +456,15 @@ if (ledgerBaseLoadSales) {
   window.loadSales = async function() {
     const qs = ledgerSalesQueryDates();
     ledgerSelectedSaleIds.clear();
-    await ledgerBaseLoadSales(qs);
+
+    if (ledgerSalesDateMode === "main") {
+      await ledgerBaseLoadSales(qs);
+    } else {
+      const mainRows = await api("/api/admin/sales?" + queryDates());
+      renderServiceBreakdown(mainRows);
+      await ledgerBaseLoadSales(qs, { skipBreakdown: true });
+    }
+
     await refreshSeriesAndEditButtons(qs);
   };
 }
