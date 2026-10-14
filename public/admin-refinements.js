@@ -185,7 +185,7 @@ function loadLedgerAssets() {
     return;
   }
   const script = document.createElement("script");
-  script.src = "/admin-ledger.js?v=20261006-2";
+  script.src = "/admin-ledger.js?v=20261014-paylater1";
   script.dataset.adminLedger = "true";
   script.addEventListener("load", loadBankPettyAsset, { once: true });
   document.body.appendChild(script);
