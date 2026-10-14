@@ -221,7 +221,7 @@ function ensureAdminSections() {
     const state = document.createElement("div");
     state.id = "adminRefreshState";
     state.className = "admin-refresh-state";
-    state.innerHTML = '<span class="live-dot"></span><span>Sales auto refresh every 30s</span><small id="adminLastRefresh">Waiting for sign in</small>';
+    state.innerHTML = '<span class="manual-refresh-dot"></span><span>Manual refresh</span><button id="adminManualRefresh" type="button" class="small-button admin-manual-refresh">Refresh</button><small id="adminLastRefresh">Waiting for sign in</small>';
     top.appendChild(state);
   }
 
@@ -404,11 +404,7 @@ async function refreshAdminSection(section = adminActiveSection, silent = false)
 
 function startAdminAutoRefresh() {
   clearInterval(adminRefreshTimer);
-  adminRefreshTimer = setInterval(() => {
-    if (document.visibilityState === "visible" && adminActiveSection === "sales") {
-      refreshAdminSection("sales", true);
-    }
-  }, ADMIN_REFRESH_MS);
+  adminRefreshTimer = null;
 }
 
 function bindAdminEnhancements() {
@@ -553,13 +549,20 @@ function bindAdminEnhancements() {
     }
   });
 
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible" && token && adminActiveSection !== "account") {
-      refreshAdminSection(adminActiveSection, true);
+  document.querySelector("#adminManualRefresh")?.addEventListener("click", async () => {
+    const button = document.querySelector("#adminManualRefresh");
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Refreshing…";
     }
-  });
-  window.addEventListener("focus", () => {
-    if (token && adminActiveSection === "sales") refreshAdminSection("sales", true);
+    try {
+      await refreshAdminSection(adminActiveSection, false);
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.textContent = "Refresh";
+      }
+    }
   });
 
   startAdminAutoRefresh();
