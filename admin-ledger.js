@@ -332,6 +332,41 @@ function addRoutes(app) {
     } catch (error) { next(error); }
   });
 
+  app.post("/api/admin/ledger/sales/bulk-delete", async (req, res, next) => {
+    const client = await pool.connect();
+    const receiptKeys = [];
+    try {
+      await ensureSchema();
+      const rawIds = Array.isArray(req.body?.ids) ? req.body.ids : [];
+      const ids = [...new Set(rawIds.map(Number).filter(id => Number.isInteger(id) && id > 0))];
+      if (!ids.length) return res.status(400).json({ error: "Select at least one transaction." });
+      if (ids.length > 100) return res.status(400).json({ error: "You can delete up to 100 transactions at once." });
+
+      await client.query("BEGIN");
+      const deleted = [];
+      for (const id of ids) {
+        const beforeSnapshot = await loadSaleSnapshot(client, id);
+        if (!beforeSnapshot) continue;
+        await recordSaleChange(client, "delete", beforeSnapshot, null);
+        if (beforeSnapshot.receipt_key) receiptKeys.push(beforeSnapshot.receipt_key);
+        await client.query("DELETE FROM sales WHERE id=$1", [id]);
+        deleted.push({ id, series: formatSeries(beforeSnapshot.series_no), transactionRef: beforeSnapshot.transaction_ref });
+      }
+      await client.query("COMMIT");
+
+      for (const key of receiptKeys) {
+        deleteReceipt(key).catch(error => console.warn("Unable to delete receipt object", key, error.message));
+      }
+
+      res.json({ deletedCount: deleted.length, requestedCount: ids.length, deleted });
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      next(error);
+    } finally {
+      client.release();
+    }
+  });
+
   app.delete("/api/admin/ledger/sales/:id", async (req, res, next) => {
     const client = await pool.connect();
     let receiptKey = null;
