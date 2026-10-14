@@ -298,10 +298,10 @@ function adminReferenceLabel(provider){
   return "Payment reference";
 }
 
-async function loadSales(queryOverride=""){
+async function loadSales(queryOverride="", options={}){
   const rows=await api("/api/admin/sales?"+(queryOverride||queryDates()));
   currentSales=rows;
-  renderServiceBreakdown(rows);
+  if(!options.skipBreakdown) renderServiceBreakdown(rows);
   $("#salesBody").innerHTML=rows.length?rows.map(r=>`
     <tr>
       <td>${fmtDate(r.created_at)}</td>
