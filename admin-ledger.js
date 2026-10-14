@@ -1,6 +1,7 @@
 const express = require("express");
 const crypto = require("crypto");
 const { Pool } = require("pg");
+const { deleteReceipt } = require("./receipt-storage");
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -62,6 +63,19 @@ async function ensureSchema() {
         note TEXT,
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+
+      CREATE TABLE IF NOT EXISTS sale_change_history (
+        id BIGSERIAL PRIMARY KEY,
+        sale_id INTEGER NOT NULL,
+        series_no BIGINT,
+        transaction_ref TEXT,
+        action TEXT NOT NULL CHECK (action IN ('edit','delete')),
+        before_snapshot JSONB NOT NULL,
+        after_snapshot JSONB,
+        changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS sale_change_history_sale_idx
+        ON sale_change_history(sale_id, changed_at ASC, id ASC);
     `);
   })().catch(error => {
     schemaPromise = null;
@@ -159,6 +173,51 @@ function paymentFields(body) {
   };
 }
 
+async function loadSaleSnapshot(db, id) {
+  const { rows } = await db.query(`
+    SELECT
+      s.id,s.series_no,s.transaction_ref,s.payment_method,s.payment_provider,
+      COALESCE(s.payment_reference,s.gcash_reference) AS payment_reference,
+      s.payment_reference_status,s.payment_status,s.was_pay_later,s.paid_at,
+      s.delivery_room_unit,s.total,s.created_at,s.cancelled_at,s.receipt_key,
+      COALESCE(
+        json_agg(
+          json_build_object(
+            'id',i.id,
+            'category',i.category,
+            'label',i.label,
+            'unitPrice',i.unit_price,
+            'qty',i.qty,
+            'lineTotal',i.line_total
+          )
+          ORDER BY i.id
+        ) FILTER (WHERE i.id IS NOT NULL),
+        '[]'
+      ) AS items
+    FROM sales s
+    LEFT JOIN sale_items i ON i.sale_id=s.id
+    WHERE s.id=$1
+    GROUP BY s.id
+  `, [id]);
+  return rows[0] || null;
+}
+
+async function recordSaleChange(db, action, beforeSnapshot, afterSnapshot = null) {
+  await db.query(`
+    INSERT INTO sale_change_history(
+      sale_id,series_no,transaction_ref,action,before_snapshot,after_snapshot,changed_at
+    )
+    VALUES($1,$2,$3,$4,$5::jsonb,$6::jsonb,NOW())
+  `, [
+    beforeSnapshot.id,
+    beforeSnapshot.series_no,
+    beforeSnapshot.transaction_ref,
+    action,
+    JSON.stringify(beforeSnapshot),
+    afterSnapshot ? JSON.stringify(afterSnapshot) : null,
+  ]);
+}
+
 function formatSeries(value) {
   return String(Number(value || 0)).padStart(7, "0");
 }
@@ -209,13 +268,83 @@ function addRoutes(app) {
     } catch (error) { next(error); }
   });
 
+  app.get("/api/admin/ledger/sales/:id/history", async (req, res, next) => {
+    try {
+      await ensureSchema();
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id) || id <= 0) {
+        return res.status(400).json({ error: "Invalid transaction." });
+      }
+      const historyResult = await pool.query(`
+        SELECT id,sale_id,series_no,transaction_ref,action,before_snapshot,after_snapshot,changed_at
+        FROM sale_change_history
+        WHERE sale_id=$1
+        ORDER BY changed_at ASC,id ASC
+      `, [id]);
+      const current = await loadSaleSnapshot(pool, id);
+      res.json({
+        saleId: id,
+        series: current ? formatSeries(current.series_no) : (historyResult.rows[0] ? formatSeries(historyResult.rows[0].series_no) : null),
+        transactionRef: current?.transaction_ref || historyResult.rows[0]?.transaction_ref || null,
+        history: historyResult.rows,
+        current,
+      });
+    } catch (error) { next(error); }
+  });
+
+  app.delete("/api/admin/ledger/sales/:id", async (req, res, next) => {
+    const client = await pool.connect();
+    let receiptKey = null;
+    try {
+      await ensureSchema();
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id) || id <= 0) {
+        return res.status(400).json({ error: "Invalid transaction." });
+      }
+
+      await client.query("BEGIN");
+      const beforeSnapshot = await loadSaleSnapshot(client, id);
+      if (!beforeSnapshot) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Transaction not found." });
+      }
+
+      receiptKey = beforeSnapshot.receipt_key || null;
+      await recordSaleChange(client, "delete", beforeSnapshot, null);
+      await client.query("DELETE FROM sales WHERE id=$1", [id]);
+      await client.query("COMMIT");
+
+      if (receiptKey) {
+        deleteReceipt(receiptKey).catch(error => {
+          console.warn("Unable to delete receipt object for sale", id, error.message);
+        });
+      }
+
+      res.json({
+        deleted: true,
+        id,
+        series: formatSeries(beforeSnapshot.series_no),
+        transactionRef: beforeSnapshot.transaction_ref,
+      });
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      next(error);
+    } finally {
+      client.release();
+    }
+  });
+
   app.patch("/api/admin/ledger/sales/:id", async (req, res, next) => {
     const client = await pool.connect();
     try {
       await ensureSchema();
       const id = Number(req.params.id);
       if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid transaction." });
-      const existing = await client.query("SELECT id,series_no FROM sales WHERE id=$1 LIMIT 1", [id]);
+      const existing = await client.query(
+        `SELECT id,series_no,transaction_ref,payment_status,was_pay_later,paid_at,created_at
+         FROM sales WHERE id=$1 LIMIT 1`,
+        [id]
+      );
       if (!existing.rows.length) return res.status(404).json({ error: "Transaction not found." });
 
       const parsedDate = parseDateTime(req.body.dateTime);
@@ -228,15 +357,29 @@ function addRoutes(app) {
       const total = items.reduce((sum, item) => sum + item.lineTotal, 0);
       const payment = paymentFields(req.body);
       const roomUnit = String(req.body.roomUnit || "").trim().slice(0, 100) || null;
+      const original = existing.rows[0];
+      const correctedDate = parsedDate.text + ":00+08:00";
+      const preserveRealSettlement =
+        Boolean(original.was_pay_later) &&
+        original.payment_status === "paid" &&
+        Boolean(original.paid_at) &&
+        payment.paymentStatus === "paid";
+      const nextPaidAt =
+        payment.paymentStatus === "unpaid"
+          ? null
+          : preserveRealSettlement
+            ? original.paid_at
+            : correctedDate;
+      const nextWasPayLater = Boolean(original.was_pay_later) || payment.wasPayLater;
 
       await client.query("BEGIN");
+      const beforeSnapshot = await loadSaleSnapshot(client, id);
       await client.query(`
         UPDATE sales
         SET payment_method=$1,payment_provider=$2,payment_reference=$3,payment_reference_status=$4,
             gcash_reference=$5,delivery_room_unit=$6,total=$7,created_at=$8::timestamptz,
-            payment_status=$9,was_pay_later=$10,
-            paid_at=CASE WHEN $9='unpaid' THEN NULL ELSE COALESCE(paid_at,$8::timestamptz) END
-        WHERE id=$11
+            payment_status=$9,was_pay_later=$10,paid_at=$11
+        WHERE id=$12
       `, [
         payment.paymentMethod,
         payment.paymentProvider,
@@ -245,9 +388,10 @@ function addRoutes(app) {
         payment.paymentMethod === "GCash" ? payment.paymentReference : null,
         roomUnit,
         total,
-        parsedDate.text + ":00+08:00",
+        correctedDate,
         payment.paymentStatus,
-        payment.wasPayLater,
+        nextWasPayLater,
+        nextPaidAt,
         id,
       ]);
       await client.query("DELETE FROM sale_items WHERE sale_id=$1", [id]);
@@ -257,8 +401,16 @@ function addRoutes(app) {
           VALUES($1,$2,$3,$4,$5,$6)
         `, [id, item.category, item.label, item.unitPrice, item.qty, item.lineTotal]);
       }
+      const afterSnapshot = await loadSaleSnapshot(client, id);
+      await recordSaleChange(client, "edit", beforeSnapshot, afterSnapshot);
       await client.query("COMMIT");
-      res.json({ id, series: formatSeries(existing.rows[0].series_no), total });
+      res.json({
+        id,
+        series: formatSeries(existing.rows[0].series_no),
+        total,
+        cashFlowDate: nextPaidAt || correctedDate,
+        settlementDatePreserved: preserveRealSettlement,
+      });
     } catch (error) {
       await client.query("ROLLBACK").catch(() => {});
       if (/transaction item|valid category|valid quantity|valid unit price|standard POS price|Other item|payment method|payment provider/.test(error.message)) {
