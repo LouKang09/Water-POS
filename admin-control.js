@@ -261,7 +261,7 @@ function addRoutes(app) {
       const items = normalizeManualItems(req.body.items);
       const total = items.reduce((sum, item) => sum + item.lineTotal, 0);
       const paymentMethod = String(req.body.paymentMethod || "Cash");
-      if (!["Cash", "GCash", "Other"].includes(paymentMethod)) {
+      if (!["Cash", "GCash", "Other", "Pay Later"].includes(paymentMethod)) {
         return res.status(400).json({ error: "Choose a valid payment method." });
       }
 
@@ -275,10 +275,11 @@ function addRoutes(app) {
         return res.status(400).json({ error: "Choose the payment provider for this historical transaction." });
       }
 
-      const paymentReference = paymentMethod === "Cash"
+      const noReference = paymentMethod === "Cash" || paymentMethod === "Pay Later";
+      const paymentReference = noReference
         ? null
         : cleanManualReference(req.body.paymentReference, paymentProvider);
-      const referenceStatus = paymentMethod === "Cash" ? null : "manual";
+      const referenceStatus = noReference ? null : "manual";
       const roomUnit = String(req.body.roomUnit || "").trim().slice(0, 100) || null;
       const reference = manualReference(parsedDate.text);
 
@@ -286,10 +287,12 @@ function addRoutes(app) {
       const created = await client.query(
         `INSERT INTO sales(
           transaction_ref,payment_method,payment_provider,payment_reference,payment_reference_status,
-          gcash_reference,delivery_room_unit,total,receipt_mime,receipt_image,created_at
+          gcash_reference,delivery_room_unit,total,receipt_mime,receipt_image,created_at,
+          payment_status,was_pay_later,paid_at
          )
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8,NULL,NULL,$9::timestamptz)
-         RETURNING id,transaction_ref,total,created_at`,
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,NULL,NULL,$9::timestamptz,$10,$11,
+                CASE WHEN $10='unpaid' THEN NULL ELSE $9::timestamptz END)
+         RETURNING id,transaction_ref,total,created_at,payment_status`,
         [
           reference,
           paymentMethod,
@@ -299,7 +302,9 @@ function addRoutes(app) {
           paymentMethod === "GCash" ? paymentReference : null,
           roomUnit,
           total,
-          parsedDate.text + ":00+08:00"
+          parsedDate.text + ":00+08:00",
+          paymentMethod === "Pay Later" ? "unpaid" : "paid",
+          paymentMethod === "Pay Later"
         ]
       );
 
