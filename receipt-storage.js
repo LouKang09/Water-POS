@@ -1,7 +1,7 @@
 const crypto = require("crypto");
 const pg = require("pg");
 const sharp = require("sharp");
-const { S3Client, PutObjectCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
+const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require("@aws-sdk/client-s3");
 
 const endpoint = process.env.RECEIPT_S3_ENDPOINT || "";
 const bucket = process.env.RECEIPT_S3_BUCKET || "";
@@ -108,6 +108,12 @@ async function fetchReceipt(key) {
     buffer: await readBody(result.Body),
     mime: result.ContentType || "image/webp"
   };
+}
+
+async function deleteReceipt(key) {
+  if (!enabled || !key) return false;
+  await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+  return true;
 }
 
 function appendReceiptSchema(sql) {
@@ -286,4 +292,4 @@ if (enabled) {
 }
 
 
-module.exports = { enabled, storeReceipt, fetchReceipt };
+module.exports = { enabled, storeReceipt, fetchReceipt, deleteReceipt };
