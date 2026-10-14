@@ -298,8 +298,8 @@ function adminReferenceLabel(provider){
   return "Payment reference";
 }
 
-async function loadSales(){
-  const rows=await api("/api/admin/sales?"+queryDates());
+async function loadSales(queryOverride=""){
+  const rows=await api("/api/admin/sales?"+(queryOverride||queryDates()));
   currentSales=rows;
   renderServiceBreakdown(rows);
   $("#salesBody").innerHTML=rows.length?rows.map(r=>`
