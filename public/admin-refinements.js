@@ -174,7 +174,7 @@ function loadLedgerAssets() {
   if (!document.querySelector('link[data-admin-ledger="true"]')) {
     const link = document.createElement("link");
     link.rel = "stylesheet";
-    link.href = "/admin-ledger.css?v=20261006-2";
+    link.href = "/admin-ledger.css?v=20261014-history1";
     link.dataset.adminLedger = "true";
     document.head.appendChild(link);
   }
@@ -185,7 +185,7 @@ function loadLedgerAssets() {
     return;
   }
   const script = document.createElement("script");
-  script.src = "/admin-ledger.js?v=20261014-paylater1";
+  script.src = "/admin-ledger.js?v=20261014-history1";
   script.dataset.adminLedger = "true";
   script.addEventListener("load", loadBankPettyAsset, { once: true });
   document.body.appendChild(script);
