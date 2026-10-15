@@ -57,3 +57,16 @@ The app shows a live attendance timer and two in-app reminders: 45 minutes into 
 - Draft figures are for review. Overtime, statutory contributions, special holidays, leave, and other employment-law-specific payroll treatments are **not automated** in this release; add or adjust them in the editable payslip.
 
 The editable payslip has employee name, pay period label, pay date (today in Philippine time by default), earnings and deduction rows, and net pay. **Save Payslip** allocates an incrementing payslip number starting at 46; editing the same employee/period keeps its existing number. The admin can change the next unused number. **Save & Print Payslip** renders an A4 two-column earnings/deductions format with signature lines.
+
+## Android v1.3.0 — offline sales and normal navigation
+
+Android v1.3.0 disables Huawei/Android kiosk screen pinning and uses `adjustResize` for the numeric keyboard. Camera/gallery switching works without re-entering LockTask. The app still connects to the existing Railway Water POS.
+
+### Working without internet
+1. Install v1.3.0 and sign in **online at least once**. Keep the Android app installed and allow the initial offline assets to cache.
+2. A previously verified cashier can reopen the app without a network connection. The service worker caches the POS shell; IndexedDB stores the offline sale queue and receipt images.
+3. Record ordinary new sales, including Cash, Pay Later, GCash, or Other with a photo receipt. Offline digital receipts can be marked unreadable for admin review. A sale is labeled **LOCAL / Pending Sync** until the database acknowledges it.
+4. On reconnect, while Water POS is open or when it is reopened, pending sales automatically retry. The **Pending / Sync now** banner shows outstanding items and any transactions requiring attention.
+5. Every queued sale receives a stable client key; PostgreSQL enforces uniqueness and serializes conflicting retries. This prevents duplicate sales if an upload succeeds but its response is lost. Original capture date/time is retained in the sales records.
+
+**Limitations:** First-time authentication, existing unpaid settlements, online delivery queue completion, payroll attendance, and central reports require connectivity. Cached Used prices may be rejected during sync if an administrator changed them meanwhile; blocked sales remain on the device for review. Payment receipts and queued sales remain on the device until successfully synced; never uninstall or clear app data with pending sales. Android background sync after the app is fully closed is not guaranteed — open the app when back online. The existing offline mode is intended for the WebView-based Android app and supported browsers with IndexedDB and service-worker support.
