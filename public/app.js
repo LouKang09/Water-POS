@@ -154,6 +154,44 @@ function addToCart(item,qty=1) {
   toast(amount+" × "+item.label+" added");
 }
 
+// Keep the quantity sheet entirely inside the visible viewport when Android's
+// on-screen keyboard opens, including browsers where the layout viewport does
+// not shrink along with window.visualViewport.
+let quantityViewportBound = false;
+function positionQuantityDialog() {
+  if (!els.quantityDialog.open) return;
+  const vv = window.visualViewport;
+  const visibleHeight = vv ? vv.height : window.innerHeight;
+  const visibleBottom = vv ? vv.height + vv.offsetTop : window.innerHeight;
+  const keyboardOffset = Math.max(0, Math.ceil(window.innerHeight - visibleBottom));
+  els.quantityDialog.style.setProperty("--quantity-keyboard-offset", keyboardOffset + "px");
+  els.quantityDialog.style.setProperty("--quantity-available-height", Math.max(220, Math.floor(visibleHeight - 8)) + "px");
+
+  if (document.activeElement === els.quantityInput) {
+    const rect = els.quantityInput.getBoundingClientRect();
+    if (rect.bottom > visibleBottom - 12 || rect.top < (vv?.offsetTop || 0) + 8) {
+      els.quantityInput.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" });
+    }
+  }
+}
+function focusQuantityInput() {
+  if (!els.quantityDialog.open || els.quantityInput.disabled) return;
+  // Synchronous focus from the actual price-button tap requests the Android
+  // numeric IME; delayed-only focus can be rejected as non-user initiated.
+  els.quantityInput.focus({ preventScroll: true });
+  els.quantityInput.select();
+  positionQuantityDialog();
+  requestAnimationFrame(positionQuantityDialog);
+  setTimeout(positionQuantityDialog, 130);
+  setTimeout(positionQuantityDialog, 320);
+}
+function observeQuantityKeyboard() {
+  if (quantityViewportBound) return;
+  quantityViewportBound = true;
+  window.visualViewport?.addEventListener("resize", positionQuantityDialog);
+  window.visualViewport?.addEventListener("scroll", positionQuantityDialog);
+  window.addEventListener("resize", positionQuantityDialog);
+}
 function openQuantityDialog(item) {
   state.pendingItem={...item};
   state.pendingPickupType="";
@@ -170,14 +208,10 @@ function openQuantityDialog(item) {
     ? "Choose Tumbler or Bottled Water first, then enter the quantity."
     : "Enter how many to add to this order.";
 
+  observeQuantityKeyboard();
   els.quantityDialog.showModal();
-
-  if(!needsType){
-    setTimeout(()=>{
-      els.quantityInput.focus();
-      els.quantityInput.select();
-    },80);
-  }
+  positionQuantityDialog();
+  if(!needsType) focusQuantityInput();
 }
 
 function choosePickupType(type) {
@@ -189,16 +223,16 @@ function choosePickupType(type) {
   els.quantityInput.disabled=false;
   els.addQuantityBtn.disabled=false;
   els.quantityHelp.textContent=type+" selected. Enter the quantity.";
-  setTimeout(()=>{
-    els.quantityInput.focus();
-    els.quantityInput.select();
-  },60);
+  focusQuantityInput();
 }
 
 function closeQuantityDialog() {
   state.pendingItem=null;
   state.pendingPickupType="";
+  if (document.activeElement === els.quantityInput) els.quantityInput.blur();
   els.quantityDialog.close();
+  els.quantityDialog.style.removeProperty("--quantity-keyboard-offset");
+  els.quantityDialog.style.removeProperty("--quantity-available-height");
 }
 
 function submitQuantity(event) {
