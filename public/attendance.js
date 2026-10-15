@@ -8,7 +8,7 @@ function localDay(now=new Date()){
   return new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Manila",year:"numeric",month:"2-digit",day:"2-digit"}).format(now);
 }
 function minsNow(){const parts=Object.fromEntries(new Intl.DateTimeFormat("en-GB",{timeZone:"Asia/Manila",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(new Date(now())).map(x=>[x.type,x.value]));return Number(parts.hour)*60+Number(parts.minute);}
-function timeText(ms){let n=Math.max(0,Math.floor(ms/60000));return Math.floor(n/60)+"h "+pad(n%60)+"m";}
+function timeText(ms){const seconds=Math.max(0,Math.floor(ms/1000));return Math.floor(seconds/3600)+"h "+pad(Math.floor(seconds%3600/60))+"m "+pad(seconds%60)+"s";}
 function now(){return Date.now()+clockOffset;}
 function notification(text){if("Notification"in window&&Notification.permission==="granted"&&document.hidden){new Notification("Water POS Attendance",{body:text});}}
 function inject(){
