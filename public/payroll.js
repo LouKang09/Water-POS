@@ -200,8 +200,11 @@ async function loadSaved(){
  });
 }
 function renderPrint(saved){
- const lineItems=(arr)=>{const visible=arr.filter(x=>Number(x.amount)!==0);return (visible.length?visible:[{label:"—",amount:0}]).map(x=>'<tr><td>'+e(x.label)+'</td><td class="ps-amount">'+peso(x.amount)+'</td></tr>').join("")};
  const earnings=rows("earningRows"),deductions=rows("deductionRows");
+ const tableRowCount=Math.max(4,earnings.length,deductions.length);
+ const lineItems=arr=>Array.from({length:tableRowCount},(_,i)=>{
+   const item=arr[i];return '<tr><td>'+e(item?.label||"")+'</td><td class="ps-amount">'+(item?peso(item.amount):"")+'</td></tr>';
+ }).join("");
  const sum=arr=>arr.reduce((s,x)=>s+Number(x.amount),0);
  const displayDate=date=>{
   const dt=new Date(date+"T00:00:00+08:00");
