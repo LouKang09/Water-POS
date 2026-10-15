@@ -56,7 +56,7 @@ public class MainActivity extends Activity {
     private static final String POS_START_URL = "https://water-pos-web-production.up.railway.app/pos-start.html";
     private static final String POS_HOST = "water-pos-web-production.up.railway.app";
     private static final int FILE_CHOOSER_REQUEST = 9001;
-    private static final long STARTUP_SPLASH_MS = 5000L;
+    private static final long STARTUP_SPLASH_MS = 1800L;
 
     private WebView webView;
     private ValueCallback<Uri[]> fileCallback;
@@ -83,18 +83,19 @@ public class MainActivity extends Activity {
         devicePolicyManager = (DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
         adminComponent = new ComponentName(this, KioskDeviceAdminReceiver.class);
         kioskHandler = new Handler(Looper.getMainLooper());
-        configureDedicatedKiosk();
-
-        if (isHuaweiP30Lite() && !isDedicatedKiosk()) {
-            Toast.makeText(
-                this,
-                "Full kiosk requires one-time Device Owner setup. Screen pinning is active until then.",
-                Toast.LENGTH_LONG
-            ).show();
+        // Release screen pinning and Device Owner restrictions left by old builds.
+        if (isLockTaskActive()) { try { stopLockTask(); } catch (Exception ignored) {} }
+        if (isDedicatedKiosk()) {
+            try {
+                devicePolicyManager.setStatusBarDisabled(adminComponent, false);
+                devicePolicyManager.setKeyguardDisabled(adminComponent, false);
+                devicePolicyManager.clearUserRestriction(adminComponent, UserManager.DISALLOW_SAFE_BOOT);
+                devicePolicyManager.setLockTaskPackages(adminComponent, new String[0]);
+            } catch (Exception ignored) {}
         }
 
         Window window = getWindow();
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         window.setStatusBarColor(Color.rgb(13, 107, 105));
         window.setNavigationBarColor(Color.BLACK);
         // Keep the Android Recents task icon small to avoid oversized Bitmap parceling.
@@ -106,14 +107,7 @@ public class MainActivity extends Activity {
             ));
         }
 
-        getWindow().getDecorView().setOnSystemUiVisibilityChangeListener(visibility -> {
-            if (!exitRequested && !resumeKioskAfterChooser) {
-                scheduleKioskRecovery(80);
-            }
-        });
-
         showStartupSplash(savedInstanceState);
-        enterKioskMode();
     }
 
     private int dp(float value) {
@@ -231,6 +225,7 @@ public class MainActivity extends Activity {
 
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
+        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
         settings.setDomStorageEnabled(true);
         settings.setDatabaseEnabled(true);
         settings.setAllowFileAccess(false);
@@ -241,7 +236,7 @@ public class MainActivity extends Activity {
         settings.setUseWideViewPort(true);
         settings.setMediaPlaybackRequiresUserGesture(true);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        settings.setUserAgentString(settings.getUserAgentString() + " WaterPOSAndroid/1.2.11");
+        settings.setUserAgentString(settings.getUserAgentString() + " WaterPOSAndroid/1.3.0");
 
         CookieManager cookieManager = CookieManager.getInstance();
         cookieManager.setAcceptCookie(true);
@@ -264,7 +259,6 @@ public class MainActivity extends Activity {
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 injectNativeControls();
-                enterKioskMode();
             }
         });
 
@@ -302,8 +296,6 @@ public class MainActivity extends Activity {
                     fileCallback.onReceiveValue(null);
                     fileCallback = null;
                     resumeKioskAfterChooser = false;
-                    restoreDedicatedKioskPackages();
-                    enterKioskMode();
                     return false;
                 }
             }
@@ -313,8 +305,6 @@ public class MainActivity extends Activity {
         // The gate validates the saved token first, preventing the login page from flashing
         // for an already authenticated cashier.
         webView.loadUrl(POS_START_URL);
-
-        enterKioskMode();
     }
 
     private static class WaterLoadingView extends View {
@@ -490,108 +480,17 @@ public class MainActivity extends Activity {
         } catch (Exception ignored) {}
     }
 
-    private void hideSystemUi() {
-        if (exitRequested) return;
-
-        Window window = getWindow();
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            WindowInsetsController controller = window.getInsetsController();
-            if (controller != null) {
-                controller.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
-                controller.setSystemBarsBehavior(
-                    WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                );
-            }
-        }
-
-        window.getDecorView().setSystemUiVisibility(
-            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
-            View.SYSTEM_UI_FLAG_FULLSCREEN |
-            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
-            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
-            View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
-            View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-        );
-    }
-
+    // Kiosk pinning is disabled. Camera/gallery and IME work in normal Android mode.
+    private void enterKioskMode() {}
+    private void scheduleKioskRecovery(long delayMs) {}
+    private void recoverKioskIfNeeded() {}
+    private void leaveKioskTemporarily() {}
     private int lockTaskState() {
-        ActivityManager manager = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
-        return manager == null ? ActivityManager.LOCK_TASK_MODE_NONE : manager.getLockTaskModeState();
+        ActivityManager m = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+        return m == null ? ActivityManager.LOCK_TASK_MODE_NONE : m.getLockTaskModeState();
     }
-
-    private boolean isLockTaskActive() {
-        return lockTaskState() != ActivityManager.LOCK_TASK_MODE_NONE;
-    }
-
-    private boolean isFullKioskLocked() {
-        return lockTaskState() == ActivityManager.LOCK_TASK_MODE_LOCKED;
-    }
-
-    private void requestLockTask() {
-        if (exitRequested || resumeKioskAfterChooser) return;
-
-        if (isLockTaskActive()) {
-            lockTaskObserved = true;
-            return;
-        }
-
-        // Device Owner uses true kiosk LockTask. Huawei P30 Lite uses Android
-        // screen-pinning LockTask so Home/Recents/app switching stay blocked.
-        if (!shouldUsePinnedKiosk()) return;
-
-        if (isDedicatedKiosk() || !pinningRequested || lockTaskObserved) {
-            try {
-                pinningRequested = true;
-                startLockTask();
-            } catch (Exception ignored) {}
-        }
-
-        if (isLockTaskActive()) lockTaskObserved = true;
-    }
-
-    private void enterKioskMode() {
-        if (exitRequested || resumeKioskAfterChooser) return;
-        configureDedicatedKiosk();
-        hideSystemUi();
-        requestLockTask();
-
-        // EMUI can briefly restore navigation gestures after focus/layout changes.
-        // Re-assert immersive + LockTask after the transition settles.
-        scheduleKioskRecovery(350);
-    }
-
-    private void scheduleKioskRecovery(long delayMs) {
-        if (kioskHandler == null || exitRequested || resumeKioskAfterChooser || !shouldUsePinnedKiosk()) return;
-        kioskHandler.removeCallbacks(kioskRecoveryRunnable);
-        kioskHandler.postDelayed(kioskRecoveryRunnable, delayMs);
-    }
-
-    private void recoverKioskIfNeeded() {
-        if (exitRequested || resumeKioskAfterChooser) return;
-
-        hideSystemUi();
-        configureDedicatedKiosk();
-        requestLockTask();
-
-        if (shouldUsePinnedKiosk() && !isLockTaskActive()) {
-            requestLockTask();
-            hideSystemUi();
-        }
-    }
-
-    private void leaveKioskTemporarily() {
-        if (kioskHandler != null) kioskHandler.removeCallbacks(kioskRecoveryRunnable);
-        if (isLockTaskActive()) {
-            try {
-                stopLockTask();
-            } catch (Exception ignored) {}
-        }
-        if (isHuaweiP30Lite()) {
-            pinningRequested = false;
-        }
-    }
+    private boolean isLockTaskActive() { return lockTaskState() != ActivityManager.LOCK_TASK_MODE_NONE; }
+    private boolean isFullKioskLocked() { return lockTaskState() == ActivityManager.LOCK_TASK_MODE_LOCKED; }
 
     private void injectNativeControls() {
         if (webView == null) return;
@@ -628,7 +527,7 @@ public class MainActivity extends Activity {
         public void exitApp() {
             runOnUiThread(() -> new AlertDialog.Builder(MainActivity.this)
                 .setTitle("Exit Water POS?")
-                .setMessage("This will close the POS app and release kiosk mode.")
+                .setMessage("Close Water POS? Unsynced offline sales will remain saved on this device.")
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton("Exit", (dialog, which) -> exitWaterPos())
                 .show());
@@ -726,59 +625,19 @@ public class MainActivity extends Activity {
         fileCallback = null;
         cameraUri = null;
         resumeKioskAfterChooser = false;
-        restoreDedicatedKioskPackages();
-        enterKioskMode();
+        // No kiosk recovery needed after camera/gallery.
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        if (!resumeKioskAfterChooser) {
-            restoreDedicatedKioskPackages();
-            enterKioskMode();
-            scheduleKioskRecovery(700);
-        }
+        if (webView != null) webView.onResume();
     }
 
     @Override
     protected void onPause() {
+        if (webView != null) webView.onPause();
         super.onPause();
-        if (!exitRequested && !resumeKioskAfterChooser) {
-            scheduleKioskRecovery(180);
-        }
-    }
-
-    @Override
-    protected void onStop() {
-        super.onStop();
-        if (!exitRequested && !resumeKioskAfterChooser) {
-            scheduleKioskRecovery(260);
-        }
-    }
-
-    @Override
-    protected void onUserLeaveHint() {
-        super.onUserLeaveHint();
-        if (!exitRequested && !resumeKioskAfterChooser && shouldUsePinnedKiosk()) {
-            // Huawei/EMUI Home gesture reaches this callback before the task leaves the foreground.
-            hideSystemUi();
-            requestLockTask();
-            scheduleKioskRecovery(60);
-        }
-    }
-
-    @Override
-    public void onWindowFocusChanged(boolean hasFocus) {
-        super.onWindowFocusChanged(hasFocus);
-        if (!exitRequested && !resumeKioskAfterChooser) {
-            if (hasFocus) {
-                hideSystemUi();
-                requestLockTask();
-                scheduleKioskRecovery(220);
-            } else if (shouldUsePinnedKiosk()) {
-                scheduleKioskRecovery(120);
-            }
-        }
     }
 
     @Override
@@ -792,7 +651,10 @@ public class MainActivity extends Activity {
         if (webView != null && webView.canGoBack()) {
             webView.goBack();
         } else {
-            Toast.makeText(this, "Use Exit App to close Water POS.", Toast.LENGTH_SHORT).show();
+            new AlertDialog.Builder(this).setTitle("Exit Water POS?")
+                .setMessage("Unsynced offline sales will remain on this device.")
+                .setNegativeButton("Stay", null)
+                .setPositiveButton("Exit", (dialog, which) -> exitWaterPos()).show();
         }
     }
 
