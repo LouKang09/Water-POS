@@ -197,6 +197,11 @@ function renderPrint(saved){
 }
 function init(){
  create();
+ if(typeof window.adminSectionTitle==="function" && !window.__payrollTitlePatched){
+   const originalTitle=window.adminSectionTitle;
+   window.adminSectionTitle=section=>section==="payroll"?"Payroll & Attendance":originalTitle(section);
+   window.__payrollTitlePatched=true;
+ }
  document.addEventListener("click",event=>{
   const payroll=event.target.closest('.side-nav [data-section="payroll"]');
   if(payroll&&token)setTimeout(loadAll,50);
