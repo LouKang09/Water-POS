@@ -32,6 +32,7 @@
     <span>PREPARING WATER POS</span>
   </div>
   <script>
+    if("serviceWorker" in navigator){navigator.serviceWorker.register("/sw.js").catch(()=>{});}
     (async function(){
       const key="water_pos_user_token";
       const token=localStorage.getItem(key)||"";
