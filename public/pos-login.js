@@ -159,6 +159,7 @@ $("#posLoginForm").addEventListener("submit", async event => {
         });
 
     localStorage.setItem(POS_TOKEN_KEY, result.token);
+    if(result.user)localStorage.setItem("water_pos_cached_user",JSON.stringify(result.user));
     location.replace("/");
   } catch (error) {
     $("#posLoginError").textContent = error.message;
@@ -193,8 +194,15 @@ bindPasswordVisibility();
   if (existing) {
     try {
       const res = await fetch("/api/pos/me", { headers: { Authorization: "Bearer " + existing }, cache: "no-store" });
-      if (res.ok) return location.replace("/");
-    } catch {}
+      if (res.ok){
+        const verified=await res.json();
+        localStorage.setItem("water_pos_cached_user",JSON.stringify(verified));
+        return location.replace("/");
+      }
+      if(res.status!==401)throw new Error("offline");
+    } catch {
+      if(localStorage.getItem("water_pos_cached_user"))return location.replace("/");
+    }
     localStorage.removeItem(POS_TOKEN_KEY);
   }
 
