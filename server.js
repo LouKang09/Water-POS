@@ -348,6 +348,12 @@ app.post("/api/sales", upload.single("receipt"), async (req,res,next) => {
   const client = await pool.connect();
   try {
     const paymentMethod = String(req.body.paymentMethod || "");
+    const capturedRaw = String(req.body.offlineCapturedAt || "");
+    const capturedDate = capturedRaw ? new Date(capturedRaw) : null;
+    if(capturedDate && (!Number.isFinite(capturedDate.getTime()) || capturedDate.getTime()>Date.now()+300000 || capturedDate.getTime()<Date.now()-90*86400000)){
+      return res.status(400).json({error:"Offline sale time must be within the last 90 days and not in the future."});
+    }
+    const saleTime = capturedDate || new Date();
     const clientSaleKey = String(req.body.clientSaleKey || "").trim();
     if (clientSaleKey && !/^[A-Za-z0-9_-]{20,80}$/.test(clientSaleKey)) {
       return res.status(400).json({error:"Invalid offline transaction key."});
@@ -441,9 +447,9 @@ app.post("/api/sales", upload.single("receipt"), async (req,res,next) => {
       `INSERT INTO sales (
          transaction_ref,payment_method,payment_provider,payment_reference,payment_reference_status,
          gcash_reference,delivery_room_unit,total,receipt_mime,receipt_image,
-         payment_status,was_pay_later,paid_at,client_sale_key,client_sale_user_id
+         payment_status,was_pay_later,paid_at,client_sale_key,client_sale_user_id,created_at
        )
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
        RETURNING id, transaction_ref, created_at`,
       [
         reference,
@@ -458,9 +464,10 @@ app.post("/api/sales", upload.single("receipt"), async (req,res,next) => {
         req.file?.buffer || null,
         paymentMethod === "Pay Later" ? "unpaid" : "paid",
         paymentMethod === "Pay Later",
-        paymentMethod === "Pay Later" ? null : new Date(),
+        paymentMethod === "Pay Later" ? null : saleTime,
         clientSaleKey || null,
-        req.posUser?.id || null
+        req.posUser?.id || null,
+        saleTime
       ]
     );
 
