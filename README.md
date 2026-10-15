@@ -38,3 +38,22 @@ Mobile-first point-of-sale web application for a water refilling business, with 
 6. Admin: http://localhost:3000/admin.html
 
 Database tables are created automatically on startup.
+
+## Employee attendance and payroll (October 2026)
+
+**POS app**: Signed-in employee accounts show a Time In / Time Out card. Time In is an explicit action; signing out, refreshing or switching apps does not time out a shift. Start Lunch pauses paid work time; End Lunch resumes. An attempted clock-out before 6:00 PM or before 8 paid work hours requires confirmation, and an early time-out can be resumed on the same day with **Continue Shift**. Reopened time-out gaps are excluded from paid time.
+
+The app shows a live attendance timer and two in-app reminders: 45 minutes into lunch, and at 5:45 PM if the employee has not clocked out. Reminders run while the POS page remains active; they are **not guaranteed background push notifications** if an Android device suspends or closes the app.
+
+**Admin > Payroll & Attendance**: Create employee accounts or select an existing POS employee. Set each employee's payroll name and daily wage (default ₱582). Cutoff periods are 1–15 and 16–last calendar day (February automatically uses 28 or 29). Review daily time records, lateness, lunch and unfinished shifts. An admin can close a missed shift with a mandatory reason; past-day default clock-out is 6 PM Philippine time and the time is adjustable if needed.
+
+**Automatic draft payroll policy**:
+- Scheduled shift 9:00 AM–6:00 PM, one-hour unpaid lunch, eight paid hours.
+- Base completed day: employee-specific daily wage (default ₱582 ÷ 8 = ₱72.75/hour).
+- Lateness from 9 AM through 9:29 AM carries no automatic lateness deduction; starting at 9:30 AM actual late minutes are deductible.
+- Clock-outs before 6 PM, lunch over 60 minutes, and time-out gaps when a shift is resumed generate unpaid minutes.
+- Automatic deductions for a single day cannot exceed that day's daily wage.
+- Missing/unclosed shifts are excluded from calculated wages until completed or administratively resolved.
+- Draft figures are for review. Overtime, statutory contributions, special holidays, leave, and other employment-law-specific payroll treatments are **not automated** in this release; add or adjust them in the editable payslip.
+
+The editable payslip has employee name, pay period label, pay date (today in Philippine time by default), earnings and deduction rows, and net pay. **Save Payslip** allocates an incrementing payslip number starting at 46; editing the same employee/period keeps its existing number. The admin can change the next unused number. **Save & Print Payslip** renders an A4 two-column earnings/deductions format with signature lines.
