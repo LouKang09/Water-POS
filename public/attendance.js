@@ -3,11 +3,11 @@
 const $=s=>document.querySelector(s);
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const pad=n=>String(n).padStart(2,"0");
-let shift=null,clockOffset=0,lastReminder="",lunchReminder="",processing=false;
+let shift=null,clockOffset=0,lastSyncAt=Date.now(),lastReminder="",lunchReminder="",processing=false;
 function localDay(now=new Date()){
   return new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Manila",year:"numeric",month:"2-digit",day:"2-digit"}).format(now);
 }
-function minsNow(){const parts=Object.fromEntries(new Intl.DateTimeFormat("en-GB",{timeZone:"Asia/Manila",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(new Date()).map(x=>[x.type,x.value]));return Number(parts.hour)*60+Number(parts.minute);}
+function minsNow(){const parts=Object.fromEntries(new Intl.DateTimeFormat("en-GB",{timeZone:"Asia/Manila",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(new Date(now())).map(x=>[x.type,x.value]));return Number(parts.hour)*60+Number(parts.minute);}
 function timeText(ms){let n=Math.max(0,Math.floor(ms/60000));return Math.floor(n/60)+"h "+pad(n%60)+"m";}
 function now(){return Date.now()+clockOffset;}
 function notification(text){if("Notification"in window&&Notification.permission==="granted"&&document.hidden){new Notification("Water POS Attendance",{body:text});}}
@@ -49,7 +49,8 @@ function render(){
  const ended=shift?.clockOut?Date.parse(shift.clockOut):now();
  const elapsed=shift?Math.max(0,ended-started):0;
  const liveLunch=shift?.state==="lunch"?Math.max(0,now()-Date.parse(shift.lunchStartedAt||shift.clockIn)):0;
- const activePaid=shift?Math.max(0,elapsed-(shift.lunchMinutes||0)*60000-(shift.pausedMinutes||0)*60000):0;
+ const liveLunchSinceSync=shift?.state==="lunch"?Math.max(0,now()-lastSyncAt):0;
+ const activePaid=shift?Math.max(0,elapsed-(shift.lunchMinutes||0)*60000-(shift.pausedMinutes||0)*60000-liveLunchSinceSync):0;
  $("#attendanceTimer").textContent=timeText(activePaid);
  $("#attendanceClockLabel").textContent=state==="lunch"?"Lunch break":state==="out"?"Today's total":"Recorded working time";
  $("#attendanceBreak").textContent=state==="lunch"?"Lunch elapsed: "+timeText(liveLunch):"Lunch taken: "+timeText((shift?.lunchMinutes||0)*60000)+" · Unpaid";
@@ -61,6 +62,7 @@ async function load(){
    const r=await fetch("/api/pos/attendance",{cache:"no-store"});
    const data=await r.json();if(!r.ok)throw new Error(data.error||"Unable to load attendance.");
    clockOffset=Date.parse(data.serverNow)-Date.now();
+   lastSyncAt=Date.parse(data.serverNow);
    shift=data.shift;$("#attendanceNotice").textContent="Time is saved securely. Logging out does not end your shift.";render();
  }catch(e){if($("#attendanceNotice"))$("#attendanceNotice").textContent=e.message;}
 }
@@ -69,7 +71,7 @@ function warning(title,message,confirmAction){
  $("#attendanceWarningText").textContent=message;
  $("#attendanceWarningConfirm").hidden=!confirmAction;
  $("#attendanceWarningKeep").textContent=confirmAction?"Continue Working":"OK";
- $("#attendanceWarning").showModal();
+ if(!$("#attendanceWarning").open)$("#attendanceWarning").showModal();
 }
 async function action(type,confirmEarly=false){
  if(processing)return;
@@ -80,7 +82,7 @@ async function action(type,confirmEarly=false){
    const data=await response.json();
    if(response.status===409&&data.needsConfirmation){warning("Early Time Out Warning",data.error,true);return;}
    if(!response.ok)throw new Error(data.error||"Could not save attendance.");
-   shift=data.shift;
+   lastSyncAt=now();shift=data.shift;
    $("#attendanceNotice").textContent=type==="time-out"?"Time out saved. Use Continue Shift if you ended too early.":type==="continue"?"Shift resumed. Your earlier time-out gap is excluded.":"Attendance saved successfully.";
    render();
  }catch(e){$("#attendanceNotice").textContent=e.message;}
