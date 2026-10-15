@@ -998,6 +998,12 @@ async function scanReceipt(file,{sourceType="upload"}={}) {
   els.gcashReference.readOnly=true;
 
   const provider=selectedProvider();
+  if(file && !navigator.onLine){
+    state.ocrInProgress=false;
+    allowUnreadableReceipt("Offline: receipt saved on device for later admin review.");
+    updatePaymentButtonState();
+    return;
+  }
   els.gcashRefHelp.textContent="Looking for "+providerReferenceHint(provider)+" on the receipt photo.";
   updatePaymentButtonState();
 
@@ -1166,13 +1172,29 @@ async function submitSale() {
   }
 
   try{
-    const endpoint=settling ? "/api/pos/unpaid/"+state.settlingUnpaidId+"/settle" : "/api/sales";
-    const res=await fetch(endpoint,{method:"POST",body:fd});
-    const data=await res.json();
-    if(!res.ok) throw new Error(data.error||"Unable to save transaction.");
+    let data;
+    let pendingSync=false;
+    if(settling){
+      if(!navigator.onLine)throw new Error("Settling previous unpaid sales requires internet. New sales can still be recorded offline.");
+      const res=await fetch("/api/pos/unpaid/"+state.settlingUnpaidId+"/settle",{method:"POST",body:fd});
+      data=await res.json();
+      if(!res.ok)throw new Error(data.error||"Unable to settle transaction.");
+    }else{
+      // Persist before network access so an interrupted upload cannot lose a sale.
+      if(!window.waterOffline)throw new Error("Offline sales storage is not ready. Reopen Water POS.");
+      const entry=await window.waterOffline.queueSale(fd);
+      const outcome=navigator.onLine?await window.waterOffline.sync():{online:false,confirmed:{}};
+      pendingSync=(await window.waterOffline.all()).some(item=>item.key===entry.key);
+      data=outcome.confirmed?.[entry.key]||{
+        transactionRef:"LOCAL-"+entry.key.slice(-8).toUpperCase(),total:entry.total
+      };
+    }
     els.paymentDialog.close();
 
-    if(settling){
+    if(pendingSync){
+      els.successEyebrow.textContent="PENDING SYNC · SAVED ONLY ON DEVICE";
+      els.successTitle.textContent="Offline sale recorded";
+    }else if(settling){
       els.successEyebrow.textContent="UNPAID TRANSACTION SETTLED";
       els.successTitle.textContent="Payment complete";
       state.settlingUnpaidId=null;
@@ -1187,7 +1209,9 @@ async function submitSale() {
       els.successTitle.textContent="Payment complete";
     }
 
-    els.successRef.textContent=data.transactionRef;
+    els.successRef.textContent=pendingSync
+      ? data.transactionRef+" · Will upload automatically when online"
+      : data.transactionRef;
     els.successTotal.textContent=money(data.total);
     els.successDialog.showModal();
   }catch(e){
@@ -1403,8 +1427,13 @@ els.refreshOnlineQueue.addEventListener("click",()=>loadOnlineQueue());
 (async function init(){
   try {
     const res=await fetch("/api/used-products");
-    if(res.ok) state.usedProducts=await res.json();
-  } catch {}
+    if(res.ok){
+      state.usedProducts=await res.json();
+      localStorage.setItem("water_pos_used_products",JSON.stringify(state.usedProducts));
+    }
+  } catch {
+    try{state.usedProducts=JSON.parse(localStorage.getItem("water_pos_used_products")||"[]");}catch{}
+  }
   renderProducts();
   renderCart();
   loadOnlineQueue({quiet:true});
