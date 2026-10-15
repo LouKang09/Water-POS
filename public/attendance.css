@@ -1,0 +1,27 @@
+.attendance-widget{border:1px solid #a6d9d1;background:linear-gradient(135deg,#f0fbf7 0%,#fff 70%);border-radius:20px;padding:19px 20px;margin:0 0 16px;box-shadow:0 8px 28px rgba(13,107,105,.08);color:#173c40}
+.attendance-title{display:flex;justify-content:space-between;align-items:flex-start;gap:18px}
+.attendance-title h2{font-size:1.23rem;letter-spacing:-.02em;margin:2px 0 5px}
+.attendance-title p{margin:0;font-size:.8rem;color:#507177}
+.attendance-eyebrow{letter-spacing:.13em;font-size:.63rem;font-weight:800;color:#148377}
+.attendance-clock{display:grid;text-align:right;min-width:140px}
+.attendance-clock strong{font-size:1.4rem;letter-spacing:-.025em;font-variant-numeric:tabular-nums}
+.attendance-clock small{font-size:.69rem;color:#57777d}
+.attendance-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:15px}
+.attendance-actions button{padding:11px 17px;font-size:.84rem;font-weight:750;border-radius:11px;cursor:pointer;min-height:42px;border:1px solid transparent}
+.attendance-actions button[hidden],.attendance-warning button[hidden]{display:none!important}
+.attendance-primary{background:#087b70;color:white!important}
+.attendance-secondary{border-color:#8cbfb6!important;background:#fff;color:#155951!important}
+.attendance-danger{background:#fff5ef!important;border-color:#eccdb8!important;color:#a44523!important}
+#attendanceNotice{font-size:.74rem;line-height:1.45;color:#55747a;margin:10px 0 0}
+.attendance-warning{border:0;border-radius:19px;max-width:min(440px,calc(100vw - 36px));padding:0;box-shadow:0 24px 90px #0005}
+.attendance-warning::backdrop{background:rgba(5,22,28,.58)}
+.attendance-warning-card{background:#fff;padding:25px;color:#243e43}
+.attendance-warning h2{font-size:1.2rem;margin:7px 0}
+.attendance-warning p:not(.attendance-eyebrow){font-size:.91rem;line-height:1.6;color:#5d6e72}
+.attendance-warning-buttons{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:18px}
+.attendance-warning-buttons button{padding:11px 14px;border-radius:10px;border:1px solid #ccc;font-weight:700;cursor:pointer}
+html[data-pos-theme="dark"] .attendance-widget{background:linear-gradient(135deg,#173d47,#162e3c);border-color:#3e6e73;color:#d8f5ee}
+html[data-pos-theme="dark"] .attendance-title p,html[data-pos-theme="dark"] #attendanceNotice,html[data-pos-theme="dark"] .attendance-clock small{color:#a4c9c9}
+html[data-pos-theme="dark"] .attendance-secondary{background:#193d49;color:#e3fffb!important;border-color:#4d8588!important}
+html[data-pos-theme="dark"] .attendance-danger{background:#51392f!important;color:#ffd2c2!important;border-color:#886354!important}
+@media(max-width:640px){.attendance-widget{padding:15px;margin:0 0 14px;border-radius:16px}.attendance-title{gap:8px}.attendance-title h2{font-size:1.07rem}.attendance-clock{min-width:110px}.attendance-clock strong{font-size:1.22rem}.attendance-clock small{font-size:.61rem}.attendance-actions button{flex:1 1 42%;padding:10px 8px} }
