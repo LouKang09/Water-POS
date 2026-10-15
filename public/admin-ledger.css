@@ -1,3 +1,20 @@
+/* Interactive Series sort; default order is newest/highest series first. */
+.ledger-series-sort{
+  display:inline-flex;align-items:center;justify-content:flex-start;gap:7px;
+  border:0;background:transparent;color:inherit;font:inherit;font-weight:800;
+  padding:5px 6px;margin:-5px -6px;border-radius:7px;white-space:nowrap;
+  cursor:pointer;touch-action:manipulation;
+}
+.ledger-series-sort:hover{background:rgba(13,107,105,.09)}
+.ledger-series-sort:focus-visible{outline:2px solid var(--brand,#0d6b69);outline-offset:2px}
+.ledger-series-sort-arrow{
+  display:inline-grid;place-items:center;width:20px;height:20px;
+  border-radius:6px;background:rgba(13,107,105,.10);
+  color:var(--brand,#0d6b69);font-size:1.05em;line-height:1;
+}
+html[data-pos-theme="dark"] .ledger-series-sort:hover{background:rgba(156,223,207,.13)}
+html[data-pos-theme="dark"] .ledger-series-sort-arrow{background:rgba(156,223,207,.14);color:#8ee3d0}
+
 .ledger-series{
   font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
   font-weight:850;
