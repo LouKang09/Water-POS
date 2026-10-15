@@ -336,6 +336,10 @@ async function validatedItems(items) {
 }
 
 app.get("/api/health", (req,res) => res.json({ ok:true }));
+// Offline clients must verify the deduplicating server version before syncing.
+app.get("/api/pos/offline-capabilities", (req,res) => res.json({
+  idempotentSales:true, originalSaleTimestamp:true, version:1
+}));
 
 app.get("/api/used-products", async (req,res,next) => {
   try {
