@@ -1,0 +1,14 @@
+.offline-pos-status{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:9px;margin:0 0 12px;padding:12px 15px;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:15px;box-shadow:0 4px 14px rgba(12,55,52,.05)}
+.offline-pos-summary{display:flex;align-items:center;gap:9px;min-width:0}.offline-pos-summary strong{display:block;font-size:.82rem}.offline-pos-summary small{display:block;font-size:.66rem;color:var(--muted);line-height:1.45}
+.offline-pos-dot{display:inline-block;width:11px;height:11px;border-radius:50%;flex:0 0 auto;background:#33b86e;box-shadow:0 0 0 3px #33b86e25}
+.offline-pos-dot.offline{background:#d28c2b;box-shadow:0 0 0 3px #d28c2b20}.offline-pos-dot.warning{background:#c24e4e;box-shadow:0 0 0 3px #c24e4e20}
+.offline-pos-actions{display:flex;gap:7px}.offline-pos-actions button,.offline-pending-controls button{min-height:34px;padding:7px 10px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2);font-size:.74rem;font-weight:760;color:var(--ink)}
+.offline-pos-actions button:last-child{background:var(--brand);color:#fff;border-color:var(--brand)}
+.offline-pos-actions button:disabled{opacity:.5}
+.offline-pos-details{flex:1 0 100%;padding-top:9px;border-top:1px solid var(--line);max-height:310px;overflow:auto}
+.offline-pos-details[hidden]{display:none}
+.offline-pending-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 2px;border-bottom:1px solid var(--line);font-size:.76rem}
+.offline-pending-row small{display:block;margin-top:4px;font-size:.65rem;color:var(--muted);line-height:1.5}
+.offline-pending-controls{display:flex;gap:5px}.offline-pending-controls button:last-child{color:#b64646}
+@media(max-width:560px){.offline-pos-status{padding:10px}.offline-pos-summary{flex:1 1 190px}.offline-pos-actions{flex:1 0 auto;justify-content:flex-end}.offline-pos-actions button{font-size:.68rem;padding:7px 8px}}
+html[data-pos-theme="dark"] .offline-pos-actions button:last-child{color:#082b2a}
