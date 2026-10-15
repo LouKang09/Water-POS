@@ -537,8 +537,10 @@ function bindAdminEnhancements() {
       toast((method === "Pay Later" ? "Historical unpaid transaction saved · " : "Historical transaction saved · ") + result.transaction_ref);
       document.querySelector("#manualPaymentReference").value = "";
       document.querySelector("#manualRoomUnit").value = "";
-      document.querySelector("#manualItemList").innerHTML = "";
-      addManualItemRow();
+      // Keep the line-item selections intact after a successful save. Rebuilding
+      // the list resets Pick-Up ₱40 (or Delivery ₱35/₱45) to Delivery ₱25.
+      // The next historical entry may reuse its current category, label, price
+      // and quantity; only transaction-specific room/reference fields are cleared.
       await Promise.all([loadSummary(), loadTrend(), loadSales()]);
       markAdminRefreshed();
     } catch (error) {
