@@ -228,8 +228,15 @@ function attendanceRoutes(app){
      const outMinute=s.clock_out?manilaParts(new Date(s.clock_out)).mins:null;
      const early=completed?Math.max(0,SHIFT_END_MIN-outMinute):0;
      const lunchOver=completed?Math.max(0,view.lunchMinutes-LUNCH_MIN):0;
-     if(completed){daysPaid++;lateMinutes+=lateCharged;earlyMinutes+=early;extraLunchMinutes+=lunchOver;pausedMinutes+=view.pausedMinutes;}else pending++;
-     results.push({date:dayString(s.work_day),completed,paidWorkMinutes:view.paidWorkMinutes,lateMinutes:late,lateDeductedMinutes:completed?lateCharged:0,earlyMinutes:early,lunchMinutes:view.lunchMinutes,extraLunchMinutes:lunchOver,pausedMinutes:view.pausedMinutes,state:s.state});
+     // Charge at most 8 paid hours per day. An extremely short shift must
+     // never generate a negative wage or duplicate the same missing time.
+     let remaining=480;
+     const chargedLate=completed?Math.min(remaining,lateCharged):0;remaining-=chargedLate;
+     const chargedEarly=completed?Math.min(remaining,early):0;remaining-=chargedEarly;
+     const chargedLunch=completed?Math.min(remaining,lunchOver):0;remaining-=chargedLunch;
+     const chargedPause=completed?Math.min(remaining,view.pausedMinutes):0;
+     if(completed){daysPaid++;lateMinutes+=chargedLate;earlyMinutes+=chargedEarly;extraLunchMinutes+=chargedLunch;pausedMinutes+=chargedPause;}else pending++;
+     results.push({date:dayString(s.work_day),completed,paidWorkMinutes:view.paidWorkMinutes,lateMinutes:late,lateDeductedMinutes:chargedLate,earlyMinutes:early,lunchMinutes:view.lunchMinutes,extraLunchMinutes:lunchOver,pausedMinutes:view.pausedMinutes,state:s.state});
    }
    const perMin=rate/480;
    const gross=money(daysPaid*rate);
