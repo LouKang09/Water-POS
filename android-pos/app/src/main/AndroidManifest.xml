@@ -32,9 +32,10 @@
             android:screenOrientation="portrait"
             android:excludeFromRecents="false"
             android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize"
             android:alwaysRetainTaskState="true"
-            android:immersive="true"
-            android:lockTaskMode="if_whitelisted"
+            android:immersive="false"
+            android:lockTaskMode="normal"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|uiMode">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
