@@ -1176,3 +1176,34 @@ th{color:var(--muted);font-size:.68rem;text-transform:uppercase;letter-spacing:.
 @media(prefers-reduced-motion:reduce){
   .admin-page .trend-series-toggle{transition:none}
 }
+
+/* Quantity bottom sheet follows the actual visual viewport above Android IME. */
+@media (max-width:767px){
+  .quantity-dialog[open]{
+    position:fixed!important;
+    inset:auto 0 var(--quantity-keyboard-offset,0px) 0!important;
+    margin:0!important;
+    width:100%!important;
+    max-width:100%!important;
+    height:auto!important;
+    max-height:var(--quantity-available-height,92dvh)!important;
+    overflow-y:auto!important;
+    overscroll-behavior:contain;
+    scroll-padding-bottom:12px;
+    background:transparent;
+  }
+  .quantity-dialog[open] .quantity-sheet{
+    max-height:none;
+    width:100%;
+    padding:16px max(14px,env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left));
+    border-radius:22px 22px 0 0;
+  }
+  .quantity-dialog[open] .quantity-field input{
+    font-size:2rem;
+    min-height:62px;
+    scroll-margin-bottom:14px;
+    caret-color:var(--brand);
+  }
+  .quantity-dialog[open] .dialog-header{position:static;margin-bottom:10px}
+  .quantity-dialog[open] .quantity-field{margin-bottom:10px}
+}
