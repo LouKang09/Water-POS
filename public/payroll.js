@@ -44,7 +44,7 @@ function create(){
   <div class="panel payroll-editor"><div class="payroll-section-head"><div><h3>Editable Payslip</h3><p>Every label, amount, name, and date can be adjusted before printing.</p></div><span class="payroll-no-label">Payslip no. <strong id="payrollNo">46</strong></span></div>
    <div class="payroll-form-grid"><label><span>Employee Name on Slip</span><input id="slipEmployee" maxlength="120"></label><label><span>Pay Period Label</span><input id="slipPeriod" maxlength="120"></label><label><span>Pay Date</span><input id="slipDate" type="date"></label><label><span>Notes (internal)</span><input id="slipNotes" maxlength="500" placeholder="Optional"></label></div>
    <div class="payroll-tables"><div class="payroll-column"><div class="payroll-column-head"><h4>Earnings</h4><button type="button" id="addEarning">+ Add</button></div><div id="earningRows" class="payroll-rows"></div><div class="payroll-subtotal">Total Earnings <strong id="earningTotal">₱ 0.00</strong></div></div>
-   <div class="payroll-column"><div class="payroll-column-head"><h4>Deductions</h4><button type="button" id="addDeduction">+ Add</button></div><div id="deductionRows" class="payroll-rows"></div><div class="payroll-subtotal">Total Deductions <strong id="deductionTotal">₱ 0.00</strong></div></div></div>
+   <div class="payroll-column"><div class="payroll-column-head"><h4>Deductions</h4><div class="payroll-deduction-actions"><button type="button" id="resetDeductions" title="Restore standard attendance-based deductions">Reset</button><button type="button" id="addDeduction">+ Add</button></div></div><div id="deductionRows" class="payroll-rows"></div><div class="payroll-subtotal">Total Deductions <strong id="deductionTotal">₱ 0.00</strong></div></div></div>
    <div class="payroll-bottom"><div class="payroll-net">Net Pay <strong id="netPay">₱ 0.00</strong></div><div class="payroll-buttons"><button id="savePayslip" type="button" class="small-button">Save Payslip</button><button id="printPayslip" type="button" class="primary-button">Save & Print Payslip</button></div></div><p id="payrollMessage" aria-live="polite"></p>
   </div>
   <div class="panel"><div class="payroll-section-head"><h3>Saved Payslips</h3><span>Numbers assigned only when saved</span></div><div id="payrollSaved" class="payroll-saved"></div></div>
@@ -60,6 +60,7 @@ function create(){
  q("#payrollCreateEmployee").onsubmit=createEmployee;
  q("#addEarning").onclick=()=>addRow("earningRows",{label:"Additional Earning",amount:0});
  q("#addDeduction").onclick=()=>addRow("deductionRows",{label:"Other Deduction",amount:0});
+ q("#resetDeductions").onclick=resetDeductionRows;
  q("#savePayslip").onclick=()=>savePayslip(false);
  q("#printPayslip").onclick=()=>savePayslip(true);
  q("#savePayrollNext").onclick=saveStartNo;
@@ -77,6 +78,16 @@ function addRow(holder,item){
  row.querySelector("button").onclick=()=>{row.remove();totals();};
  row.querySelectorAll("input").forEach(i=>i.addEventListener("input",totals));
  q("#"+holder).appendChild(row);totals();
+}
+function resetDeductionRows(){
+ if(!lastPreview){toast("Choose an employee and payroll period first.");return;}
+ const defaults=lastPreview.deductions||[];
+ if(!window.confirm("Restore all standard, automatically calculated deduction rows?\n\nThis replaces the deductions currently in the editor, including any manually added rows. It will not change the saved payslip until you save."))return;
+ const container=q("#deductionRows");
+ container.replaceChildren();
+ defaults.forEach(item=>addRow("deductionRows",item));
+ totals();
+ q("#payrollMessage").textContent="Standard deduction rows restored. Review the amounts, then save to apply changes.";
 }
 function rows(holder){
  return [...q("#"+holder).querySelectorAll(".payroll-item")].map(r=>({label:r.querySelector(".payroll-item-label").value.trim(),amount:Number(r.querySelector(".payroll-item-amount").value)})).filter(x=>x.label||x.amount);
