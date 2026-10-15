@@ -1,6 +1,7 @@
 const ledgerMoney = value => "₱" + Number(value || 0).toLocaleString("en-PH", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 const ledgerEscape = value => String(value ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[ch]));
 let ledgerSeriesMap = new Map();
+let ledgerSeriesSortDirection = "desc";
 let ledgerEditCountMap = new Map();
 let ledgerSalesFilter = "all";
 let ledgerSalesDateMode = "main";
@@ -200,7 +201,8 @@ function ensureLedgerAdminUi() {
   if (salesHead && !salesHead.querySelector('[data-ledger-series="true"]')) {
     const series = document.createElement("th");
     series.dataset.ledgerSeries = "true";
-    series.textContent = "Series";
+    series.setAttribute("aria-sort", "descending");
+    series.innerHTML = '<button type="button" id="sortSalesSeries" class="ledger-series-sort" aria-label="Sort series ascending" title="Currently descending · click for ascending">Series <span class="ledger-series-sort-arrow" aria-hidden="true">↓</span></button>';
     salesHead.insertBefore(series, salesHead.firstElementChild);
     const select = document.createElement("th");
     select.dataset.ledgerSelect = "true";
@@ -312,6 +314,37 @@ function clearSalesSelection() {
 
 function visibleSalesRows() {
   return [...document.querySelectorAll("#salesBody tr[data-sale-id]")].filter(row => !row.hidden);
+}
+
+// Sort the full date-filtered sales set by numeric display series, not by the
+// transaction date, so sorting also works for manually backdated records.
+function sortSalesBySeries() {
+  const body = document.querySelector("#salesBody");
+  if (!body) return;
+  const rows = [...body.querySelectorAll("tr[data-sale-id]")];
+  if (rows.length) {
+    const direction = ledgerSeriesSortDirection === "asc" ? 1 : -1;
+    rows.sort((a,b) => {
+      const av = Number(ledgerSeriesMap.get(a.dataset.saleId));
+      const bv = Number(ledgerSeriesMap.get(b.dataset.saleId));
+      const aValid = Number.isFinite(av) && av > 0;
+      const bValid = Number.isFinite(bv) && bv > 0;
+      if (aValid !== bValid) return aValid ? -1 : 1;
+      if (!aValid) return Number(b.dataset.saleId) - Number(a.dataset.saleId);
+      return direction * (av - bv) || direction * (Number(a.dataset.saleId) - Number(b.dataset.saleId));
+    });
+    // Appending existing rows retains their listeners, state and checkbox values.
+    body.append(...rows);
+  }
+  const header = document.querySelector('th[data-ledger-series="true"]');
+  if (header) header.setAttribute("aria-sort", ledgerSeriesSortDirection === "asc" ? "ascending" : "descending");
+  const button = document.querySelector("#sortSalesSeries");
+  if (button) {
+    const ascending = ledgerSeriesSortDirection === "asc";
+    button.querySelector(".ledger-series-sort-arrow").textContent = ascending ? "↑" : "↓";
+    button.setAttribute("aria-label", "Sort series " + (ascending ? "descending" : "ascending"));
+    button.title = "Currently " + (ascending ? "ascending" : "descending") + " · click for " + (ascending ? "descending" : "ascending");
+  }
 }
 
 function updateSalesSelectionUi() {
@@ -445,6 +478,7 @@ async function refreshSeriesAndEditButtons(qs = ledgerSalesQueryDates()) {
     document.querySelectorAll(".ledger-edit-button").forEach(button => button.addEventListener("click", () => openSaleEdit(button.dataset.id)));
     document.querySelectorAll(".ledger-history-button").forEach(button => button.addEventListener("click", () => openSaleHistory(button.dataset.id)));
     document.querySelectorAll(".ledger-delete-button").forEach(button => button.addEventListener("click", () => deleteSaleTransaction(button.dataset.id)));
+    sortSalesBySeries();
     applySalesTransactionFilter();
   } catch (error) {
     console.warn("Unable to load sales series", error);
@@ -878,6 +912,11 @@ function bindLedgerUi() {
       await loadSales();
       if (typeof markAdminRefreshed === "function") markAdminRefreshed();
     } catch (error) { toast(error.message); }
+  });
+
+  document.querySelector("#sortSalesSeries")?.addEventListener("click", () => {
+    ledgerSeriesSortDirection = ledgerSeriesSortDirection === "desc" ? "asc" : "desc";
+    sortSalesBySeries();
   });
 
   document.querySelector("#selectAllSales")?.addEventListener("change", event => {
