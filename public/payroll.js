@@ -32,6 +32,13 @@ function create(){
     <button type="button" id="payrollSaveRate" class="small-button">Save Employee Rate</button>
    </div><p class="payroll-help">Default rate: ₱582 per 8 paid hours. Late deduction starts at 30 minutes after 9 AM. One hour of lunch is unpaid; lunch over 60 minutes may be deducted.</p>
   </div>
+  <details class="panel payroll-enroll"><summary><strong>+ Add Employee</strong><span>Give a new staff member an account for Time In / Time Out</span></summary><form id="payrollCreateEmployee" class="payroll-form-grid">
+    <label><span>Employee Full Name</span><input id="payrollNewName" required maxlength="120" placeholder="Employee name"></label>
+    <label><span>Login Email</span><input id="payrollNewEmail" type="email" required placeholder="employee@example.com"></label>
+    <label><span>Initial Password</span><input id="payrollNewPassword" type="password" required minlength="8" placeholder="At least 8 characters"></label>
+    <label><span>Daily Wage (₱)</span><input id="payrollNewRate" type="number" min="0" step="0.01" required value="582"></label>
+    <button type="submit" class="primary-button">Create Employee Account</button>
+   </form><p class="payroll-help">The employee signs into the existing Water POS app using this email and password. The employee can change the password inside the app.</p></details>
   <div class="payroll-stats" id="payrollStats"></div>
   <div class="panel payroll-attendance"><div class="payroll-section-head"><div><h3>Daily Time Records (DTR)</h3><p>Live attendance history, including breaks and pending time-outs.</p></div></div><div class="payroll-table-scroll"><table><thead><tr><th>Date</th><th>Status</th><th>Worked</th><th>Late</th><th>Lunch</th><th>Early Out</th></tr></thead><tbody id="payrollDays"></tbody></table></div><p id="payrollAttendanceInfo"></p><div id="payrollAdminClose" class="payroll-admin-close"></div></div>
   <div class="panel payroll-editor"><div class="payroll-section-head"><div><h3>Editable Payslip</h3><p>Every label, amount, name, and date can be adjusted before printing.</p></div><span class="payroll-no-label">Payslip no. <strong id="payrollNo">46</strong></span></div>
@@ -50,6 +57,7 @@ function create(){
  for(const key of ["payrollEmployee","payrollYear","payrollMonth","payrollHalf"])q("#"+key).addEventListener("change",loadPreview);
  q("#payrollReload").onclick=loadPreview;
  q("#payrollSaveRate").onclick=saveRate;
+ q("#payrollCreateEmployee").onsubmit=createEmployee;
  q("#addEarning").onclick=()=>addRow("earningRows",{label:"Additional Earning",amount:0});
  q("#addDeduction").onclick=()=>addRow("deductionRows",{label:"Other Deduction",amount:0});
  q("#savePayslip").onclick=()=>savePayslip(false);
@@ -134,6 +142,23 @@ async function closeShift(id){
   await api("/api/admin/payroll/attendance/"+id+"/close",{method:"POST",body:{reason,clockOutAt:time||undefined}});
   toast("Admin time-out recorded.");await loadPreview();
  }catch(ex){toast(ex.message);}
+}
+async function createEmployee(event){
+ event.preventDefault();
+ const button=q("#payrollCreateEmployee button[type=submit]");button.disabled=true;
+ try{
+  const data=await api("/api/admin/payroll/employees",{method:"POST",body:{
+    name:q("#payrollNewName").value,email:q("#payrollNewEmail").value,
+    password:q("#payrollNewPassword").value,dailyWage:q("#payrollNewRate").value
+  }});
+  await loadEmployees();
+  q("#payrollEmployee").value=data.id;
+  q("#payrollCreateEmployee").reset();
+  q(".payroll-enroll").open=false;
+  toast("Employee account created. Staff may now sign in and record attendance.");
+  await loadPreview();
+ }catch(err){toast(err.message);}
+ finally{button.disabled=false;}
 }
 async function saveRate(){
  const id=getParams().employeeId;
