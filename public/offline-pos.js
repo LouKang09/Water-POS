@@ -74,6 +74,18 @@ async function sync(){
  if(!owner)return {online:false,synced:0,pending:0,error:"No employee account."};
  syncing=true;let synced=0,online=true;const confirmed={};lastError="";
  try{
+  // Never send a queued sale to a server version without deduplication.
+  const capabilityController=new AbortController();
+  const capabilityTimeout=setTimeout(()=>capabilityController.abort(),9000);
+  let capability;
+  try{
+    const res=await fetch("/api/pos/offline-capabilities",{cache:"no-store",signal:capabilityController.signal});
+    if(res.ok)capability=await res.json();
+  }finally{clearTimeout(capabilityTimeout);}
+  if(!capability?.idempotentSales){
+    lastError="Waiting for offline-compatible server. Your local sales remain safe.";
+    return {online:false,synced:0,pending:(await all()).filter(x=>x.owner===owner).length,error:lastError};
+  }
   const list=(await all()).filter(x=>x.owner===owner).sort((a,b)=>a.createdAt.localeCompare(b.createdAt));
   for(const entry of list){
    if(entry.state==="review")continue;
@@ -100,6 +112,8 @@ async function sync(){
    await put(entry);
    lastError="Some sales require review before syncing.";
   }
+ }catch(error){
+  online=false;lastError="Offline sync server not reachable. Transactions remain saved locally.";
  }finally{syncing=false;void updateBanner();}
  return {online,synced,confirmed,pending:(await all()).filter(x=>x.owner===owner).length,error:lastError};
 }
