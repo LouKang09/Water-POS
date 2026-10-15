@@ -119,6 +119,9 @@ async function initDb() {
     CREATE INDEX IF NOT EXISTS delivery_queue_status_created_idx
       ON delivery_queue(status, created_at);
 
+    ALTER TABLE sales ADD COLUMN IF NOT EXISTS client_sale_key TEXT;
+    ALTER TABLE sales ADD COLUMN IF NOT EXISTS client_sale_user_id INTEGER;
+    CREATE UNIQUE INDEX IF NOT EXISTS sales_client_sale_key_uniq ON sales(client_sale_key);
     ALTER TABLE sales ADD COLUMN IF NOT EXISTS payment_provider TEXT;
     ALTER TABLE sales ADD COLUMN IF NOT EXISTS payment_reference TEXT;
     ALTER TABLE sales ADD COLUMN IF NOT EXISTS payment_reference_status TEXT;
@@ -345,6 +348,10 @@ app.post("/api/sales", upload.single("receipt"), async (req,res,next) => {
   const client = await pool.connect();
   try {
     const paymentMethod = String(req.body.paymentMethod || "");
+    const clientSaleKey = String(req.body.clientSaleKey || "").trim();
+    if (clientSaleKey && !/^[A-Za-z0-9_-]{20,80}$/.test(clientSaleKey)) {
+      return res.status(400).json({error:"Invalid offline transaction key."});
+    }
     const allowedOtherProviders = ["Maya","MariBank","GoTyme","VYBE by BPI"];
     if (!["Cash","GCash","Other","Pay Later"].includes(paymentMethod)) {
       return res.status(400).json({error:"Invalid payment method."});
@@ -409,13 +416,34 @@ app.post("/api/sales", upload.single("receipt"), async (req,res,next) => {
     }
 
     await client.query("BEGIN");
+    // Serialize retries for this exact client-generated sale key; the unique index
+    // and transaction-scoped advisory lock make ambiguous network retries idempotent.
+    if (clientSaleKey) {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1)::bigint)", [clientSaleKey]);
+      const existing = await client.query(
+        "SELECT id,transaction_ref,total,created_at,client_sale_user_id FROM sales WHERE client_sale_key=$1",
+        [clientSaleKey]
+      );
+      if (existing.rows.length) {
+        const old = existing.rows[0];
+        if (old.client_sale_user_id != null && Number(old.client_sale_user_id) !== Number(req.posUser?.id)) {
+          await client.query("ROLLBACK");
+          return res.status(409).json({error:"This pending transaction belongs to another POS account."});
+        }
+        await client.query("COMMIT");
+        return res.status(200).json({
+          id:old.id,transactionRef:old.transaction_ref,total:Number(old.total),
+          createdAt:old.created_at,alreadySynced:true
+        });
+      }
+    }
     const sale = await client.query(
       `INSERT INTO sales (
          transaction_ref,payment_method,payment_provider,payment_reference,payment_reference_status,
          gcash_reference,delivery_room_unit,total,receipt_mime,receipt_image,
-         payment_status,was_pay_later,paid_at
+         payment_status,was_pay_later,paid_at,client_sale_key,client_sale_user_id
        )
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
        RETURNING id, transaction_ref, created_at`,
       [
         reference,
@@ -430,7 +458,9 @@ app.post("/api/sales", upload.single("receipt"), async (req,res,next) => {
         req.file?.buffer || null,
         paymentMethod === "Pay Later" ? "unpaid" : "paid",
         paymentMethod === "Pay Later",
-        paymentMethod === "Pay Later" ? null : new Date()
+        paymentMethod === "Pay Later" ? null : new Date(),
+        clientSaleKey || null,
+        req.posUser?.id || null
       ]
     );
 
