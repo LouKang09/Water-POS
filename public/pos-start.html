@@ -48,7 +48,14 @@
           location.replace("/");
           return;
         }
-      }catch(e){}
+      }catch(e){
+        // If the network is unavailable, keep a previously verified cashier
+        // signed in. IndexedDB will hold sales until sync is possible.
+        if(localStorage.getItem("water_pos_cached_user")){
+          location.replace("/");
+          return;
+        }
+      }
       localStorage.removeItem(key);
       location.replace("/pos-login.html");
     })();
