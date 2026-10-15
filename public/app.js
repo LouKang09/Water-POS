@@ -998,12 +998,6 @@ async function scanReceipt(file,{sourceType="upload"}={}) {
   els.gcashReference.readOnly=true;
 
   const provider=selectedProvider();
-  if(file && !navigator.onLine){
-    state.ocrInProgress=false;
-    allowUnreadableReceipt("Offline: receipt saved on device for later admin review.");
-    updatePaymentButtonState();
-    return;
-  }
   els.gcashRefHelp.textContent="Looking for "+providerReferenceHint(provider)+" on the receipt photo.";
   updatePaymentButtonState();
 
@@ -1021,6 +1015,12 @@ async function scanReceipt(file,{sourceType="upload"}={}) {
   els.receiptPreview.classList.remove("hidden");
   els.receiptDrop.classList.add("has-file");
   updateDigitalCopy();
+  if(!navigator.onLine){
+    state.ocrInProgress=false;
+    allowUnreadableReceipt("Offline: receipt photo stored locally. Reference will need admin review after sync.");
+    updatePaymentButtonState();
+    return;
+  }
   setOcrStatus(sourceType==="camera" ? "Optimizing camera photo…" : "Reading receipt…");
 
   let imageSource=null;
