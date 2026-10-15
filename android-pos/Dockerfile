@@ -20,11 +20,11 @@ COPY android-pos/ /workspace/
 RUN mkdir -p /workspace/app/src/main/res/drawable-nodpi
 COPY branding/inyou-official-hd.png /workspace/app/src/main/res/drawable-nodpi/inyou_logo.png
 RUN gradle assembleDebug --no-daemon \
-    && cp app/build/outputs/apk/debug/app-debug.apk /tmp/INYOU-Water-POS-v1.2.11.apk
+    && cp app/build/outputs/apk/debug/app-debug.apk /tmp/INYOU-Water-POS-v1.3.0.apk
 
 FROM python:3.12-alpine
 WORKDIR /app
-COPY --from=build /tmp/INYOU-Water-POS-v1.2.11.apk /app/INYOU-Water-POS-v1.2.11.apk
-RUN printf '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Water POS APK</title></head><body style="font-family:sans-serif;padding:30px"><h1>INYOU Water POS Android v1.2.11</h1><p>Official INYOU Water POS app using the exact HD INYOU master logo, universal adaptive/round Android launcher icon, rounded 5-second water loading splash, session-safe startup, visible in-app password update, Android recent-apps icon, forgot-password OTP recovery, Huawei P30 Lite screen-pinning fallback, strict Device Owner kiosk with Home/Recents/status-bar blocking, safe Exit App release, and logout.</p><p><a href="/INYOU-Water-POS-v1.2.11.apk">Download INYOU-Water-POS-v1.2.11.apk</a></p></body></html>' > /app/index.html
+COPY --from=build /tmp/INYOU-Water-POS-v1.3.0.apk /app/INYOU-Water-POS-v1.3.0.apk
+RUN printf '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Water POS APK</title></head><body style="font-family:sans-serif;padding:30px"><h1>INYOU Water POS Android v1.3.0</h1><p>Official INYOU Water POS app using the exact HD INYOU master logo, universal adaptive/round Android launcher icon, rounded 5-second water loading splash, session-safe startup, visible in-app password update, Android recent-apps icon, forgot-password OTP recovery, normal Android navigation with no recurring pinning prompts, keyboard resize, offline sale capture and automatic sync, safe Exit App, and logout.</p><p><a href="/INYOU-Water-POS-v1.3.0.apk">Download INYOU-Water-POS-v1.3.0.apk</a></p></body></html>' > /app/index.html
 EXPOSE 8080
 CMD ["python", "-m", "http.server", "8080", "--bind", "0.0.0.0"]
