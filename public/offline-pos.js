@@ -47,7 +47,7 @@ async function queueSale(formData){
  const file=formData.get("receipt");
  if(file&&file.size>8*1024*1024)throw new Error("Receipt photo exceeds 8 MB. Please capture a smaller photo.");
  const key=randomKey();
- const fields={};
+ const fields={offlineCapturedAt:new Date().toISOString()};
  for(const [name,value] of formData.entries()){
   if(name!=="receipt"&&name!=="clientSaleKey")fields[name]=String(value);
  }
@@ -72,7 +72,7 @@ async function sync(){
  if(syncing)return {online:false,synced:0,pending:(await all()).length,busy:true};
  const owner=userId();
  if(!owner)return {online:false,synced:0,pending:0,error:"No employee account."};
- syncing=true;let synced=0,online=true;lastError="";
+ syncing=true;let synced=0,online=true;const confirmed={};lastError="";
  try{
   const list=(await all()).filter(x=>x.owner===owner).sort((a,b)=>a.createdAt.localeCompare(b.createdAt));
   for(const entry of list){
@@ -85,6 +85,7 @@ async function sync(){
     finally{clearTimeout(timeout);}
    }catch(error){online=false;lastError="No connection to Water POS server. Sales are safe on this device.";break;}
    if(response.ok){
+    try{confirmed[entry.key]=await response.json()}catch{confirmed[entry.key]={transactionRef:"Confirmed on server"}}
     await del(entry.key);synced++;listen();continue;
    }
    let details={};try{details=await response.json()}catch{}
@@ -100,7 +101,7 @@ async function sync(){
    lastError="Some sales require review before syncing.";
   }
  }finally{syncing=false;void updateBanner();}
- return {online,synced,pending:(await all()).filter(x=>x.owner===owner).length,error:lastError};
+ return {online,synced,confirmed,pending:(await all()).filter(x=>x.owner===owner).length,error:lastError};
 }
 async function retry(key){
  const entry=(await all()).find(e=>e.key===key&&e.owner===userId());if(!entry)return;
