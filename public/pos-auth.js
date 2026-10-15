@@ -172,6 +172,7 @@ async function savePosAccount(event) {
     posToken = data.token;
     localStorage.setItem(POS_TOKEN_KEY, posToken);
     currentPosUser = data.user;
+    localStorage.setItem("water_pos_cached_user",JSON.stringify(currentPosUser));
     const label = document.querySelector("#posUserLabel");
     if (label) label.textContent = currentPosUser.name || currentPosUser.email || "POS User";
     document.querySelector("#posAccountDialog").close();
@@ -265,13 +266,26 @@ document.addEventListener("click", event => {
   if (!posToken || location.pathname === "/pos-login.html") return;
   try {
     const res = await window.fetch("/api/pos/me", { cache: "no-store" });
-    if (!res.ok) throw new Error("session");
+    if (res.status===401) throw new Error("unauthorized");
+    if (!res.ok) throw new Error("connection");
     currentPosUser = await res.json();
+    localStorage.setItem("water_pos_cached_user",JSON.stringify(currentPosUser));
     const label = document.querySelector("#posUserLabel");
     if (label) label.textContent = currentPosUser.name || currentPosUser.email || "POS User";
     document.documentElement.classList.add("pos-auth-ready");
-  } catch {
-    localStorage.removeItem(POS_TOKEN_KEY);
-    location.replace("/pos-login.html");
+  } catch (error) {
+    // A network outage is not a logout. Only an explicit HTTP 401 should
+    // revoke local access; the cashier can still capture offline sales.
+    if(error.message==="unauthorized"){
+      localStorage.removeItem(POS_TOKEN_KEY);
+      location.replace("/pos-login.html");
+    }else{
+      try{
+        currentPosUser=JSON.parse(localStorage.getItem("water_pos_cached_user")||"null");
+        const label=document.querySelector("#posUserLabel");
+        if(label&&currentPosUser)label.textContent=currentPosUser.name||currentPosUser.email||"POS User";
+      }catch{}
+      document.documentElement.classList.add("pos-auth-ready");
+    }
   }
 })();
