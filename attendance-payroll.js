@@ -1,6 +1,7 @@
 "use strict";
 const express = require("express");
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
 const { Pool } = require("pg");
 const pool = new Pool({connectionString:process.env.DATABASE_URL,ssl:process.env.NODE_ENV==="production"?{rejectUnauthorized:false}:false});
 const jwtSecret=process.env.JWT_SECRET||"development-only-change-me";
@@ -162,6 +163,27 @@ function attendanceRoutes(app){
      await client.query("COMMIT");
      res.json({ok:true,shift:await shiftView(pool,shift)});
    }catch(e){await client.query("ROLLBACK").catch(()=>{});throw e;}finally{client.release();}
+ }));
+
+ app.post("/api/admin/payroll/employees",wrap(async(req,res)=>{
+   const name=String(req.body?.name||"").trim().slice(0,120);
+   const email=String(req.body?.email||"").trim().toLowerCase();
+   const password=String(req.body?.password||"");
+   const rate=Number(req.body?.dailyWage??582);
+   if(name.length<2||email.length>254||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||password.length<8||password.length>128||!Number.isFinite(rate)||rate<0||rate>100000){
+     return res.status(400).json({error:"Enter an employee name, valid email, password of at least 8 characters, and valid daily rate."});
+   }
+   const client=await pool.connect();
+   try{
+     await client.query("BEGIN");
+     const salt=crypto.randomBytes(16).toString("hex");
+     const hash=crypto.scryptSync(password,salt,64).toString("hex");
+     const inserted=await sql(client,"INSERT INTO pos_users(name,email,password_hash,salt,active,auth_version) VALUES($1,$2,$3,$4,TRUE,1) RETURNING id,name,email,active",[name,email,hash,salt]);
+     const user=inserted.rows[0];
+     await sql(client,"INSERT INTO employee_pay_rates(user_id,payroll_name,daily_wage) VALUES($1,$2,$3)",[user.id,name,money(rate)]);
+     await client.query("COMMIT");
+     res.status(201).json({...user,payroll_name:name,daily_wage:money(rate)});
+   }catch(e){await client.query("ROLLBACK").catch(()=>{});if(e.code==="23505")e=Object.assign(new Error("That employee login email is already registered."),{status:409});throw e;}finally{client.release();}
  }));
  app.get("/api/admin/payroll/employees",wrap(async(req,res)=>{
    const r=await sql(pool,"SELECT u.id,u.name,u.email,u.active,COALESCE(p.payroll_name,u.name) AS payroll_name,COALESCE(p.daily_wage,582) AS daily_wage FROM pos_users u LEFT JOIN employee_pay_rates p ON p.user_id=u.id ORDER BY u.name,u.id");
