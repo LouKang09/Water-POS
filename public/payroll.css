@@ -49,3 +49,6 @@
  body.printing-payroll .print-report-inner{display:none}
  @page{size:A4 portrait;margin:15mm}
 }
+
+.payroll-enroll{border-style:dashed!important}.payroll-enroll summary{display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;list-style:none;color:#138372}.payroll-enroll summary::-webkit-details-marker{display:none}.payroll-enroll summary strong{font-size:.9rem}.payroll-enroll summary span{color:var(--muted,#789);font-size:.74rem;font-weight:400}.payroll-enroll form{padding-top:19px;align-items:end}.payroll-enroll form button{padding:11px 15px;min-height:40px}
+@media(max-width:660px){.payroll-enroll summary{align-items:flex-start;flex-direction:column;gap:3px}.payroll-enroll form{grid-template-columns:1fr!important}}
