@@ -336,9 +336,12 @@ async function validatedItems(items) {
 }
 
 app.get("/api/health", (req,res) => res.json({ ok:true }));
-// Offline clients must verify the deduplicating server version before syncing.
+// Offline clients verify these capabilities before sending queued sales.
 app.get("/api/pos/offline-capabilities", (req,res) => res.json({
-  idempotentSales:true, originalSaleTimestamp:true, version:1
+  idempotentSales:true,
+  originalSaleTimestamp:true,
+  manualReferenceWithoutReceipt:true,
+  version:2
 }));
 
 app.get("/api/used-products", async (req,res,next) => {
@@ -398,20 +401,30 @@ app.post("/api/sales", upload.single("receipt"), async (req,res,next) => {
       ? normalizePaymentReference(req.body.detectedReference || req.body.gcashDetectedReference, paymentProvider)
       : null;
     const ocrVerified = req.body.ocrVerified === "true" || req.body.gcashOcrVerified === "true";
+    // This fallback is deliberately restricted to keyed offline transactions. It
+    // lets a cashier recover a queued digital sale when a receipt image truly cannot
+    // be captured, while requiring a valid reference and flagging it for admin review.
+    const offlineManualReference = Boolean(clientSaleKey) && req.body.offlineManualReference === "true";
 
-    if (isDigital && !req.file) {
-      return res.status(400).json({error: paymentProvider + " receipt image is required."});
+    if (isDigital && offlineManualReference && !isValidPaymentReference(submittedReference, paymentProvider)) {
+      return res.status(400).json({error:"Enter a valid manual payment reference (GCash: 6–18 digits; other providers: 6–40 characters with at least 4 digits)."});
     }
-    if (isDigital && !String(req.file.mimetype || "").startsWith("image/")) {
+    if (isDigital && !req.file && !offlineManualReference) {
+      return res.status(400).json({error: paymentProvider + " receipt image is required. Open Pending and choose Edit / Fix to add a photo or enter a manual reference."});
+    }
+    if (req.file && !String(req.file.mimetype || "").startsWith("image/")) {
       return res.status(400).json({error:"The payment receipt must be an image."});
     }
 
-    // A digital payment may proceed without a readable OCR reference as long as the
-    // receipt image is attached. These are explicitly marked for admin cross-checking.
+    // Receipt unreadable and manual-reference transactions are both retained for
+    // admin cross-checking; manually supplied references are never marked OCR-verified.
     let paymentReference = null;
     let referenceStatus = isDigital ? "unreadable" : null;
 
-    if (isDigital && ocrVerified && detectedReference) {
+    if (isDigital && offlineManualReference) {
+      paymentReference = submittedReference;
+      referenceStatus = "manual";
+    } else if (isDigital && ocrVerified && detectedReference) {
       if (!isValidPaymentReference(detectedReference, paymentProvider)) {
         return res.status(400).json({error:"The reference read from the image is not valid. Re-scan or save it as unreadable with the receipt attached."});
       }
