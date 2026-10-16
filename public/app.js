@@ -104,6 +104,41 @@ function renderDeliveryRoomField() {
   els.roomUnitField.classList.toggle("required-field",cartHasDelivery && state.category!=="Unpaid");
 }
 
+// Keep the Delivery Room / Unit field above Android's soft keyboard and clear
+// sticky/fixed POS chrome while the cashier is typing into it.
+let roomUnitViewportListenersBound=false;
+let roomUnitScrollScheduled=false;
+function keepRoomUnitVisible(){
+  if(!els.roomUnit||document.activeElement!==els.roomUnit||window.innerWidth>767||roomUnitScrollScheduled)return;
+  roomUnitScrollScheduled=true;
+  requestAnimationFrame(()=>{
+    roomUnitScrollScheduled=false;
+    if(document.activeElement!==els.roomUnit)return;
+    const vv=window.visualViewport;
+    const visibleTop=vv?vv.offsetTop:0;
+    const visibleBottom=vv?vv.offsetTop+vv.height:window.innerHeight;
+    const rect=els.roomUnit.getBoundingClientRect();
+    const checkout=document.querySelector(".checkout-bar");
+    const checkoutVisible=checkout&&!checkout.classList.contains("hidden")&&getComputedStyle(checkout).display!=="none";
+    const checkoutTop=checkoutVisible?checkout.getBoundingClientRect().top:visibleBottom;
+    const safeBottom=Math.min(visibleBottom-18,checkoutTop>visibleTop&&checkoutTop<visibleBottom?checkoutTop-14:visibleBottom-18);
+    if(rect.bottom>safeBottom)window.scrollBy({top:Math.ceil(rect.bottom-safeBottom),behavior:"auto"});
+    else if(rect.top<visibleTop+14)window.scrollBy({top:Math.floor(rect.top-(visibleTop+14)),behavior:"auto"});
+  });
+}
+function bindRoomUnitKeyboard(){
+  if(roomUnitViewportListenersBound||!els.roomUnit)return;
+  roomUnitViewportListenersBound=true;
+  els.roomUnit.addEventListener("focus",()=>{
+    if(window.innerWidth<=767)document.body.classList.add("room-unit-keyboard-open");
+    [0,100,240,420].forEach(delay=>setTimeout(keepRoomUnitVisible,delay));
+  });
+  els.roomUnit.addEventListener("blur",()=>document.body.classList.remove("room-unit-keyboard-open"));
+  window.visualViewport?.addEventListener("resize",keepRoomUnitVisible);
+  window.visualViewport?.addEventListener("scroll",keepRoomUnitVisible);
+  window.addEventListener("resize",keepRoomUnitVisible);
+}
+
 function renderProducts() {
   const unpaidMode=state.category==="Unpaid";
   document.querySelector(".cart-card")?.classList.toggle("hidden",unpaidMode);
@@ -1405,7 +1440,9 @@ els.closePayment.addEventListener("click",()=>{
 });
 els.cameraInput.addEventListener("change",()=>{if(els.cameraInput.files[0])scanReceipt(els.cameraInput.files[0],{sourceType:"camera"});});
 els.receiptInput.addEventListener("change",()=>{if(els.receiptInput.files[0])scanReceipt(els.receiptInput.files[0],{sourceType:"upload"});});
+bindRoomUnitKeyboard();
 els.roomUnit.addEventListener("input",()=>{state.deliveryRoomUnit=els.roomUnit.value;});
+els.roomUnit.addEventListener("input",keepRoomUnitVisible);
 els.gcashReference.addEventListener("input",()=>{
   const cleaned=normalizeReference(els.gcashReference.value);
   if(els.gcashReference.value!==cleaned) els.gcashReference.value=cleaned;
