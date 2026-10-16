@@ -1207,3 +1207,14 @@ th{color:var(--muted);font-size:.68rem;text-transform:uppercase;letter-spacing:.
   .quantity-dialog[open] .dialog-header{position:static;margin-bottom:10px}
   .quantity-dialog[open] .quantity-field{margin-bottom:10px}
 }
+
+/* Keep Delivery Room / Unit entry visible while Android's keyboard is open. */
+.room-unit-field{scroll-margin-top:14px;scroll-margin-bottom:42vh}
+.room-unit-field input{scroll-margin-top:14px;scroll-margin-bottom:42vh}
+@media(max-width:767px){
+  body.room-unit-keyboard-open .checkout-bar{display:none!important}
+  body.room-unit-keyboard-open .pos-header,
+  body.room-unit-keyboard-open .category-tabs{position:relative!important;top:auto!important}
+  body.room-unit-keyboard-open .room-unit-field{margin-bottom:22px;padding-bottom:12px}
+  body.room-unit-keyboard-open .room-unit-field input{min-height:52px;font-size:16px}
+}
