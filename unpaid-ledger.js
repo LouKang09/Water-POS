@@ -67,9 +67,8 @@ function normalizeReference(value, provider = "") {
 
 function validReference(value, provider = "") {
   const ref = normalizeReference(value, provider);
-  if (provider === "GCash") return ref.length >= 6 && ref.length <= 18;
-  const digitCount = ref.split("").filter(ch => ch >= "0" && ch <= "9").length;
-  return ref.length >= 6 && ref.length <= 40 && digitCount >= 4;
+  if (provider === "GCash") return ref.length >= 3 && ref.length <= 18;
+  return ref.length >= 3 && ref.length <= 40;
 }
 
 function oneCharacterCorrection(a, b) {
