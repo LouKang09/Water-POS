@@ -64,9 +64,8 @@ function normalizePaymentReference(value, provider = "") {
 
 function isValidPaymentReference(value, provider = "") {
   const ref=normalizePaymentReference(value,provider);
-  if (provider === "GCash") return ref.length >= 6 && ref.length <= 18;
-  const digitCount=(ref.match(/\d/g)||[]).length;
-  return ref.length >= 6 && ref.length <= 40 && digitCount >= 4;
+  if (provider === "GCash") return ref.length >= 3 && ref.length <= 18;
+  return ref.length >= 3 && ref.length <= 40;
 }
 
 function isSingleCorrection(detected,submitted) {
