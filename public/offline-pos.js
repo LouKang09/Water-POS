@@ -54,7 +54,11 @@ async function queueSale(formData){
  const items=JSON.parse(fields.items||"[]");
  const total=items.reduce((sum,x)=>sum+Number(x.qty||0)*Number(x.unitPrice||0),0);
  const entry={key,owner,ownerName:person()?.name||"",createdAt:new Date().toISOString(),fields,
-  receipt:file instanceof Blob&&file.size?file:null,total,method:fields.paymentMethod||"Cash",
+  // Some Android WebViews do not preserve cross-interface instanceof checks.
+  // Validate the image by its file metadata and persist a Blob copy instead.
+  receipt:file&&typeof file.size==="number"&&file.size>0&&String(file.type||"").startsWith("image/")
+    ?file.slice(0,file.size,file.type):null,
+  total,method:fields.paymentMethod||"Cash",
   state:"pending",error:""};
  // Do not acknowledge checkout before IndexedDB commits this transaction.
  await put(entry);
@@ -89,6 +93,11 @@ async function sync(){
   const list=(await all()).filter(x=>x.owner===owner).sort((a,b)=>a.createdAt.localeCompare(b.createdAt));
   for(const entry of list){
    if(entry.state==="review")continue;
+   if(entry.fields?.offlineManualReference==="true"&&!capability.manualReferenceWithoutReceipt){
+    online=false;
+    lastError="Waiting for server support for manual-reference recovery. Your sale is still saved on this device.";
+    break;
+   }
    let response;
    try{
     const controller=new AbortController();
@@ -110,16 +119,145 @@ async function sync(){
    entry.state="review";
    entry.error=details.error||"Could not accept this transaction; review before retrying.";
    await put(entry);
-   lastError="Some sales require review before syncing.";
+   lastError=entry.error||"This sale needs review before syncing.";
   }
  }catch(error){
   online=false;lastError="Offline sync server not reachable. Transactions remain saved locally.";
  }finally{syncing=false;void updateBanner();}
  return {online,synced,confirmed,pending:(await all()).filter(x=>x.owner===owner).length,error:lastError};
 }
-async function retry(key){
+let reviewEditingKey=null;
+let reviewSelectedReceipt=null;
+let reviewPreviewUrl="";
+
+function referenceValue(value,provider){
+ let cleaned=String(value||"").toUpperCase().split("").filter(ch=>/[A-Z0-9-]/.test(ch)).join("").replace(/-+/g,"-").replace(/^-|-$/g,"");
+ if(provider==="GCash")cleaned=cleaned.replace(/\D/g,"");
+ return cleaned;
+}
+function validReference(value,provider){
+ const ref=referenceValue(value,provider);
+ if(provider==="GCash")return ref.length>=6&&ref.length<=18;
+ return ref.length>=6&&ref.length<=40&&(ref.match(/\d/g)||[]).length>=4;
+}
+function clearReviewPreview(){
+ if(reviewPreviewUrl)URL.revokeObjectURL(reviewPreviewUrl);
+ reviewPreviewUrl="";
+ const preview=$("#offlineReviewPreview");
+ if(preview){preview.removeAttribute("src");preview.hidden=true;}
+}
+function showReviewPreview(file){
+ clearReviewPreview();
+ if(!file||!file.size)return;
+ reviewPreviewUrl=URL.createObjectURL(file);
+ const preview=$("#offlineReviewPreview");
+ preview.src=reviewPreviewUrl;preview.hidden=false;
+}
+function ensureReviewDialog(){
+ let dialog=$("#offlineReviewDialog");
+ if(dialog)return dialog;
+ dialog=document.createElement("dialog");
+ dialog.id="offlineReviewDialog";
+ dialog.className="offline-review-dialog";
+ dialog.innerHTML='<form method="dialog" class="offline-review-sheet"><div class="offline-review-heading"><div><p class="offline-review-eyebrow">LOCAL TRANSACTION REVIEW</p><h2 id="offlineReviewTitle">Fix pending sale</h2></div><button type="button" id="offlineReviewClose" class="offline-review-close" aria-label="Close">×</button></div><p id="offlineReviewPayment" class="offline-review-payment"></p><p id="offlineReviewProblem" class="offline-review-problem" role="status"></p><div id="offlineReviewReceiptState" class="offline-review-receipt-state"></div><div class="offline-review-photo-actions"><label class="offline-review-photo-button"><input id="offlineReviewCamera" type="file" accept="image/*" capture="environment"><span>Take / replace photo</span></label><label class="offline-review-photo-button"><input id="offlineReviewGallery" type="file" accept="image/*"><span>Choose from gallery</span></label></div><img id="offlineReviewPreview" class="offline-review-preview" alt="Receipt preview" hidden><label class="offline-review-field"><span>Payment reference</span><input id="offlineReviewReference" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" placeholder="Enter reference number"><small>GCash: 6–18 digits. Other e-wallets: 6–40 characters and at least 4 digits.</small></label><label class="offline-review-manual"><input id="offlineReviewManual" type="checkbox"><span><strong>Use manual reference if no photo is available</strong><small>Use only when receipt capture is not possible. The reference will be marked as manually entered for admin cross-checking.</small></span></label><div class="offline-review-actions"><button type="button" id="offlineReviewCancel" class="offline-review-secondary">Cancel</button><button type="button" id="offlineReviewSave" class="offline-review-primary">Save &amp; Retry Sync</button></div></form>';
+ document.body.append(dialog);
+ const close=()=>{if(dialog.open)dialog.close();};
+ dialog.querySelector("#offlineReviewClose").addEventListener("click",close);
+ dialog.querySelector("#offlineReviewCancel").addEventListener("click",close);
+ dialog.querySelector("#offlineReviewSave").addEventListener("click",saveReviewAndRetry);
+ for(const id of ["#offlineReviewCamera","#offlineReviewGallery"]){
+  dialog.querySelector(id).addEventListener("change",event=>{
+   const file=event.target.files?.[0];if(!file)return;
+   const problem=dialog.querySelector("#offlineReviewProblem");
+   if(!String(file.type||"").startsWith("image/")){problem.textContent="Choose an image file.";event.target.value="";return;}
+   if(file.size>8*1024*1024){problem.textContent="Receipt photos must be 8 MB or smaller. Try a smaller photo.";event.target.value="";return;}
+   reviewSelectedReceipt=file;
+   dialog.querySelector("#offlineReviewReceiptState").textContent="New receipt selected: "+file.name+" · "+(file.size/1024/1024).toFixed(2)+" MB";
+   problem.textContent="";showReviewPreview(file);
+  });
+ }
+ dialog.addEventListener("close",()=>{
+  clearReviewPreview();reviewEditingKey=null;reviewSelectedReceipt=null;
+  dialog.querySelector("#offlineReviewCamera").value="";
+  dialog.querySelector("#offlineReviewGallery").value="";
+ });
+ return dialog;
+}
+async function openReviewEditor(key){
  const entry=(await all()).find(e=>e.key===key&&e.owner===userId());if(!entry)return;
- entry.state="pending";entry.error="";await put(entry);void sync();
+ const dialog=ensureReviewDialog();reviewEditingKey=key;reviewSelectedReceipt=null;
+ const fields=entry.fields||{};
+ const method=fields.paymentMethod||entry.method||"Cash";
+ const provider=method==="GCash"?"GCash":fields.paymentProvider||"";
+ dialog.querySelector("#offlineReviewTitle").textContent="LOCAL-"+identityLabel(entry);
+ dialog.querySelector("#offlineReviewPayment").textContent=method+(provider&&provider!==method?" · "+provider:"")+" · "+money(entry.total);
+ dialog.querySelector("#offlineReviewProblem").textContent=entry.error||"Add a receipt photo or provide a valid manual reference to recover this sale.";
+ dialog.querySelector("#offlineReviewReference").value=fields.paymentReference||fields.gcashReference||"";
+ dialog.querySelector("#offlineReviewManual").checked=fields.offlineManualReference==="true";
+ dialog.querySelector("#offlineReviewManual").disabled=!["GCash","Other"].includes(method);
+ dialog.querySelector("#offlineReviewManual").closest(".offline-review-manual").classList.toggle("offline-review-disabled",!["GCash","Other"].includes(method));
+ const hasReceipt=Boolean(entry.receipt&&entry.receipt.size);
+ dialog.querySelector("#offlineReviewReceiptState").textContent=hasReceipt?"A receipt image is saved on this device. You can keep it or replace it.":"No receipt image is saved on this device.";
+ showReviewPreview(hasReceipt?entry.receipt:null);
+ if(!dialog.open)dialog.showModal();
+}
+async function saveReviewAndRetry(){
+ const dialog=ensureReviewDialog(),button=dialog.querySelector("#offlineReviewSave");
+ const key=reviewEditingKey;if(!key)return;
+ const entry=(await all()).find(e=>e.key===key&&e.owner===userId());if(!entry)return;
+ const fields=entry.fields||{};
+ const method=fields.paymentMethod||entry.method||"Cash";
+ const provider=method==="GCash"?"GCash":fields.paymentProvider||"";
+ const digital=["GCash","Other"].includes(method);
+ const manual=digital&&dialog.querySelector("#offlineReviewManual").checked;
+ const typed=dialog.querySelector("#offlineReviewReference").value.trim();
+ const normalized=referenceValue(typed,provider);
+ const availableReceipt=reviewSelectedReceipt||entry.receipt||null;
+ const problem=dialog.querySelector("#offlineReviewProblem");
+ if(digital&&manual){
+  if(!validReference(normalized,provider)){
+   problem.textContent=provider==="GCash"?"Enter a valid GCash reference of 6–18 digits.":"Enter a valid reference of 6–40 characters with at least 4 digits.";
+   return;
+  }
+  fields.paymentReference=normalized;
+  fields.detectedReference="";
+  fields.gcashDetectedReference="";
+  fields.ocrVerified="false";
+  fields.gcashOcrVerified="false";
+  fields.offlineManualReference="true";
+ }else if(digital){
+  const oldReference=referenceValue(fields.paymentReference||fields.gcashReference||"",provider);
+  if(typed&&normalized!==oldReference){
+   problem.textContent="To use a manually typed reference, check the manual-reference option below.";
+   return;
+  }
+  if(!availableReceipt){
+   problem.textContent="Receipt image is missing. Take a photo or choose an image, or enter a valid reference and check the manual-reference option.";
+   return;
+  }
+  fields.offlineManualReference="false";
+  if(reviewSelectedReceipt){
+   fields.paymentReference="";
+   fields.detectedReference="";
+   fields.gcashDetectedReference="";
+   fields.ocrVerified="false";
+   fields.gcashOcrVerified="false";
+  }
+ }
+ if(reviewSelectedReceipt){
+  entry.receipt=reviewSelectedReceipt.slice(0,reviewSelectedReceipt.size,reviewSelectedReceipt.type);
+ }
+ entry.fields=fields;entry.state="pending";entry.error="";
+ button.disabled=true;button.textContent="Saving…";
+ try{
+  await put(entry);listen();lastError="";
+  if(dialog.open)dialog.close();
+  await sync();await updateBanner();
+ }catch(error){
+  problem.textContent=error.message||"Could not save the correction on this device.";
+ }finally{
+  button.disabled=false;button.textContent="Save & Retry Sync";
+ }
 }
 async function discard(key){
  const entry=(await all()).find(e=>e.key===key&&e.owner===userId());
@@ -136,26 +274,33 @@ function ui(){
  $("#offlinePosPending").onclick=()=>{$("#offlinePosDetails").hidden=!$("#offlinePosDetails").hidden;void updateBanner();};
  $("#offlinePosDetails").addEventListener("click",e=>{
   const btn=e.target.closest("button[data-pending]");if(!btn)return;
-  if(btn.dataset.action==="retry")void retry(btn.dataset.pending);
+  if(btn.dataset.action==="edit")void openReviewEditor(btn.dataset.pending);
   if(btn.dataset.action==="discard")void discard(btn.dataset.pending);
  });
+ ensureReviewDialog();
 }
 async function updateBanner(){
  if(!$("#offlinePosStatus"))return;
  const owner=userId();
  const list=(await all()).filter(x=>x.owner===owner).sort((a,b)=>a.createdAt.localeCompare(b.createdAt));
- const count=list.length;
+ const count=list.length,reviewCount=list.filter(x=>x.state==="review").length;
  const isOnline=navigator.onLine;
  $("#offlinePosCount").textContent=count;
- $("#offlinePosHeadline").textContent=!isOnline?"Offline · local sales enabled":lastError?"Sync needs attention":count?"Online · "+count+" pending sync":"Online · ready";
- $("#offlinePosDescription").textContent=lastError||(!isOnline?"Sales will upload when your internet returns.":"Confirmed sales sync to the central database.");
- $("#offlinePosDot").className="offline-pos-dot "+(!isOnline?"offline":lastError?"warning":"online");
+ $("#offlinePosHeadline").textContent=!isOnline?"Offline · local sales enabled":reviewCount||lastError?"Sync needs attention":count?"Online · "+count+" pending sync":"Online · ready";
+ $("#offlinePosDescription").textContent=reviewCount
+  ?reviewCount+" sale"+(reviewCount===1?" needs":"s need")+" a receipt or valid reference. Open Pending and choose Edit / Fix."
+  :lastError||(!isOnline?"Sales will upload when your internet returns.":"Confirmed sales sync to the central database.");
+ $("#offlinePosDot").className="offline-pos-dot "+(!isOnline?"offline":reviewCount||lastError?"warning":"online");
  const details=$("#offlinePosDetails");
- details.innerHTML=list.length?list.map(x=>`<div class="offline-pending-row">
- <div><strong>LOCAL-${escape(identityLabel(x))}</strong> · ${money(x.total)} · ${escape(x.method)}
- <small>${escape(new Date(x.createdAt).toLocaleString("en-PH"))} · ${x.state==="review"?"Needs review":"Awaiting server"} ${x.error?("· "+escape(x.error)):""}</small></div>
- <div class="offline-pending-controls">${x.state==="review"?'<button data-action="retry" data-pending="'+escape(x.key)+'">Retry</button>':""}
- <button data-action="discard" data-pending="${escape(x.key)}">Discard</button></div></div>`).join(""):"<p>No unsynced sales on this device.</p>";
+ details.innerHTML=list.length?list.map(x=>{
+  const method=x.fields?.paymentMethod||x.method||"Cash";
+  const needsFix=x.state==="review"||(["GCash","Other"].includes(method)&&!x.receipt&&x.fields?.offlineManualReference!=="true");
+  return '<div class="offline-pending-row"><div><strong>LOCAL-'+escape(identityLabel(x))+'</strong> · '+money(x.total)+' · '+escape(method)+
+   '<small>'+escape(new Date(x.createdAt).toLocaleString("en-PH"))+' · '+(x.state==="review"?"Needs review":x.receipt?"Receipt saved · awaiting server":"Awaiting server")+
+   (x.error?(" · "+escape(x.error)):"")+'</small></div><div class="offline-pending-controls">'+
+   (needsFix?'<button data-action="edit" data-pending="'+escape(x.key)+'">Edit / Fix</button>':"")+
+   '<button data-action="discard" data-pending="'+escape(x.key)+'">Discard</button></div></div>';
+ }).join(""):"<p>No unsynced sales on this device.</p>";
 }
 async function enable(){
  if("serviceWorker"in navigator){
