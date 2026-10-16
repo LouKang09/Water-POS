@@ -141,7 +141,7 @@ function referenceValue(value,provider){
 }
 function validReference(value,provider){
  const ref=referenceValue(value,provider);
- if(provider==="GCash")return ref.length>=6&&ref.length<=18;
+ if(provider==="GCash")return ref.length>=4&&ref.length<=18;
  return ref.length>=6&&ref.length<=40&&(ref.match(/\d/g)||[]).length>=4;
 }
 function clearReviewPreview(){
@@ -163,7 +163,7 @@ function ensureReviewDialog(){
  dialog=document.createElement("dialog");
  dialog.id="offlineReviewDialog";
  dialog.className="offline-review-dialog";
- dialog.innerHTML='<form method="dialog" class="offline-review-sheet"><div class="offline-review-heading"><div><p class="offline-review-eyebrow">LOCAL TRANSACTION REVIEW</p><h2 id="offlineReviewTitle">Fix pending sale</h2></div><button type="button" id="offlineReviewClose" class="offline-review-close" aria-label="Close">×</button></div><p id="offlineReviewPayment" class="offline-review-payment"></p><p id="offlineReviewProblem" class="offline-review-problem" role="status"></p><div id="offlineReviewReceiptState" class="offline-review-receipt-state"></div><div class="offline-review-photo-actions"><label class="offline-review-photo-button"><input id="offlineReviewCamera" type="file" accept="image/*" capture="environment"><span>Take / replace photo</span></label><label class="offline-review-photo-button"><input id="offlineReviewGallery" type="file" accept="image/*"><span>Choose from gallery</span></label></div><img id="offlineReviewPreview" class="offline-review-preview" alt="Receipt preview" hidden><label class="offline-review-field"><span>Payment reference</span><input id="offlineReviewReference" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" placeholder="Enter reference number"><small>GCash: 6–18 digits. Other e-wallets: 6–40 characters and at least 4 digits.</small></label><label class="offline-review-manual"><input id="offlineReviewManual" type="checkbox"><span><strong>Use manual reference if no photo is available</strong><small>Use only when receipt capture is not possible. The reference will be marked as manually entered for admin cross-checking.</small></span></label><div class="offline-review-actions"><button type="button" id="offlineReviewCancel" class="offline-review-secondary">Cancel</button><button type="button" id="offlineReviewSave" class="offline-review-primary">Save &amp; Retry Sync</button></div></form>';
+ dialog.innerHTML='<form method="dialog" class="offline-review-sheet"><div class="offline-review-heading"><div><p class="offline-review-eyebrow">LOCAL TRANSACTION REVIEW</p><h2 id="offlineReviewTitle">Fix pending sale</h2></div><button type="button" id="offlineReviewClose" class="offline-review-close" aria-label="Close">×</button></div><p id="offlineReviewPayment" class="offline-review-payment"></p><p id="offlineReviewProblem" class="offline-review-problem" role="status"></p><div id="offlineReviewReceiptState" class="offline-review-receipt-state"></div><div class="offline-review-photo-actions"><label class="offline-review-photo-button"><input id="offlineReviewCamera" type="file" accept="image/*" capture="environment"><span>Take / replace photo</span></label><label class="offline-review-photo-button"><input id="offlineReviewGallery" type="file" accept="image/*"><span>Choose from gallery</span></label></div><img id="offlineReviewPreview" class="offline-review-preview" alt="Receipt preview" hidden><label class="offline-review-field"><span>Payment reference</span><input id="offlineReviewReference" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" placeholder="Enter reference number"><small>GCash: 4–18 digits. Other e-wallets: 6–40 characters and at least 4 digits.</small></label><label class="offline-review-manual"><input id="offlineReviewManual" type="checkbox"><span><strong>Use manual reference if no photo is available</strong><small>Use only when receipt capture is not possible. The reference will be marked as manually entered for admin cross-checking.</small></span></label><div class="offline-review-actions"><button type="button" id="offlineReviewCancel" class="offline-review-secondary">Cancel</button><button type="button" id="offlineReviewSave" class="offline-review-primary">Save &amp; Retry Sync</button></div></form>';
  document.body.append(dialog);
  dialog.querySelector("form").addEventListener("submit",event=>event.preventDefault());
  const close=()=>{if(dialog.open)dialog.close();};
@@ -221,7 +221,7 @@ async function saveReviewAndRetry(){
  const problem=dialog.querySelector("#offlineReviewProblem");
  if(digital&&manual){
   if(!validReference(normalized,provider)){
-   problem.textContent=provider==="GCash"?"Enter a valid GCash reference of 6–18 digits.":"Enter a valid reference of 6–40 characters with at least 4 digits.";
+   problem.textContent=provider==="GCash"?"Enter a valid GCash reference of 4–18 digits.":"Enter a valid reference of 6–40 characters with at least 4 digits.";
    return;
   }
   fields.paymentReference=normalized;
