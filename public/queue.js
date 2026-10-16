@@ -106,9 +106,8 @@ function normalizeReference(value,provider=selectedProvider()){
 
 function validReference(value,provider=selectedProvider()){
   const ref=normalizeReference(value,provider);
-  if(provider==="GCash") return ref.length>=6 && ref.length<=18;
-  const digits=(ref.match(/\d/g)||[]).length;
-  return ref.length>=6 && ref.length<=40 && digits>=4;
+  if(provider==="GCash") return ref.length>=3 && ref.length<=18;
+  return ref.length>=3 && ref.length<=40;
 }
 
 function selectedProvider(){
