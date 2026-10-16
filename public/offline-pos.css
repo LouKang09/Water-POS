@@ -12,3 +12,38 @@
 .offline-pending-controls{display:flex;gap:5px}.offline-pending-controls button:last-child{color:#b64646}
 @media(max-width:560px){.offline-pos-status{padding:10px}.offline-pos-summary{flex:1 1 190px}.offline-pos-actions{flex:1 0 auto;justify-content:flex-end}.offline-pos-actions button{font-size:.68rem;padding:7px 8px}}
 html[data-pos-theme="dark"] .offline-pos-actions button:last-child{color:#082b2a}
+
+/* Offline sale recovery editor: replace the receipt or enter a reviewed manual reference. */
+.offline-review-dialog{width:min(94vw,520px);max-width:520px;max-height:92dvh;margin:auto;padding:0;border:1px solid var(--line);border-radius:22px;background:var(--surface);color:var(--ink);box-shadow:0 24px 80px rgba(0,0,0,.25);overflow:hidden}
+.offline-review-dialog::backdrop{background:rgba(5,20,20,.68);backdrop-filter:blur(5px)}
+.offline-review-sheet{max-height:92dvh;overflow-y:auto;padding:19px;overscroll-behavior:contain}
+.offline-review-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.offline-review-eyebrow{margin:0 0 4px;font-size:.64rem;letter-spacing:.12em;font-weight:900;color:var(--brand)}
+.offline-review-heading h2{margin:0;font-size:1.2rem;letter-spacing:-.03em}
+.offline-review-close{flex:0 0 auto;width:38px;height:38px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2);color:var(--ink);font-size:1.4rem;line-height:1}
+.offline-review-payment{margin:11px 0 8px;color:var(--muted);font-size:.78rem;font-weight:800}
+.offline-review-problem{margin:0 0 11px;padding:10px 12px;border:1px solid #e8c98d;border-radius:12px;background:#fff8e8;color:#80540d;font-size:.76rem;line-height:1.45}
+.offline-review-receipt-state{margin:8px 0;color:var(--muted);font-size:.72rem;line-height:1.45}
+.offline-review-photo-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}
+.offline-review-photo-button{position:relative;display:flex;align-items:center;justify-content:center;min-height:44px;padding:10px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2);color:var(--ink);font-size:.75rem;font-weight:850;text-align:center;cursor:pointer}
+.offline-review-photo-button input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.offline-review-preview{display:block;width:100%;max-height:230px;object-fit:contain;margin:9px 0;border:1px solid var(--line);border-radius:12px;background:var(--surface-2)}
+.offline-review-preview[hidden]{display:none}
+.offline-review-field{display:grid;gap:6px;margin-top:12px}
+.offline-review-field>span{font-size:.78rem;font-weight:850}
+.offline-review-field input{width:100%;min-height:45px;padding:11px 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);font-size:16px}
+.offline-review-field small{color:var(--muted);font-size:.67rem;line-height:1.4}
+.offline-review-manual{display:flex;align-items:flex-start;gap:10px;margin-top:14px;padding:12px;border:1px solid var(--line);border-radius:13px;background:var(--surface-2);cursor:pointer}
+.offline-review-manual>input{width:19px;height:19px;flex:0 0 auto;margin-top:2px;accent-color:var(--brand)}
+.offline-review-manual strong,.offline-review-manual small{display:block}
+.offline-review-manual strong{font-size:.75rem;line-height:1.35}
+.offline-review-manual small{margin-top:4px;color:var(--muted);font-size:.67rem;line-height:1.4}
+.offline-review-disabled{opacity:.5}
+.offline-review-actions{position:sticky;bottom:-19px;display:grid;grid-template-columns:1fr 1.5fr;gap:8px;margin:17px -19px -19px;padding:12px 19px calc(12px + env(safe-area-inset-bottom));border-top:1px solid var(--line);background:var(--surface)}
+.offline-review-actions button{min-height:43px;padding:10px;border:1px solid var(--line);border-radius:12px;font-size:.75rem;font-weight:850}
+.offline-review-secondary{background:var(--surface-2);color:var(--ink)}
+.offline-review-primary{background:var(--brand);border-color:var(--brand)!important;color:#fff}
+.offline-review-primary:disabled{opacity:.6}
+.offline-pending-controls button:first-child{background:var(--brand);border-color:var(--brand);color:#fff}
+html[data-pos-theme="dark"] .offline-review-problem{background:#332813;border-color:#705725;color:#f5d995}
+@media(max-width:420px){.offline-review-sheet{padding:15px}.offline-review-actions{bottom:-15px;margin:15px -15px -15px;padding:10px 15px calc(10px + env(safe-area-inset-bottom))}.offline-review-photo-button{font-size:.69rem;padding:8px}}
