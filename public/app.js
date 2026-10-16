@@ -470,7 +470,7 @@ function normalizeReference(value,provider=selectedProvider()) {
 
 function validReferenceLength(value,provider=selectedProvider()) {
   const ref=normalizeReference(value,provider);
-  if(provider==="GCash") return ref.length>=6 && ref.length<=18;
+  if(provider==="GCash") return ref.length>=4 && ref.length<=18;
   return ref.length>=6 && ref.length<=40 && /\d{4}/.test(ref);
 }
 
@@ -810,7 +810,7 @@ function readDigitsAfter(text,startIndex) {
     break;
   }
 
-  return digits.length>=6 && digits.length<=18 ? digits : "";
+  return digits.length>=4 && digits.length<=18 ? digits : "";
 }
 
 function editDistance(a,b) {
@@ -953,7 +953,7 @@ function extractDigitCandidates(text) {
   const candidates=[];
   for(const line of String(text||"").split(/\n|\r/)){
     const digits=digitsOnly(line);
-    if(digits.length>=6 && digits.length<=18) candidates.push(digits);
+    if(digits.length>=4 && digits.length<=18) candidates.push(digits);
   }
   return [...new Set(candidates)].sort((x,y)=>y.length-x.length);
 }
@@ -997,7 +997,7 @@ function extractLongNumberCandidates(text) {
   return String(text||"")
     .split(/\n|\r/)
     .map(line=>digitsOnly(line))
-    .filter(value=>value.length>=6 && value.length<=18)
+    .filter(value=>value.length>=4 && value.length<=18)
     .sort((a,b)=>b.length-a.length);
 }
 
