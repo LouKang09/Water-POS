@@ -238,9 +238,8 @@ function normalizePaymentReference(value, provider = "") {
 
 function isValidPaymentReference(value, provider = "") {
   const ref = normalizePaymentReference(value, provider);
-  if (provider === "GCash") return ref.length >= 4 && ref.length <= 18;
-  const digitCount = ref.split("").filter(ch => ch >= "0" && ch <= "9").length;
-  return ref.length >= 6 && ref.length <= 40 && digitCount >= 4;
+  if (provider === "GCash") return ref.length >= 3 && ref.length <= 18;
+  return ref.length >= 3 && ref.length <= 40;
 }
 
 function isSingleDigitCorrection(detected, submitted) {
@@ -407,7 +406,7 @@ app.post("/api/sales", upload.single("receipt"), async (req,res,next) => {
     const offlineManualReference = Boolean(clientSaleKey) && req.body.offlineManualReference === "true";
 
     if (isDigital && offlineManualReference && !isValidPaymentReference(submittedReference, paymentProvider)) {
-      return res.status(400).json({error:"Enter a valid manual payment reference (GCash: 4–18 digits; other providers: 6–40 characters with at least 4 digits)."});
+      return res.status(400).json({error:"Enter a valid manual payment reference (GCash: 3–18 digits; other providers: 3–40 characters)."});
     }
     if (isDigital && !req.file && !offlineManualReference) {
       return res.status(400).json({error: paymentProvider + " receipt image is required. Open Pending and choose Edit / Fix to add a photo or enter a manual reference."});
