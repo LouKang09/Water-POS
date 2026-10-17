@@ -1,5 +1,6 @@
 const ledgerMoney = value => "₱" + Number(value || 0).toLocaleString("en-PH", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 const ledgerEscape = value => String(value ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[ch]));
+const normalizeRoomUnitDisplay = value => String(value ?? "").trim().replace(/\s+/g, " ").replace(/\bUnit(?:\s+Unit)+\b/gi, "Unit").replace(/\bRoom(?:\s+Room)+\b/gi, "Room");
 let ledgerSeriesMap = new Map();
 let ledgerSeriesSortDirection = "desc";
 let ledgerEditCountMap = new Map();
@@ -534,7 +535,7 @@ function snapshotCard(snapshot, title, meta = "") {
         <div><span>Cash Flow / Paid Date</span><strong>${ledgerEscape(snapshot.paid_at ? historyDate(snapshot.paid_at) : "Unpaid")}</strong></div>
         <div><span>Payment</span><strong>${ledgerEscape(payment)}</strong></div>
         <div><span>Total</span><strong>${ledgerMoney(snapshot.total)}</strong></div>
-        <div><span>Room / Unit</span><strong>${ledgerEscape(snapshot.delivery_room_unit || "—")}</strong></div>
+        <div><span>Room / Unit</span><strong>${ledgerEscape(normalizeRoomUnitDisplay(snapshot.delivery_room_unit) || "—")}</strong></div>
         <div><span>Reference</span><strong>${ledgerEscape(snapshot.payment_reference || "—")}</strong></div>
       </div>
       <div class="sale-history-items"><span>Items</span><div>${snapshotItemText(snapshot)}</div></div>
@@ -688,7 +689,7 @@ async function openSaleEdit(id) {
     document.querySelector("#saleEditPayment").value = sale.payment_method;
     document.querySelector("#saleEditProvider").value = sale.payment_provider || "Maya";
     document.querySelector("#saleEditReference").value = sale.payment_reference || "";
-    document.querySelector("#saleEditRoom").value = sale.delivery_room_unit || "";
+    document.querySelector("#saleEditRoom").value = normalizeRoomUnitDisplay(sale.delivery_room_unit || "");
     const list = document.querySelector("#saleEditItems");
     list.innerHTML = "";
     (sale.items || []).forEach(item => list.appendChild(saleEditItemRow(item)));
@@ -772,7 +773,7 @@ async function printSalesReport(period) {
       <td>${ledgerEscape(seriesMap.get(String(sale.id)) || "—")}</td>
       <td>${ledgerEscape(fmtDate(sale.created_at))}</td>
       <td>${ledgerEscape(sale.transaction_ref)}</td>
-      <td>${ledgerEscape(sale.delivery_room_unit || "—")}</td>
+      <td>${ledgerEscape(normalizeRoomUnitDisplay(sale.delivery_room_unit) || "—")}</td>
       <td>${(sale.items || []).map(item => `${Number(item.qty)}× ${ledgerEscape(item.label)}`).join("<br>")}</td>
       <td>${ledgerEscape(sale.payment_provider || sale.payment_method)}</td>
       <td class="num">${ledgerMoney(sale.total)}</td>
