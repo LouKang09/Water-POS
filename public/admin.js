@@ -130,18 +130,27 @@ async function loadTrend(){
 
   const hourlyTrend=rows.some(row=>row.hour!==undefined&&row.hour!==null);
   const twoDayHourly=hourlyTrend&&from!==to;
-  const labels=rows.map(row=>{
+  const chartRows=[];
+  rows.forEach((row,index)=>{
+    chartRows.push(row);
+    const next=rows[index+1];
+    if(twoDayHourly&&row.hour===18&&next&&next.date!==row.date){
+      chartRows.push({date:row.date,hour:null,separator:true});
+    }
+  });
+  const labels=chartRows.map(row=>{
+    if(row.separator) return "";
     if(row.hour===undefined||row.hour===null) return shortDate(row.date);
     return twoDayHourly?`${shortDate(row.date)} · ${formatTrendHour(row.hour)}`:formatTrendHour(row.hour);
   });
   // Reuse the instance on refresh: preserve hovered positions, hidden series and smooth interaction.
   if(salesChart){
-    salesChart.$trendRows=rows;
+    salesChart.$trendRows=chartRows;
     salesChart.data.labels=labels;
     TREND_SERIES.forEach((series,index)=>{
-      salesChart.data.datasets[index].data=rows.map(r=>Number(r[series.key])||0);
-      salesChart.data.datasets[index].pointRadius=rows.length>75?1:rows.length>30?2:3.6;
-      salesChart.data.datasets[index].pointHitRadius=rows.length>75?4:12;
+      salesChart.data.datasets[index].data=chartRows.map(row=>row.separator?null:Number(row[series.key])||0);
+      salesChart.data.datasets[index].pointRadius=chartRows.length>75?1:chartRows.length>30?2:3.6;
+      salesChart.data.datasets[index].pointHitRadius=chartRows.length>75?4:12;
     });
     salesChart.update("none");
     syncTrendLegend();
@@ -150,7 +159,7 @@ async function loadTrend(){
 
   const datasets=TREND_SERIES.map((series,index)=>({
     label:series.label,
-    data:rows.map(r=>Number(r[series.key])||0),
+    data:chartRows.map(row=>row.separator?null:Number(row[series.key])||0),
     borderColor:series.color,
     backgroundColor:series.color,
     borderWidth:series.weight,
@@ -247,7 +256,7 @@ async function loadTrend(){
       }
     }
   });
-  salesChart.$trendRows=rows;
+  salesChart.$trendRows=chartRows;
   syncTrendLegend();
 }
 
