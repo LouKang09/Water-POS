@@ -1,9 +1,9 @@
 /* Offline Water POS application shell. API data is never cached. */
-const CACHE="water-pos-offline-v135";
+const CACHE="water-pos-offline-v136";
 const SHELL=[
 "/","/index.html","/pos-start.html","/pos-login.html",
 "/styles.css?v=20261016-room-keyboard1","/pos-theme.css?v=20261012-1",
-"/attendance.css?v=20261015-1","/app.js?v=20261016-reference3char1",
+"/attendance.css?v=20261015-1","/app.js?v=20261017-unitroomfix1",
 "/pos-auth.js?v=20261015-offline130","/offline-pos.js?v=20261016-reference3char1",
 "/attendance.js?v=20261015-1","/pos-theme.js?v=20261012-1",
 "/pos-login.js?v=20261015-offline130","/pos-login.css?v=20261011-2",
