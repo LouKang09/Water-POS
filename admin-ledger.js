@@ -461,7 +461,7 @@ function addRoutes(app) {
       const items = normalizeItems(req.body.items);
       const total = items.reduce((sum, item) => sum + item.lineTotal, 0);
       const payment = paymentFields(req.body);
-      const roomUnit = String(req.body.roomUnit || "").trim().replace(/\s+/g, " ").replace(/\bUnit(?:\s+Unit)+\b/gi, "Unit").replace(/\bRoom(?:\s+Room)+\b/gi, "Room").slice(0, 100) || null;
+      const roomUnit = String(req.body.roomUnit || "").trim().replace(/\s+/g, " ").replace(/\bUnit(?:\s+Unit)+\b/gi, "Unit").replace(/\bRoom(?:\s+Room)+\b/gi, "Room").replace(/^(?:unit\b[\s:#-]*)+/i, "").trim().slice(0, 100) || null;
       const original = existing.rows[0];
       const correctedDate = parsedDate.text + ":00+08:00";
       const preserveRealSettlement =
@@ -542,7 +542,7 @@ function addRoutes(app) {
       const items = normalizeItems(req.body.items);
       const total = items.reduce((sum, item) => sum + item.lineTotal, 0);
       const payment = paymentFields(req.body);
-      const roomUnit = String(req.body.roomUnit || "").trim().replace(/\s+/g, " ").replace(/\bUnit(?:\s+Unit)+\b/gi, "Unit").replace(/\bRoom(?:\s+Room)+\b/gi, "Room").slice(0, 100) || null;
+      const roomUnit = String(req.body.roomUnit || "").trim().replace(/\s+/g, " ").replace(/\bUnit(?:\s+Unit)+\b/gi, "Unit").replace(/\bRoom(?:\s+Room)+\b/gi, "Room").replace(/^(?:unit\b[\s:#-]*)+/i, "").trim().slice(0, 100) || null;
       const reference = manualReference(parsedDate.text);
 
       await client.query("BEGIN");
