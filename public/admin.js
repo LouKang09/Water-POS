@@ -94,9 +94,28 @@ function syncTrendLegend() {
   if(all) all.disabled=TREND_SERIES.every((_,index)=>salesChart.isDatasetVisible(index));
 }
 
-// A subtle guide emphasizes only the active point, never an entire date column.
+// Separate calendar days in short-range hourly views and emphasize only the active point.
 const trendFocusGuide={
   id:"waterPosTrendFocusGuide",
+  beforeDatasetsDraw(chart){
+    const rows=chart.$trendRows;
+    if(!rows?.some(row=>row.separator)) return;
+    const {ctx,chartArea,scales}=chart;
+    ctx.save();
+    ctx.strokeStyle="rgba(92,123,142,.18)";
+    ctx.lineWidth=1;
+    ctx.setLineDash([3,5]);
+    rows.forEach((row,index)=>{
+      if(!row.separator) return;
+      const x=scales.x.getPixelForValue(index);
+      if(!Number.isFinite(x)) return;
+      ctx.beginPath();
+      ctx.moveTo(x,chartArea.top);
+      ctx.lineTo(x,chartArea.bottom);
+      ctx.stroke();
+    });
+    ctx.restore();
+  },
   afterDatasetsDraw(chart){
     const active=chart.getActiveElements();
     if(active.length!==1) return;
@@ -129,19 +148,30 @@ async function loadTrend(){
   }
 
   const hourlyTrend=rows.some(row=>row.hour!==undefined&&row.hour!==null);
-  const twoDayHourly=hourlyTrend&&from!==to;
+  const multiDayHourly=hourlyTrend&&from!==to;
+  const chartTitle=$("#chartTitle");
+  if(chartTitle) chartTitle.textContent=hourlyTrend?"Hourly Sales Trend":"Daily Sales Trend";
+  const chartSubtitle=$("#chartSubtitle");
+  if(chartSubtitle) chartSubtitle.textContent=!hourlyTrend
+    ?"Explore day-to-day revenue and payment methods."
+    :multiDayHourly
+      ?"Compare sales by hour across each selected day (9 AM–6 PM)."
+      :"See how sales change through the day, hour by hour (9 AM–6 PM).";
+  canvas.setAttribute("aria-label",hourlyTrend
+    ?"Hourly sales trend from 9 AM to 6 PM with selectable Total Sales, Cash, GCash, and Other Digital lines. Hover or tap a point to inspect its exact amount."
+    :"Daily sales trend with selectable Total Sales, Cash, GCash, and Other Digital lines. Hover or tap a point to inspect its exact amount.");
   const chartRows=[];
   rows.forEach((row,index)=>{
     chartRows.push(row);
     const next=rows[index+1];
-    if(twoDayHourly&&row.hour===18&&next&&next.date!==row.date){
+    if(multiDayHourly&&row.hour===18&&next&&next.date!==row.date){
       chartRows.push({date:row.date,hour:null,separator:true});
     }
   });
   const labels=chartRows.map(row=>{
     if(row.separator) return "";
     if(row.hour===undefined||row.hour===null) return shortDate(row.date);
-    return twoDayHourly?`${shortDate(row.date)} · ${formatTrendHour(row.hour)}`:formatTrendHour(row.hour);
+    return multiDayHourly?`${shortDate(row.date)} · ${formatTrendHour(row.hour)}`:formatTrendHour(row.hour);
   });
   // Reuse the instance on refresh: preserve hovered positions, hidden series and smooth interaction.
   if(salesChart){
@@ -167,7 +197,7 @@ async function loadTrend(){
     cubicInterpolationMode:"monotone",
     fill:index===0?{target:"origin",above:"rgba(39,133,231,.065)"}:false,
     pointStyle:"circle",
-    pointRadius:rows.length>75?1:rows.length>30?2:3.6,
+    pointRadius:chartRows.length>75?1:chartRows.length>30?2:3.6,
     pointHitRadius:12,
     pointHoverRadius:7,
     pointHoverBorderWidth:2.8,
@@ -235,7 +265,19 @@ async function loadTrend(){
           ticks:{
             color:"#8192A0",
             font:{family:"Inter,system-ui,sans-serif",size:11,weight:"500"},
-            autoSkip:true,maxRotation:0,maxTicksLimit:10,padding:12
+            autoSkip:!hourlyTrend,
+            maxRotation:0,
+            minRotation:0,
+            maxTicksLimit:hourlyTrend?40:10,
+            padding:12,
+            callback:(value,index)=>{
+              const row=chartRows[index];
+              if(!row||row.separator) return "";
+              if(!hourlyTrend) return shortDate(row.date);
+              if(!multiDayHourly) return formatTrendHour(row.hour);
+              if(Number(row.hour)===9) return [shortDate(row.date),formatTrendHour(row.hour)];
+              return [12,15,18].includes(Number(row.hour))?formatTrendHour(row.hour):"";
+            }
           }
         },
         y:{
@@ -257,6 +299,7 @@ async function loadTrend(){
     }
   });
   salesChart.$trendRows=chartRows;
+  salesChart.update("none");
   syncTrendLegend();
 }
 
