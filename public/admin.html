@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#092f2e">
   <title>INYOU Water POS Admin</title>
   <link rel="icon" type="image/png" href="/brand/inyou-official-hd.png?v=20261011-2">
-  <link rel="stylesheet" href="/styles.css?v=20261017-hourly-trend1">
+  <link rel="stylesheet" href="/styles.css?v=20261017-hourly-trend2">
   <link rel="stylesheet" href="/admin-enhancements.css?v=20261014-manual2">
   <link rel="stylesheet" href="/admin-refinements.css?v=20261006-2">
   <link rel="stylesheet" href="/payroll.css?v=20261015-print-fix2">
@@ -79,8 +79,8 @@
           <div class="panel-header">
             <div class="panel-header-copy">
               <p class="trend-eyebrow">SALES ANALYTICS</p>
-              <h2>Daily Sales Trend</h2>
-              <p>Explore day-to-day revenue and payment methods.</p>
+              <h2 id="chartTitle">Daily Sales Trend</h2>
+              <p id="chartSubtitle">Explore day-to-day revenue and payment methods.</p>
             </div>
             <span id="chartRange" class="badge trend-range">Last 14 days</span>
           </div>
@@ -94,9 +94,9 @@
             <button type="button" id="trendShowAll" class="trend-show-all" disabled>Show all</button>
           </div>
           <div class="chart-wrap trend-chart-wrap">
-            <canvas id="salesTrendChart" role="img" aria-label="Daily sales trend with four selectable lines: Total Sales, Cash, GCash, and Other Digital. Hover or tap an individual data point to see only that series' exact amount."></canvas>
+            <canvas id="salesTrendChart" role="img" aria-label="Sales trend with four selectable lines: Total Sales, Cash, GCash, and Other Digital. Hover or tap a data point to inspect its exact amount."></canvas>
           </div>
-          <p class="trend-chart-help"><span class="trend-help-icon" aria-hidden="true">◎</span> Hover or tap a data point to see its exact amount. Use the legend to focus on a line. One- and two-day ranges show hourly sales from 9 AM to 6 PM.</p>
+          <p class="trend-chart-help"><span class="trend-help-icon" aria-hidden="true">◎</span> Hover or tap a data point to see its exact amount. Use the legend to focus on a line. Ranges of 1–6 days show hourly sales from 9 AM to 6 PM, with each date separated; ranges of 7 days or more show daily totals.</p>
         </div>
 
         <div class="report-toolbar">
@@ -211,7 +211,7 @@
   <section id="printReport" class="print-report" aria-hidden="true"></section>
   <div id="toast" class="toast"></div>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-  <script src="/admin.js?v=20261017-hourly-trend1"></script>
+  <script src="/admin.js?v=20261017-hourly-trend2"></script>
   <script src="/admin-enhancements.js?v=20261017-unitroomfix2"></script>
   <script src="/admin-refinements.js?v=20261017-sales-ledgerfix2"></script>
   <script src="/payroll.js?v=20261015-print-fix2"></script>
