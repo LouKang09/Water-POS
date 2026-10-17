@@ -22,6 +22,7 @@ const parseYmd=value=>{
 const shortDate=value=>parseYmd(value).toLocaleDateString("en-PH",{month:"short",day:"numeric"});
 const displayDate=value=>parseYmd(value).toLocaleDateString("en-PH",{year:"numeric",month:"short",day:"numeric"});
 const escapeHtml=value=>String(value??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[ch]));
+const normalizeRoomUnitDisplay=value=>String(value??"").trim().replace(/\s+/g," ").replace(/\bUnit(?:\s+Unit)+\b/gi,"Unit").replace(/\bRoom(?:\s+Room)+\b/gi,"Room");
 
 function toast(msg){const el=$("#toast");el.textContent=msg;el.classList.add("show");clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.remove("show"),2200);}
 async function api(url,opts={}){
@@ -306,7 +307,7 @@ async function loadSales(queryOverride="", options={}){
     <tr>
       <td>${fmtDate(r.created_at)}</td>
       <td><strong>${escapeHtml(r.transaction_ref)}</strong></td>
-      <td>${escapeHtml(r.delivery_room_unit||"—")}</td>
+      <td>${escapeHtml(normalizeRoomUnitDisplay(r.delivery_room_unit)||"—")}</td>
       <td>${r.items.map(i=>`${Number(i.qty)}× ${escapeHtml(i.label)}`).join("<br>")}</td>
       <td><span class="badge">${escapeHtml(r.payment_method)}</span></td>
       <td>${escapeHtml(r.payment_provider||"—")}</td>
@@ -447,7 +448,7 @@ async function printSalesReport(period){
       <tr>
         <td>${escapeHtml(fmtDate(r.created_at))}</td>
         <td>${escapeHtml(r.transaction_ref)}</td>
-        <td>${escapeHtml(r.delivery_room_unit||"—")}</td>
+        <td>${escapeHtml(normalizeRoomUnitDisplay(r.delivery_room_unit)||"—")}</td>
         <td>${r.items.map(i=>`${Number(i.qty)}× ${escapeHtml(i.label)}`).join("<br>")}</td>
         <td>${escapeHtml(r.payment_provider||r.payment_method)}</td>
         <td>${r.payment_reference_status==="unreadable" ? "Unreadable · review receipt" : escapeHtml(r.payment_reference||"—")}</td>
