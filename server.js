@@ -827,6 +827,27 @@ app.get("/api/admin/summary", adminAuth, async (req,res,next) => {
     const expenses = await pool.query(
       `SELECT COALESCE(SUM(amount),0)::numeric AS expenses
        FROM expenses WHERE expense_date BETWEEN $1::date AND $2::date`, [from,to]);
+    const peakHourRows = await pool.query(
+      `SELECT EXTRACT(HOUR FROM created_at AT TIME ZONE 'Asia/Manila')::int AS hour,
+              COALESCE(SUM(total),0)::numeric AS sales,
+              COALESCE(SUM(total) FILTER (WHERE payment_method='Cash'),0)::numeric AS cash,
+              COALESCE(SUM(total) FILTER (WHERE payment_method='GCash'),0)::numeric AS gcash,
+              COALESCE(SUM(total) FILTER (WHERE payment_method='Other'),0)::numeric AS other
+       FROM sales
+       WHERE payment_status='paid' AND (created_at AT TIME ZONE 'Asia/Manila')::date BETWEEN $1::date AND $2::date
+       GROUP BY hour
+       ORDER BY hour`, [from,to]);
+    const peakTimes = {};
+    for (const key of ["sales","cash","gcash","other"]) {
+      let best = null;
+      for (const row of peakHourRows.rows) {
+        const amount = Number(row[key] || 0);
+        if (amount > 0 && (!best || amount > best.amount)) {
+          best = { hour:Number(row.hour), amount };
+        }
+      }
+      peakTimes[key] = best;
+    }
     const s = sales.rows[0], ex = Number(expenses.rows[0].expenses);
     res.json({
       transactions:s.transactions,
@@ -835,7 +856,8 @@ app.get("/api/admin/summary", adminAuth, async (req,res,next) => {
       gcash:Number(s.gcash),
       other:Number(s.other),
       expenses:ex,
-      net:Number(s.sales)-ex
+      net:Number(s.sales)-ex,
+      peakTimes
     });
   } catch(e){ next(e); }
 });
@@ -846,6 +868,54 @@ app.get("/api/admin/sales-trend", adminAuth, async (req,res,next) => {
     const defaultDay = localToday.rows[0].day;
     const from = req.query.from || defaultDay;
     const to = req.query.to || defaultDay;
+    const rangeResult = await pool.query("SELECT ($2::date - $1::date + 1)::int AS days", [from,to]);
+    const dayCount = Number(rangeResult.rows[0]?.days || 0);
+
+    if (dayCount > 0 && dayCount <= 2) {
+      const { rows } = await pool.query(`
+        WITH days AS (
+          SELECT generate_series($1::date, $2::date, interval '1 day')::date AS day
+        ),
+        hours AS (
+          SELECT generate_series(9,18)::int AS hour
+        ),
+        hourly AS (
+          SELECT (created_at AT TIME ZONE 'Asia/Manila')::date AS day,
+                 EXTRACT(HOUR FROM created_at AT TIME ZONE 'Asia/Manila')::int AS hour,
+                 COALESCE(SUM(total),0)::numeric AS sales,
+                 COALESCE(SUM(total) FILTER (WHERE payment_method='Cash'),0)::numeric AS cash,
+                 COALESCE(SUM(total) FILTER (WHERE payment_method='GCash'),0)::numeric AS gcash,
+                 COALESCE(SUM(total) FILTER (WHERE payment_method='Other'),0)::numeric AS other,
+                 COUNT(*)::int AS transactions
+          FROM sales
+          WHERE payment_status='paid'
+            AND (created_at AT TIME ZONE 'Asia/Manila')::date BETWEEN $1::date AND $2::date
+            AND EXTRACT(HOUR FROM created_at AT TIME ZONE 'Asia/Manila') BETWEEN 9 AND 18
+          GROUP BY 1,2
+        )
+        SELECT to_char(days.day,'YYYY-MM-DD') AS date,
+               hours.hour,
+               COALESCE(hourly.sales,0)::numeric AS sales,
+               COALESCE(hourly.cash,0)::numeric AS cash,
+               COALESCE(hourly.gcash,0)::numeric AS gcash,
+               COALESCE(hourly.other,0)::numeric AS other,
+               COALESCE(hourly.transactions,0)::int AS transactions
+        FROM days
+        CROSS JOIN hours
+        LEFT JOIN hourly ON hourly.day = days.day AND hourly.hour = hours.hour
+        ORDER BY days.day, hours.hour
+      `, [from,to]);
+
+      return res.json(rows.map(r => ({
+        date:r.date,
+        hour:Number(r.hour),
+        sales:Number(r.sales),
+        cash:Number(r.cash),
+        gcash:Number(r.gcash),
+        other:Number(r.other),
+        transactions:Number(r.transactions)
+      })));
+    }
 
     const { rows } = await pool.query(`
       WITH days AS (
