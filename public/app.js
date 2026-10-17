@@ -83,6 +83,8 @@ function normalizeRoomUnit(value){
   return String(value??"").trim().replace(/\s+/g," ")
     .replace(/\bUnit(?:\s+Unit)+\b/gi,"Unit")
     .replace(/\bRoom(?:\s+Room)+\b/gi,"Room")
+    .replace(/^(?:unit\b[\s:#-]*)+/i,"")
+    .trim()
     .slice(0,100);
 }
 function displayRoomUnit(value){
