@@ -1,6 +1,6 @@
 const ledgerMoney = value => "₱" + Number(value || 0).toLocaleString("en-PH", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 const ledgerEscape = value => String(value ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[ch]));
-const normalizeRoomUnitDisplay = value => String(value ?? "").trim().replace(/\s+/g, " ").replace(/\bUnit(?:\s+Unit)+\b/gi, "Unit").replace(/\bRoom(?:\s+Room)+\b/gi, "Room");
+const normalizeRoomUnitDisplay = value => String(value ?? "").trim().replace(/\s+/g, " ").replace(/\bUnit(?:\s+Unit)+\b/gi, "Unit").replace(/\bRoom(?:\s+Room)+\b/gi, "Room").replace(/^(?:unit\b[\s:#-]*)+/i, "").trim();
 let ledgerSeriesMap = new Map();
 let ledgerSeriesSortDirection = "desc";
 let ledgerEditCountMap = new Map();
@@ -712,6 +712,8 @@ function collectSaleEditItems() {
 
 async function saveSaleEdit(event) {
   event.preventDefault();
+  const roomInput = document.querySelector("#saleEditRoom");
+  if (roomInput) roomInput.value = normalizeRoomUnitDisplay(roomInput.value);
   if (!activeLedgerSaleId) return;
   const button = document.querySelector("#saveSaleEdit");
   const error = document.querySelector("#saleEditError");
@@ -935,6 +937,9 @@ function bindLedgerUi() {
   document.querySelector("#deleteSelectedSales")?.addEventListener("click", deleteSelectedSales);
 
   document.querySelector("#closeSaleHistory")?.addEventListener("click", () => document.querySelector("#saleHistoryDialog").close());
+  document.querySelector("#saleEditRoom")?.addEventListener("blur", event => {
+    event.currentTarget.value = normalizeRoomUnitDisplay(event.currentTarget.value);
+  });
   document.querySelector("#saleEditPayment")?.addEventListener("change", saleEditPaymentFields);
   document.querySelector("#closeSaleEdit")?.addEventListener("click", () => document.querySelector("#saleEditDialog").close());
   document.querySelector("#cancelSaleEdit")?.addEventListener("click", () => document.querySelector("#saleEditDialog").close());
