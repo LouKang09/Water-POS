@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#092f2e">
   <title>INYOU Water POS Admin</title>
   <link rel="icon" type="image/png" href="/brand/inyou-official-hd.png?v=20261011-2">
-  <link rel="stylesheet" href="/styles.css?v=20261012-chart1">
+  <link rel="stylesheet" href="/styles.css?v=20261017-hourly-trend1">
   <link rel="stylesheet" href="/admin-enhancements.css?v=20261014-manual2">
   <link rel="stylesheet" href="/admin-refinements.css?v=20261006-2">
   <link rel="stylesheet" href="/payroll.css?v=20261015-print-fix2">
@@ -68,12 +68,12 @@
 
       <section id="salesSection" class="admin-section active">
         <div class="stat-grid">
-          <article class="stat-card"><span>Total Sales</span><strong id="statSales">₱0</strong></article>
-          <article class="stat-card"><span>Cash</span><strong id="statCash">₱0</strong></article>
-          <article class="stat-card"><span>GCash</span><strong id="statGcash">₱0</strong></article>
-          <article class="stat-card"><span>Other Digital</span><strong id="statOther">₱0</strong></article>
-          <article class="stat-card"><span>Expenses</span><strong id="statExpenses">₱0</strong></article>
-          <article class="stat-card"><span>Net</span><strong id="statNet">₱0</strong></article>
+          <article class="stat-card"><span>Total Sales</span><strong id="statSales">₱0</strong><small class="stat-meta" id="statSalesPeak">Peak hour: —</small></article>
+          <article class="stat-card"><span>Cash</span><strong id="statCash">₱0</strong><small class="stat-meta" id="statCashPeak">Peak hour: —</small></article>
+          <article class="stat-card"><span>GCash</span><strong id="statGcash">₱0</strong><small class="stat-meta" id="statGcashPeak">Peak hour: —</small></article>
+          <article class="stat-card"><span>Other Digital</span><strong id="statOther">₱0</strong><small class="stat-meta" id="statOtherPeak">Peak hour: —</small></article>
+          <article class="stat-card"><span>Expenses</span><strong id="statExpenses">₱0</strong><small class="stat-meta" id="statExpensesPeak">Tracked by expense date</small></article>
+          <article class="stat-card"><span>Net</span><strong id="statNet">₱0</strong><small class="stat-meta" id="statNetPeak">Peak sales hour: —</small></article>
         </div>
         <div class="panel chart-panel">
           <div class="panel-header">
@@ -96,7 +96,7 @@
           <div class="chart-wrap trend-chart-wrap">
             <canvas id="salesTrendChart" role="img" aria-label="Daily sales trend with four selectable lines: Total Sales, Cash, GCash, and Other Digital. Hover or tap an individual data point to see only that series' exact amount."></canvas>
           </div>
-          <p class="trend-chart-help"><span class="trend-help-icon" aria-hidden="true">◎</span> Hover or tap a data point to see its exact amount. Use the legend to focus on a line.</p>
+          <p class="trend-chart-help"><span class="trend-help-icon" aria-hidden="true">◎</span> Hover or tap a data point to see its exact amount. Use the legend to focus on a line. One- and two-day ranges show hourly sales from 9 AM to 6 PM.</p>
         </div>
 
         <div class="report-toolbar">
@@ -211,7 +211,7 @@
   <section id="printReport" class="print-report" aria-hidden="true"></section>
   <div id="toast" class="toast"></div>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-  <script src="/admin.js?v=20261017-unitroomfix2"></script>
+  <script src="/admin.js?v=20261017-hourly-trend1"></script>
   <script src="/admin-enhancements.js?v=20261017-unitroomfix2"></script>
   <script src="/admin-refinements.js?v=20261017-sales-ledgerfix2"></script>
   <script src="/payroll.js?v=20261015-print-fix2"></script>

@@ -124,6 +124,7 @@ dialog::backdrop{background:rgba(8,27,26,.55);backdrop-filter:blur(4px)}
 .stat-card{background:white;border:1px solid var(--line);border-radius:17px;padding:16px;box-shadow:0 8px 25px rgba(24,67,64,.05)}
 .stat-card span{display:block;color:var(--muted);font-size:.72rem;font-weight:750}
 .stat-card strong{display:block;margin-top:7px;font-size:1.4rem;letter-spacing:-.04em}
+.stat-card .stat-meta{display:block;margin-top:8px;color:var(--muted);font-size:.66rem;font-weight:650;line-height:1.35;min-height:2.6em}
 .admin-section{display:none}
 .admin-section.active{display:block}
 .panel{background:white;border:1px solid var(--line);border-radius:18px;box-shadow:0 8px 25px rgba(24,67,64,.05);overflow:hidden}
