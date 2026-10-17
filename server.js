@@ -221,6 +221,15 @@ function cleanPhone(value) {
   return String(value || "").replace(/[^0-9+]/g,"").slice(0,20);
 }
 
+function normalizeRoomUnit(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/\bUnit(?:\s+Unit)+\b/gi, "Unit")
+    .replace(/\bRoom(?:\s+Room)+\b/gi, "Room")
+    .slice(0, 100);
+}
+
 function digitsOnly(value) {
   return String(value || "").split("").filter(ch => ch >= "0" && ch <= "9").join("");
 }
@@ -385,7 +394,7 @@ app.post("/api/sales", upload.single("receipt"), async (req,res,next) => {
     const reference = txRef();
     const hasDelivery = items.some(item => item.category === "Delivery");
     const deliveryRoomUnit = hasDelivery
-      ? String(req.body.roomUnit || "").trim().slice(0, 100)
+      ? normalizeRoomUnit(req.body.roomUnit)
       : null;
 
     if (hasDelivery && !deliveryRoomUnit) {
