@@ -3,6 +3,15 @@ let adminActiveSection = document.querySelector(".side-nav button.active")?.data
 let adminRefreshTimer = null;
 let adminRefreshBusy = false;
 
+function normalizeManualRoomUnit(value) {
+  return String(value ?? "").trim().replace(/\s+/g, " ")
+    .replace(/\bUnit(?:\s+Unit)+\b/gi, "Unit")
+    .replace(/\bRoom(?:\s+Room)+\b/gi, "Room")
+    .replace(/^(?:unit\b[\s:#-]*)+/i, "")
+    .trim()
+    .slice(0, 100);
+}
+
 function addPasswordToggle(input, label = "Show") {
   if (!input || input.parentElement.querySelector(".password-toggle")) return;
   const wrap = document.createElement("div");
@@ -514,8 +523,15 @@ function bindAdminEnhancements() {
     updateManualTotal();
   });
 
+  const manualRoomUnitInput = document.querySelector("#manualRoomUnit");
+  manualRoomUnitInput?.addEventListener("blur", () => {
+    manualRoomUnitInput.value = normalizeManualRoomUnit(manualRoomUnitInput.value);
+  });
+
   document.querySelector("#manualTransactionForm")?.addEventListener("submit", async event => {
     event.preventDefault();
+    const roomUnitInput = document.querySelector("#manualRoomUnit");
+    if (roomUnitInput) roomUnitInput.value = normalizeManualRoomUnit(roomUnitInput.value);
     const errorEl = document.querySelector("#manualTransactionError");
     errorEl.textContent = "";
     const button = document.querySelector("#saveManualTransaction");
