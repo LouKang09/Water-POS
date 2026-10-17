@@ -21,6 +21,16 @@ const parseYmd=value=>{
 };
 const shortDate=value=>parseYmd(value).toLocaleDateString("en-PH",{month:"short",day:"numeric"});
 const displayDate=value=>parseYmd(value).toLocaleDateString("en-PH",{year:"numeric",month:"short",day:"numeric"});
+function formatTrendHour(hour){
+  const value=Number(hour);
+  if(!Number.isFinite(value)) return "—";
+  const normalized=((Math.trunc(value)%24)+24)%24;
+  return `${normalized%12||12} ${normalized>=12?"PM":"AM"}`;
+}
+function peakTimeText(peak,prefix="Peak hour",includeAmount=true){
+  if(!peak) return "No sales in this range";
+  return `${prefix}: ${formatTrendHour(peak.hour)}${includeAmount?" · "+money(peak.amount):""}`;
+}
 const escapeHtml=value=>String(value??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[ch]));
 const normalizeRoomUnitDisplay=value=>String(value??"").trim().replace(/\s+/g," ").replace(/\bUnit(?:\s+Unit)+\b/gi,"Unit").replace(/\bRoom(?:\s+Room)+\b/gi,"Room").replace(/^(?:unit\b[\s:#-]*)+/i,"").trim();
 
@@ -47,6 +57,13 @@ async function loadSummary(){
   $("#statOther").textContent=money(d.other);
   $("#statExpenses").textContent=money(d.expenses);
   $("#statNet").textContent=money(d.net);
+  const peaks=d.peakTimes||{};
+  $("#statSalesPeak").textContent=peakTimeText(peaks.sales,"Peak hour");
+  $("#statCashPeak").textContent=peakTimeText(peaks.cash,"Peak hour");
+  $("#statGcashPeak").textContent=peakTimeText(peaks.gcash,"Peak hour");
+  $("#statOtherPeak").textContent=peakTimeText(peaks.other,"Peak hour");
+  $("#statExpensesPeak").textContent="Tracked by expense date";
+  $("#statNetPeak").textContent=peakTimeText(peaks.sales,"Peak sales hour",false);
   $("#txCount").textContent=d.transactions+" transaction"+(d.transactions===1?"":"s");
 }
 // Stable chart metadata: keep color, label and data mapping aligned with the legend.
@@ -111,13 +128,20 @@ async function loadTrend(){
     return;
   }
 
-  const labels=rows.map(r=>shortDate(r.date));
+  const hourlyTrend=rows.some(row=>row.hour!==undefined&&row.hour!==null);
+  const twoDayHourly=hourlyTrend&&from!==to;
+  const labels=rows.map(row=>{
+    if(row.hour===undefined||row.hour===null) return shortDate(row.date);
+    return twoDayHourly?`${shortDate(row.date)} · ${formatTrendHour(row.hour)}`:formatTrendHour(row.hour);
+  });
   // Reuse the instance on refresh: preserve hovered positions, hidden series and smooth interaction.
   if(salesChart){
     salesChart.$trendRows=rows;
     salesChart.data.labels=labels;
     TREND_SERIES.forEach((series,index)=>{
       salesChart.data.datasets[index].data=rows.map(r=>Number(r[series.key])||0);
+      salesChart.data.datasets[index].pointRadius=rows.length>75?1:rows.length>30?2:3.6;
+      salesChart.data.datasets[index].pointHitRadius=rows.length>75?4:12;
     });
     salesChart.update("none");
     syncTrendLegend();
@@ -134,7 +158,7 @@ async function loadTrend(){
     cubicInterpolationMode:"monotone",
     fill:index===0?{target:"origin",above:"rgba(39,133,231,.065)"}:false,
     pointStyle:"circle",
-    pointRadius:rows.length>75?1:3.6,
+    pointRadius:rows.length>75?1:rows.length>30?2:3.6,
     pointHitRadius:12,
     pointHoverRadius:7,
     pointHoverBorderWidth:2.8,
@@ -184,8 +208,11 @@ async function loadTrend(){
           callbacks:{
             title:items=>{
               const item=items[0];
-              const date=item&&salesChart.$trendRows?.[item.dataIndex]?.date;
-              return date?displayDate(date):"";
+              const row=item&&salesChart.$trendRows?.[item.dataIndex];
+              if(!row) return "";
+              return row.hour===undefined||row.hour===null
+                ? displayDate(row.date)
+                : displayDate(row.date)+" · "+formatTrendHour(row.hour);
             },
             label:ctx=>ctx.dataset.label+"  ·  "+money(ctx.parsed.y)
           }
