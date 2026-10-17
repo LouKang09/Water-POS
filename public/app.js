@@ -79,6 +79,18 @@ const els = {
 };
 
 const money = n => "₱" + Number(n).toLocaleString("en-PH", {maximumFractionDigits:2});
+function normalizeRoomUnit(value){
+  return String(value??"").trim().replace(/\s+/g," ")
+    .replace(/\bUnit(?:\s+Unit)+\b/gi,"Unit")
+    .replace(/\bRoom(?:\s+Room)+\b/gi,"Room")
+    .slice(0,100);
+}
+function displayRoomUnit(value){
+  const roomUnit=normalizeRoomUnit(value);
+  if(!roomUnit) return "No room / unit";
+  if(/^(?:room\b|unit\b)/i.test(roomUnit)) return roomUnit;
+  return "Room / Unit "+roomUnit;
+}
 const cartTotal = () => state.cart.reduce((sum,i)=>sum+i.unitPrice*i.qty,0);
 
 function toast(message) {
@@ -351,7 +363,7 @@ function renderUnpaidSales(){
       </div>
       <div class="unpaid-items">${escapeHtml(unpaidItemsText(sale.items))}</div>
       <div class="unpaid-meta">
-        <span>${sale.delivery_room_unit ? "Room / Unit "+escapeHtml(sale.delivery_room_unit) : "No room / unit"}</span>
+        <span>${escapeHtml(displayRoomUnit(sale.delivery_room_unit))}</span>
         <span>${new Date(sale.created_at).toLocaleString("en-PH",{dateStyle:"medium",timeStyle:"short"})}</span>
       </div>
       <div class="unpaid-card-actions">
@@ -1193,7 +1205,7 @@ async function submitSale() {
   fd.append("paymentMethod",state.payment);
   if(!settling){
     fd.append("items",JSON.stringify(state.cart));
-    fd.append("roomUnit",state.deliveryRoomUnit.trim());
+    fd.append("roomUnit",normalizeRoomUnit(state.deliveryRoomUnit));
   }
 
   if(isDigital){
@@ -1442,6 +1454,11 @@ els.cameraInput.addEventListener("change",()=>{if(els.cameraInput.files[0])scanR
 els.receiptInput.addEventListener("change",()=>{if(els.receiptInput.files[0])scanReceipt(els.receiptInput.files[0],{sourceType:"upload"});});
 bindRoomUnitKeyboard();
 els.roomUnit.addEventListener("input",()=>{state.deliveryRoomUnit=els.roomUnit.value;});
+els.roomUnit.addEventListener("blur",()=>{
+  const normalized=normalizeRoomUnit(els.roomUnit.value);
+  els.roomUnit.value=normalized;
+  state.deliveryRoomUnit=normalized;
+});
 els.roomUnit.addEventListener("input",keepRoomUnitVisible);
 els.gcashReference.addEventListener("input",()=>{
   const cleaned=normalizeReference(els.gcashReference.value);
