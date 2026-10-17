@@ -871,7 +871,7 @@ app.get("/api/admin/sales-trend", adminAuth, async (req,res,next) => {
     const rangeResult = await pool.query("SELECT ($2::date - $1::date + 1)::int AS days", [from,to]);
     const dayCount = Number(rangeResult.rows[0]?.days || 0);
 
-    if (dayCount > 0 && dayCount <= 2) {
+    if (dayCount > 0 && dayCount < 7) {
       const { rows } = await pool.query(`
         WITH days AS (
           SELECT generate_series($1::date, $2::date, interval '1 day')::date AS day
