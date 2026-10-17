@@ -126,6 +126,15 @@ async function initDb() {
   `);
 }
 
+function normalizeUnitNumber(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/^(?:unit\b[\s:#-]*)+/i, "")
+    .trim()
+    .slice(0, 80);
+}
+
 async function tenantAuth(req,res,next) {
   try {
     const auth=req.headers.authorization||"";
@@ -137,12 +146,13 @@ async function tenantAuth(req,res,next) {
     );
     if(!rows.length) return res.status(401).json({error:"Tenant login required."});
     req.tenant=rows[0];
+    req.tenant.unit_no=normalizeUnitNumber(req.tenant.unit_no);
     next();
   } catch(e){next(e);}
 }
 
 function accountPayload(row) {
-  return { id:row.id,name:row.name,phone:row.phone,unit_no:row.unit_no };
+  return { id:row.id,name:row.name,phone:row.phone,unit_no:normalizeUnitNumber(row.unit_no) };
 }
 
 function validatePassword(value) {
@@ -158,7 +168,7 @@ app.post("/api/queue/account", async (req,res,next)=>{
   try {
     const name=String(req.body.name||"").trim().slice(0,120);
     const phone=cleanPhone(req.body.phone);
-    const unitNo=String(req.body.unitNo||"").trim().slice(0,80);
+    const unitNo=normalizeUnitNumber(req.body.unitNo);
     const password=String(req.body.password||"");
     const passwordError=validatePassword(password);
 
@@ -221,7 +231,7 @@ app.post("/api/queue/login", async (req,res,next)=>{
 app.post("/api/queue/claim", async (req,res,next)=>{
   try {
     const phone=cleanPhone(req.body.phone);
-    const unitNo=String(req.body.unitNo||"").trim();
+    const unitNo=normalizeUnitNumber(req.body.unitNo);
     const password=String(req.body.password||"");
     const passwordError=validatePassword(password);
     if(passwordError) return res.status(400).json({error:passwordError});
@@ -233,7 +243,7 @@ app.post("/api/queue/claim", async (req,res,next)=>{
     if(!rows.length) return res.status(404).json({error:"Existing preview account not found."});
     const account=rows[0];
     if(account.password_hash) return res.status(409).json({error:"This account already has a password. Use Existing User Login."});
-    if(account.unit_no.trim().toLowerCase()!==unitNo.toLowerCase()){
+    if(normalizeUnitNumber(account.unit_no).toLowerCase()!==unitNo.toLowerCase()){
       return res.status(401).json({error:"Phone number and Unit # do not match the existing account."});
     }
 
@@ -262,7 +272,7 @@ app.get("/api/queue/requests", tenantAuth, async (req,res,next)=>{
        ORDER BY created_at DESC LIMIT 30`,
       [req.tenant.id]
     );
-    res.json(rows.map(r=>({...r,unit_price:Number(r.unit_price),total:Number(r.total),qty:Number(r.qty)})));
+    res.json(rows.map(r=>({...r,unit_no:normalizeUnitNumber(r.unit_no),unit_price:Number(r.unit_price),total:Number(r.total),qty:Number(r.qty)})));
   } catch(e){next(e);}
 });
 
