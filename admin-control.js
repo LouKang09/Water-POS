@@ -280,7 +280,7 @@ function addRoutes(app) {
         ? null
         : cleanManualReference(req.body.paymentReference, paymentProvider);
       const referenceStatus = noReference ? null : "manual";
-      const roomUnit = String(req.body.roomUnit || "").trim().slice(0, 100) || null;
+      const roomUnit = String(req.body.roomUnit || "").trim().replace(/\s+/g, " ").replace(/\bUnit(?:\s+Unit)+\b/gi, "Unit").replace(/\bRoom(?:\s+Room)+\b/gi, "Room").slice(0, 100) || null;
       const reference = manualReference(parsedDate.text);
 
       await client.query("BEGIN");
