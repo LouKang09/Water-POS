@@ -17,6 +17,13 @@ const state={
 
 const $=s=>document.querySelector(s);
 const money=n=>"₱"+Number(n||0).toLocaleString("en-PH",{maximumFractionDigits:2});
+function normalizeUnitNumber(value){
+  return String(value??"").trim().replace(/\s+/g," ").replace(/^(?:unit\b[\s:#-]*)+/i,"").trim();
+}
+function formatUnitLabel(value){
+  const unit=normalizeUnitNumber(value);
+  return unit ? "Unit "+unit : "Unit —";
+}
 
 function toast(message){
   const el=$("#queueToast");
@@ -57,7 +64,7 @@ async function authRequest(url,body){
 function saveSession(result){
   tenantToken=result.token;
   localStorage.setItem(tokenKey,tenantToken);
-  state.account=result.account;
+  state.account=result.account?{...result.account,unit_no:normalizeUnitNumber(result.account.unit_no)}:null;
   renderAccount();
   updateSummary();
   loadHistory();
@@ -281,9 +288,9 @@ function renderAccount(){
   if(!logged) return;
   $("#tenantDisplayName").textContent=state.account.name;
   $("#tenantDisplayPhone").textContent=state.account.phone;
-  $("#tenantUnitBadge").textContent="Unit "+state.account.unit_no;
-  $("#deliveryUnitChip").textContent="Unit "+state.account.unit_no;
-  $("#summaryUnit").textContent="Unit "+state.account.unit_no;
+  $("#tenantUnitBadge").textContent=formatUnitLabel(state.account.unit_no);
+  $("#deliveryUnitChip").textContent=formatUnitLabel(state.account.unit_no);
+  $("#summaryUnit").textContent=formatUnitLabel(state.account.unit_no);
 }
 
 function updateSummary(){
@@ -339,7 +346,7 @@ function renderHistory(rows){
     <article class="history-item">
       <div class="history-top">
         <div>
-          <strong>${money(r.unit_price)} × ${r.qty} · Unit ${String(r.unit_no)}</strong>
+          <strong>${money(r.unit_price)} × ${r.qty} · ${formatUnitLabel(r.unit_no)}</strong>
           <small>${new Date(r.created_at).toLocaleString("en-PH",{dateStyle:"medium",timeStyle:"short"})} · ${money(r.total)}</small>
         </div>
         <span class="status ${r.status==="completed"?"completed":"pending"}">${historyStatus(r)}</span>
