@@ -22,7 +22,7 @@ const parseYmd=value=>{
 const shortDate=value=>parseYmd(value).toLocaleDateString("en-PH",{month:"short",day:"numeric"});
 const displayDate=value=>parseYmd(value).toLocaleDateString("en-PH",{year:"numeric",month:"short",day:"numeric"});
 const escapeHtml=value=>String(value??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[ch]));
-const normalizeRoomUnitDisplay=value=>String(value??"").trim().replace(/\s+/g," ").replace(/\bUnit(?:\s+Unit)+\b/gi,"Unit").replace(/\bRoom(?:\s+Room)+\b/gi,"Room");
+const normalizeRoomUnitDisplay=value=>String(value??"").trim().replace(/\s+/g," ").replace(/\bUnit(?:\s+Unit)+\b/gi,"Unit").replace(/\bRoom(?:\s+Room)+\b/gi,"Room").replace(/^(?:unit\b[\s:#-]*)+/i,"").trim();
 
 function toast(msg){const el=$("#toast");el.textContent=msg;el.classList.add("show");clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.remove("show"),2200);}
 async function api(url,opts={}){
