@@ -5,7 +5,7 @@ const e=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt
 const peso=n=>"₱ "+Number(n||0).toLocaleString("en-PH",{minimumFractionDigits:2,maximumFractionDigits:2});
 const currency=n=>Number(n||0).toFixed(2);
 const pad=n=>String(n).padStart(2,"0");
-let employees=[],lastPreview=null,nextNo=46,loading=false;
+let employees=[],lastPreview=null,savedPayslips=[],nextNo=46,loading=false;
 function phToday(){
  const p=Object.fromEntries(new Intl.DateTimeFormat("en-GB",{timeZone:"Asia/Manila",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date()).map(x=>[x.type,x.value]));
  return p.year+"-"+p.month+"-"+p.day;
@@ -40,8 +40,22 @@ function create(){
     <button type="submit" class="primary-button">Create Employee Account</button>
    </form><p class="payroll-help">The employee signs into the existing Water POS app using this email and password. The employee can change the password inside the app.</p></details>
   <div class="payroll-stats" id="payrollStats"></div>
-  <div class="panel payroll-attendance"><div class="payroll-section-head"><div><h3>Daily Time Records (DTR)</h3><p>Live attendance history, including breaks and pending time-outs.</p></div></div><div class="payroll-table-scroll"><table><thead><tr><th>Date</th><th>Status</th><th>Worked</th><th>Late</th><th>Lunch</th><th>Early Out</th></tr></thead><tbody id="payrollDays"></tbody></table></div><p id="payrollAttendanceInfo"></p><div id="payrollAdminClose" class="payroll-admin-close"></div></div>
-  <div class="panel payroll-editor"><div class="payroll-section-head"><div><h3>Editable Payslip</h3><p>Every label, amount, name, and date can be adjusted before printing.</p></div><span class="payroll-no-label">Payslip no. <strong id="payrollNo">46</strong></span></div>
+  <div class="panel payroll-attendance"><div class="payroll-section-head"><div><h3>Daily Time Records (DTR)</h3><p>Review exact timestamps and edit a record to correct time-in, time-out or lunch. Worked, late and early-out figures recalculate from the corrected times.</p></div></div><div class="payroll-table-scroll"><table><thead><tr><th>Date</th><th>Status</th><th>Time In Timestamp</th><th>Time Out Timestamp</th><th>Worked</th><th>Late</th><th>Lunch</th><th>Early Out</th><th>Actions</th></tr></thead><tbody id="payrollDays"></tbody></table></div><p id="payrollAttendanceInfo"></p><div id="payrollAdminClose" class="payroll-admin-close"></div></div>
+  <dialog id="payrollDtrEditDialog" class="payroll-dialog"><form id="payrollDtrEditForm">
+   <div class="payroll-section-head"><div><h3>Edit Daily Time Record</h3><p>Times are interpreted as Philippine time (Asia/Manila). Calculated attendance figures update after saving.</p></div><button type="button" id="dtrEditClose" class="small-button">Close</button></div>
+   <p id="dtrEditDayLabel" class="payroll-dtr-day"></p><input id="dtrEditId" type="hidden">
+   <div class="payroll-form-grid">
+    <label><span>Time In Timestamp</span><input id="dtrEditClockIn" type="datetime-local" required></label>
+    <label><span>Time Out Timestamp</span><input id="dtrEditClockOut" type="datetime-local"></label>
+    <label><span>First Lunch Start</span><input id="dtrEditLunchStart" type="datetime-local"></label>
+    <label><span>First Lunch End</span><input id="dtrEditLunchEnd" type="datetime-local"></label>
+   </div>
+   <p class="payroll-help">Leave time-out blank for a shift that is still open. This form edits the first lunch interval; any additional lunch intervals and other break records are retained.</p>
+   <label><span>Reason for correction (required for audit)</span><input id="dtrEditReason" maxlength="400" required placeholder="e.g. Corrected from the supervisor's attendance log"></label>
+   <div class="payroll-buttons"><button type="button" id="dtrEditCancel" class="small-button">Cancel</button><button type="submit" id="dtrEditSave" class="primary-button">Save DTR Corrections</button></div>
+   <p id="dtrEditMessage" aria-live="polite"></p>
+  </form></dialog>
+  <div class="panel payroll-editor"><div class="payroll-section-head"><div><h3>Editable Payslip</h3><p>Every label, amount, name, and date can be adjusted before printing.</p></div><div class="payroll-editor-actions"><button type="button" id="payrollRecalculate" class="small-button" title="Replace the current earning and standard deduction rows with the latest DTR calculations">Recalculate from DTR</button><span class="payroll-no-label">Payslip no. <strong id="payrollNo">46</strong></span></div></div>
    <div class="payroll-form-grid"><label><span>Employee Name on Slip</span><input id="slipEmployee" maxlength="120"></label><label><span>Pay Period Label</span><input id="slipPeriod" maxlength="120"></label><label><span>Pay Date</span><input id="slipDate" type="date"></label><label><span>Notes (internal)</span><input id="slipNotes" maxlength="500" placeholder="Optional"></label></div>
    <div class="payroll-tables"><div class="payroll-column"><div class="payroll-column-head"><h4>Earnings</h4><button type="button" id="addEarning">+ Add</button></div><div id="earningRows" class="payroll-rows"></div><div class="payroll-subtotal">Total Earnings <strong id="earningTotal">₱ 0.00</strong></div></div>
    <div class="payroll-column"><div class="payroll-column-head"><h4>Deductions</h4><div class="payroll-deduction-actions"><button type="button" id="resetDeductions" title="Restore standard attendance-based deductions">Reset</button><button type="button" id="addDeduction">+ Add</button></div></div><div id="deductionRows" class="payroll-rows"></div><div class="payroll-subtotal">Total Deductions <strong id="deductionTotal">₱ 0.00</strong></div></div></div>
@@ -56,6 +70,10 @@ function create(){
  q("#slipDate").value=phToday();
  for(const key of ["payrollEmployee","payrollYear","payrollMonth","payrollHalf"])q("#"+key).addEventListener("change",loadPreview);
  q("#payrollReload").onclick=loadPreview;
+ q("#payrollRecalculate").onclick=recalculateFromDtr;
+ q("#payrollDtrEditForm").onsubmit=saveDtrEdit;
+ q("#dtrEditCancel").onclick=closeDtrDialog;
+ q("#dtrEditClose").onclick=closeDtrDialog;
  q("#payrollSaveRate").onclick=saveRate;
  q("#payrollCreateEmployee").onsubmit=createEmployee;
  q("#addEarning").onclick=()=>addRow("earningRows",{label:"Additional Earning",amount:0});
@@ -98,6 +116,17 @@ function totals(){
  q("#earningTotal").textContent=peso(earning);q("#deductionTotal").textContent=peso(deduction);q("#netPay").textContent=peso(earning-deduction);
 }
 function mins(n){return Math.floor(Number(n||0)/60)+"h "+pad(Math.round(Number(n||0)%60))+"m";}
+function stamp(value){
+ if(!value)return "—";
+ const date=new Date(value);
+ if(!Number.isFinite(date.getTime()))return "—";
+ return new Intl.DateTimeFormat("en-PH",{timeZone:"Asia/Manila",year:"numeric",month:"short",day:"2-digit",hour:"numeric",minute:"2-digit"}).format(date);
+}
+function toManilaInput(value){
+ if(!value)return "";
+ const parts=Object.fromEntries(new Intl.DateTimeFormat("en-GB",{timeZone:"Asia/Manila",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(new Date(value)).map(x=>[x.type,x.value]));
+ return parts.year+"-"+parts.month+"-"+parts.day+"T"+parts.hour+":"+parts.minute;
+}
 async function loadEmployees(){
  employees=await api("/api/admin/payroll/employees");
  const current=q("#payrollEmployee").value;
@@ -131,12 +160,69 @@ async function loadPreview(){
   (data.saved?.earnings||data.earnings).forEach(r=>addRow("earningRows",r));
   (data.saved?.deductions||data.deductions).forEach(r=>addRow("deductionRows",r));
   q("#payrollStats").innerHTML='<div><span>Completed Workdays</span><strong>'+data.completedDays+'</strong></div><div><span>Pending Time-outs</span><strong>'+data.openDays+'</strong></div><div><span>Late Minutes Charged</span><strong>'+data.lateMinutes+'</strong></div><div><span>Daily Rate</span><strong>'+peso(employee.daily_wage)+'</strong></div>';
-  q("#payrollDays").innerHTML=data.days.length?data.days.map(row=>'<tr><td>'+e(row.date)+'</td><td>'+e(row.completed?"Completed":"Needs time-out")+'</td><td>'+e(mins(row.paidWorkMinutes))+'</td><td>'+row.lateMinutes+' min'+(row.lateDeductedMinutes?" (deductible)":"")+'</td><td>'+row.lunchMinutes+' min</td><td>'+row.earlyMinutes+' min</td></tr>').join(""):'<tr><td colspan="6">No attendance recorded during this period.</td></tr>';
+  q("#payrollDays").innerHTML=data.days.length?data.days.map(row=>'<tr><td>'+e(row.date)+'</td><td>'+e(row.completed?"Completed":"Needs time-out")+'</td><td>'+e(stamp(row.clockIn))+'</td><td>'+e(stamp(row.clockOut))+'</td><td>'+e(mins(row.paidWorkMinutes))+'</td><td>'+row.lateMinutes+' min'+(row.lateDeductedMinutes?" (deductible)":"")+'</td><td><span>'+row.lunchMinutes+' min</span><small class="payroll-time-detail">'+e(stamp(row.lunchStartAt))+' – '+e(stamp(row.lunchEndAt))+'</small></td><td>'+row.earlyMinutes+' min</td><td><button type="button" class="small-button payroll-edit-dtr" data-edit-dtr="'+row.id+'">Edit</button></td></tr>').join(""):'<tr><td colspan="9">No attendance recorded during this period.</td></tr>';
+  q("#payrollDays").querySelectorAll("[data-edit-dtr]").forEach(btn=>btn.onclick=()=>openDtrEditor(btn.dataset.editDtr));
   q("#payrollAttendanceInfo").textContent=data.openDays?"Warning: "+data.openDays+" day(s) have no final time-out, so they are excluded from automatic earnings. Review them below.":"Only completed days are included in payroll.";
   await loadOpenShifts(data.period.from,data.period.to);
-  q("#payrollMessage").textContent=data.saved?"Loaded saved payslip #"+data.saved.payslip_no+". All details remain editable.":"Preview calculated. Review and save to assign a payslip number.";
+  q("#payrollMessage").textContent=data.saved
+    ?"Loaded saved payslip #"+data.saved.payslip_no+". Saved amounts are preserved; if attendance changed after saving, use Recalculate from DTR before saving again."
+    :"Preview calculated from "+data.completedDays+" completed workday(s). Review the cutoff and amounts, then save to assign a payslip number.";
   totals();
  }catch(error){q("#payrollMessage").textContent=error.message;}
+}
+async function openDtrEditor(id){
+ const row=lastPreview?.days?.find(item=>String(item.id)===String(id));
+ if(!row)return toast("Refresh attendance and try opening that DTR record again.");
+ q("#dtrEditId").value=row.id;
+ q("#dtrEditDayLabel").textContent=row.date+" · "+(row.completed?"Completed shift":"Open shift")+". Worked: "+mins(row.paidWorkMinutes)+" · Late: "+row.lateMinutes+" min · Lunch: "+row.lunchMinutes+" min · Early out: "+row.earlyMinutes+" min.";
+ q("#dtrEditClockIn").value=toManilaInput(row.clockIn);
+ q("#dtrEditClockOut").value=toManilaInput(row.clockOut);
+ q("#dtrEditLunchStart").value=toManilaInput(row.lunchStartAt);
+ q("#dtrEditLunchEnd").value=toManilaInput(row.lunchEndAt);
+ q("#dtrEditReason").value="";
+ q("#dtrEditMessage").textContent="";
+ q("#payrollDtrEditDialog").showModal();
+}
+function closeDtrDialog(){
+ const dialog=q("#payrollDtrEditDialog");
+ if(dialog?.open)dialog.close();
+}
+async function saveDtrEdit(event){
+ event.preventDefault();
+ const id=q("#dtrEditId").value;
+ const reason=q("#dtrEditReason").value.trim();
+ if(!reason)return toast("Enter a reason for the DTR correction.");
+ const button=q("#dtrEditSave");button.disabled=true;
+ q("#dtrEditMessage").textContent="Saving attendance corrections…";
+ try{
+  await api("/api/admin/payroll/attendance/"+encodeURIComponent(id),{method:"PATCH",body:{
+   clockInAt:q("#dtrEditClockIn").value,
+   clockOutAt:q("#dtrEditClockOut").value,
+   lunchStartAt:q("#dtrEditLunchStart").value,
+   lunchEndAt:q("#dtrEditLunchEnd").value,
+   reason
+  }});
+  closeDtrDialog();
+  q("#payrollMessage").textContent="DTR correction saved. Worked time, late minutes, lunch and early-out values have been recalculated.";
+  await loadPreview();
+  await loadSaved();
+ }catch(error){
+  q("#dtrEditMessage").textContent=error.message||"Unable to save DTR correction.";
+ }finally{button.disabled=false;}
+}
+async function recalculateFromDtr(){
+ if(!lastPreview)return toast("Choose an employee and payroll cutoff first.");
+ if(!window.confirm("Replace the current earnings and deductions with the latest calculations from all completed DTRs in this selected cutoff? Any manual changes in those rows will be replaced. The saved payslip changes only when you click Save Payslip or Save & Print Payslip."))return;
+ try{
+  await loadPreview();
+  if(!lastPreview)return;
+  q("#earningRows").replaceChildren();
+  q("#deductionRows").replaceChildren();
+  (lastPreview.earnings||[]).forEach(item=>addRow("earningRows",item));
+  (lastPreview.deductions||[]).forEach(item=>addRow("deductionRows",item));
+  totals();
+  q("#payrollMessage").textContent="Recalculated from "+lastPreview.completedDays+" completed DTR day(s) for "+lastPreview.period.label+". Review the rows and save to update the payslip.";
+ }catch(error){toast(error.message||"Unable to recalculate from DTR.");}
 }
 async function loadOpenShifts(from,to){
  const att=await api("/api/admin/payroll/attendance?"+new URLSearchParams({from,to,employeeId:getParams().employeeId}));
@@ -201,14 +287,28 @@ async function savePayslip(print){
  finally{button.disabled=false;}
 }
 async function loadSaved(){
- const saved=await api("/api/admin/payroll/payslips");
- q("#payrollSaved").innerHTML=saved.length?saved.map(x=>'<button class="payroll-saved-row" type="button" data-user="'+x.user_id+'" data-date="'+e(x.period_from)+'"><strong>#'+x.payslip_no+'</strong><span>'+e(x.employee_name)+'</span><small>'+e(x.period_from)+' – '+e(x.period_to)+'</small></button>').join(""):"No payslips have been saved yet.";
- q("#payrollSaved").querySelectorAll("button").forEach(b=>b.onclick=async()=>{
-   const [y,m,d]=b.dataset.date.split("-").map(Number);
-   q("#payrollEmployee").value=b.dataset.user;q("#payrollYear").value=y;q("#payrollMonth").value=m;q("#payrollHalf").value=d===1?"first":"second";
+ savedPayslips=await api("/api/admin/payroll/payslips");
+ q("#payrollSaved").innerHTML=savedPayslips.length?savedPayslips.map(x=>'<div class="payroll-saved-row" data-id="'+x.id+'"><strong>#'+x.payslip_no+'</strong><span>'+e(x.employee_name)+'</span><small>'+e(x.period_from)+' – '+e(x.period_to)+'</small><div class="payroll-saved-actions"><button type="button" class="small-button" data-edit-saved="'+x.id+'">Edit</button><button type="button" class="small-button payroll-delete-slip" data-delete-saved="'+x.id+'">Delete</button></div></div>').join(""):"No payslips have been saved yet.";
+ q("#payrollSaved").querySelectorAll("[data-edit-saved]").forEach(button=>button.onclick=async()=>{
+   const slip=savedPayslips.find(x=>String(x.id)===button.dataset.editSaved);
+   if(!slip)return;
+   const [y,m,d]=slip.period_from.split("-").map(Number);
+   q("#payrollEmployee").value=slip.user_id;q("#payrollYear").value=y;q("#payrollMonth").value=m;q("#payrollHalf").value=d===1?"first":"second";
    await loadPreview();
    q(".payroll-editor")?.scrollIntoView({behavior:"smooth",block:"start"});
  });
+ q("#payrollSaved").querySelectorAll("[data-delete-saved]").forEach(button=>button.onclick=()=>deleteSavedPayslip(button.dataset.deleteSaved));
+}
+async function deleteSavedPayslip(id){
+ const slip=savedPayslips.find(x=>String(x.id)===String(id));
+ if(!slip)return;
+ if(!window.confirm("Delete saved payslip #"+slip.payslip_no+" for "+slip.employee_name+"?\n\nThis removes it from Saved Payslips. Its number will not be reused."))return;
+ try{
+  await api("/api/admin/payroll/payslips/"+encodeURIComponent(id),{method:"DELETE"});
+  toast("Payslip #"+slip.payslip_no+" deleted.");
+  await loadSaved();
+  if(String(lastPreview?.saved?.id||"")===String(id))await loadPreview();
+ }catch(error){toast(error.message||"Unable to delete saved payslip.");}
 }
 function renderPrint(saved){
  const earnings=rows("earningRows"),deductions=rows("deductionRows");
