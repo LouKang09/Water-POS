@@ -84,3 +84,33 @@
   body.printing-payroll .ps-signatures{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:4mm!important;width:100%!important;margin:12mm 0 0!important}
   body.printing-payroll .ps-signatures>div{font-size:9pt!important}
 }
+
+
+/* DTR timestamp editing and saved-payslip actions */
+.payroll-attendance .payroll-table-scroll table{min-width:1120px}
+.payroll-attendance td{vertical-align:top}
+.payroll-attendance .payroll-time-detail{display:block;max-width:190px;margin-top:4px;color:var(--muted,#71808a);font-size:.7rem;white-space:normal}
+.payroll-edit-dtr{padding:6px 10px!important;white-space:nowrap}
+.payroll-editor-actions{display:flex;align-items:center;justify-content:flex-end;gap:9px;flex-wrap:wrap}
+.payroll-editor-actions #payrollRecalculate{white-space:nowrap}
+.payroll-saved-row{gap:14px;cursor:default}
+.payroll-saved-actions{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.payroll-saved-actions button{padding:7px 10px;border:1px solid var(--line,#cad7d8);border-radius:8px;background:transparent;color:var(--ink,#183941);font:inherit;font-size:.76rem}
+.payroll-saved-actions .payroll-delete-slip{color:#b42332;border-color:#e6b8bd}
+.payroll-saved-actions .payroll-delete-slip:hover{background:rgba(180,35,50,.08)}
+.payroll-dialog{box-sizing:border-box;width:min(760px,calc(100vw - 32px));max-width:760px;max-height:calc(100dvh - 32px);overflow:auto;padding:22px;border:1px solid var(--line,#dce6e5);border-radius:18px;background:var(--card,#fff);color:var(--ink,#183941);box-shadow:0 24px 80px rgba(0,0,0,.24)}
+.payroll-dialog::backdrop{background:rgba(7,24,27,.62);backdrop-filter:blur(3px)}
+.payroll-dialog form{display:grid;gap:14px}
+.payroll-dialog .payroll-section-head{margin-bottom:0}
+.payroll-dialog .payroll-form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.payroll-dialog .payroll-dtr-day{padding:10px 12px;border-radius:10px;background:rgba(26,133,120,.08);font-size:.82rem;font-weight:650}
+.payroll-dialog #dtrEditMessage{margin:0;color:var(--muted,#71808a);font-size:.8rem}
+@media(max-width:660px){
+ .payroll-editor-actions{justify-content:flex-start;align-items:flex-start;flex-direction:column}
+ .payroll-saved-row{align-items:flex-start;flex-wrap:wrap;gap:8px}
+ .payroll-saved-row span{flex:1 1 50%}
+ .payroll-saved-row small{flex:1 1 100%}
+ .payroll-saved-actions{width:100%}
+ .payroll-dialog{padding:15px}
+ .payroll-dialog .payroll-form-grid{grid-template-columns:1fr}
+}
