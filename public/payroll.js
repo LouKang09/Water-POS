@@ -110,6 +110,10 @@ function resetDeductionRows(){
 function rows(holder){
  return [...q("#"+holder).querySelectorAll(".payroll-item")].map(r=>({label:r.querySelector(".payroll-item-label").value.trim(),amount:Number(r.querySelector(".payroll-item-amount").value)})).filter(x=>x.label||x.amount);
 }
+function sameRows(a,b){
+ const normalize=items=>JSON.stringify((items||[]).map(item=>({label:String(item.label||"").trim(),amount:Math.round((Number(item.amount)||0)*100)/100})));
+ return normalize(a)===normalize(b);
+}
 function totals(){
  const earning=rows("earningRows").reduce((n,x)=>n+(Number.isFinite(x.amount)?x.amount:0),0);
  const deduction=rows("deductionRows").reduce((n,x)=>n+(Number.isFinite(x.amount)?x.amount:0),0);
@@ -274,13 +278,30 @@ async function saveStartNo(){
 async function savePayslip(print){
  const values={...getParams(),employeeName:q("#slipEmployee").value,periodLabel:q("#slipPeriod").value,payDate:q("#slipDate").value,notes:q("#slipNotes").value,earnings:rows("earningRows"),deductions:rows("deductionRows")};
  if(!values.employeeName.trim()||!values.earnings.length||values.earnings.some(x=>!x.label||!Number.isFinite(x.amount)||x.amount<0)||values.deductions.some(x=>!x.label||!Number.isFinite(x.amount)||x.amount<0))return toast("Complete all earning and deduction descriptions and amounts.");
- if(lastPreview?.openDays&& !window.confirm("Some days have no time-out and are excluded from calculated wages. Save this payslip anyway?"))return;
  const button=q(print?"#printPayslip":"#savePayslip");
  button.disabled=true;
  try{
+  // If the editor still contains the exact saved rows, check whether attendance has changed since that slip was last saved.
+  if(lastPreview?.saved&&sameRows(values.earnings,lastPreview.saved.earnings)&&sameRows(values.deductions,lastPreview.saved.deductions)){
+   const fresh=await api("/api/admin/payroll/preview?"+params());
+   lastPreview=fresh;
+   if(fresh.saved&&(!sameRows(fresh.saved.earnings,fresh.earnings)||!sameRows(fresh.saved.deductions,fresh.deductions))){
+    const message="This saved payslip's amounts differ from the latest DTR calculation ("+fresh.completedDays+" completed day(s) in "+fresh.period.label+"). Recalculate from DTR before "+(print?"printing":"saving")+"?";
+    if(window.confirm(message)){
+     values.earnings=fresh.earnings;
+     values.deductions=fresh.deductions;
+     q("#earningRows").replaceChildren();q("#deductionRows").replaceChildren();
+     values.earnings.forEach(item=>addRow("earningRows",item));
+     values.deductions.forEach(item=>addRow("deductionRows",item));
+     totals();
+    }
+   }
+  }
+  if(lastPreview?.openDays&& !window.confirm("Some days have no time-out and are excluded from calculated wages. Save this payslip anyway?"))return;
   const saved=await api("/api/admin/payroll/payslips",{method:"POST",body:values});
   q("#payrollNo").textContent=saved.payslip_no;
   q("#payrollMessage").textContent="Payslip #"+saved.payslip_no+" saved. Net Pay: "+peso(saved.netPay);
+  if(lastPreview)lastPreview.saved=saved;
   await loadSaved();
   if(print)renderPrint(saved);
  }catch(ex){toast(ex.message);}
