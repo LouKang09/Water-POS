@@ -13,6 +13,14 @@ function manilaParts(when=new Date()){
   return {date:p.year+"-"+p.month+"-"+p.day,mins:Number(p.hour)*60+Number(p.minute)};
 }
 function dateValid(s){return typeof s==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(s)&&!Number.isNaN(Date.parse(s+"T00:00:00Z"))&&new Date(s+"T00:00:00Z").toISOString().slice(0,10)===s;}
+function parseManilaDateTime(value,label){
+  if(value==null||value==="")return null;
+  const text=String(value).trim();
+  if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(text)||!dateValid(text.slice(0,10)))throw Object.assign(new Error("Enter a valid "+label+" date and time in Philippine time."),{status:400});
+  const parsed=new Date(text+":00+08:00");
+  if(!Number.isFinite(parsed.getTime()))throw Object.assign(new Error("Enter a valid "+label+" date and time in Philippine time."),{status:400});
+  return parsed;
+}
 function money(n){return Math.round((Number(n)+Number.EPSILON)*100)/100;}
 function duration(a,b){return Math.max(0,(new Date(b).getTime()-new Date(a).getTime())/60000);}
 function validId(s){const n=Number(s);return Number.isSafeInteger(n)&&n>0?n:null;}
@@ -81,6 +89,14 @@ async function ensureSchema(){
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         UNIQUE(user_id,period_from,period_to)
       );
+      CREATE TABLE IF NOT EXISTS payroll_payslip_audit(
+        id BIGSERIAL PRIMARY KEY,
+        payslip_no INTEGER NOT NULL,
+        actor TEXT NOT NULL,
+        action TEXT NOT NULL,
+        snapshot JSONB,
+        at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
     `);
   })().catch(e=>{schemaPromise=null;throw e});
   return schemaPromise;
@@ -98,14 +114,20 @@ async function posAuth(req,res,next){
 const wrap=fn=>(req,res)=>Promise.resolve().then(ensureSchema).then(()=>fn(req,res)).catch(e=>{console.error("Attendance/payroll:",e);res.status(e.status||500).json({error:e.status?e.message:"Unable to process attendance or payroll. Try again."});});
 async function shiftView(db,shift,when=new Date()){
  if(!shift)return null;
- const r=await sql(db,"SELECT kind,started_at,ended_at FROM attendance_pauses WHERE shift_id=$1 ORDER BY started_at ASC",[shift.id]);
+ const r=await sql(db,"SELECT id,kind,started_at,ended_at FROM attendance_pauses WHERE shift_id=$1 ORDER BY started_at ASC,id ASC",[shift.id]);
  const end=shift.state==="out"?shift.clock_out:when;
  const elapsed=duration(shift.clock_in,end);
  let lunch=0,paused=0;
  for(const b of r.rows){const mins=duration(b.started_at,b.ended_at||end);if(b.kind==="lunch")lunch+=mins;else paused+=mins;}
- const activeLunch=r.rows.find(x=>x.kind==="lunch"&&!x.ended_at);
+ const lunchRows=r.rows.filter(x=>x.kind==="lunch");
+ const activeLunch=lunchRows.find(x=>!x.ended_at);
+ const firstLunch=lunchRows[0];
  const totalMinutes=Math.max(0,Math.round(elapsed-lunch-paused));
- return {id:shift.id,userId:shift.user_id,day:dayString(shift.work_day),state:shift.state,clockIn:shift.clock_in,clockOut:shift.clock_out,paidWorkMinutes:totalMinutes,lunchMinutes:Math.round(lunch),pausedMinutes:Math.round(paused),lunchStartedAt:activeLunch?.started_at||null,early:shift.state==="out"&&(totalMinutes<480||manilaParts(new Date(shift.clock_out)).mins<SHIFT_END_MIN)};
+ const clockInMinute=manilaParts(new Date(shift.clock_in)).mins;
+ const clockOutMinute=shift.clock_out?manilaParts(new Date(shift.clock_out)).mins:null;
+ const lateMinutes=Math.max(0,clockInMinute-SHIFT_START_MIN);
+ const earlyOutMinutes=shift.state==="out"&&clockOutMinute!==null?Math.max(0,SHIFT_END_MIN-clockOutMinute):0;
+ return {id:shift.id,userId:shift.user_id,day:dayString(shift.work_day),state:shift.state,clockIn:shift.clock_in,clockOut:shift.clock_out,paidWorkMinutes:totalMinutes,lunchMinutes:Math.round(lunch),pausedMinutes:Math.round(paused),lunchStartedAt:activeLunch?.started_at||null,lunchStartAt:firstLunch?.started_at||null,lunchEndAt:firstLunch?.ended_at||null,lunchIntervals:lunchRows.map(x=>({startedAt:x.started_at,endedAt:x.ended_at})),lateMinutes,earlyOutMinutes,early:shift.state==="out"&&(totalMinutes<480||earlyOutMinutes>0)};
 }
 async function todayShift(db,userId){
  const day=manilaParts().date;
@@ -213,6 +235,54 @@ function attendanceRoutes(app){
    const r=await sql(pool,"SELECT s.*,u.name FROM attendance_shifts s JOIN pos_users u ON u.id=s.user_id WHERE s.work_day BETWEEN $1::date AND $2::date AND ($3::int IS NULL OR s.user_id=$3) ORDER BY s.work_day DESC,u.name",[from,to,uid]);
    res.json(await Promise.all(r.rows.map(async s=>({...await shiftView(pool,s),name:s.name}))));
  }));
+ app.patch("/api/admin/payroll/attendance/:id",wrap(async(req,res)=>{
+   const id=validId(req.params.id),note=String(req.body?.reason||"").trim().slice(0,400);
+   if(!id||!note)return res.status(400).json({error:"A valid DTR record and correction reason are required."});
+   const clockInAt=parseManilaDateTime(req.body?.clockInAt,"time-in");
+   const clockOutAt=parseManilaDateTime(req.body?.clockOutAt,"time-out");
+   const lunchStartAt=parseManilaDateTime(req.body?.lunchStartAt,"lunch start");
+   const lunchEndAt=parseManilaDateTime(req.body?.lunchEndAt,"lunch end");
+   if(!clockInAt)return res.status(400).json({error:"Time-in is required."});
+   const now=new Date();
+   if(clockInAt>now||(clockOutAt&&clockOutAt>now)||(lunchStartAt&&lunchStartAt>now)||(lunchEndAt&&lunchEndAt>now))return res.status(400).json({error:"Attendance timestamps cannot be in the future."});
+   if(!lunchStartAt&&lunchEndAt)return res.status(400).json({error:"Enter lunch start before lunch end."});
+   if(lunchStartAt&&!lunchEndAt&&clockOutAt)return res.status(400).json({error:"Enter lunch end or clear lunch start before setting a final time-out."});
+   if(lunchStartAt&&lunchStartAt<clockInAt)return res.status(400).json({error:"Lunch cannot start before time-in."});
+   if(lunchEndAt&&lunchEndAt<lunchStartAt)return res.status(400).json({error:"Lunch end must be after lunch start."});
+   if(clockOutAt&&clockOutAt<=clockInAt)return res.status(400).json({error:"Time-out must be after time-in."});
+   if(lunchEndAt&&clockOutAt&&lunchEndAt>clockOutAt)return res.status(400).json({error:"Lunch must end before time-out."});
+   const client=await pool.connect();
+   try{
+     await client.query("BEGIN");
+     const found=await sql(client,"SELECT * FROM attendance_shifts WHERE id=$1 FOR UPDATE",[id]);
+     if(!found.rows.length){await client.query("ROLLBACK");return res.status(404).json({error:"Attendance record not found."});}
+     const shift=found.rows[0],day=dayString(shift.work_day);
+     if(manilaParts(clockInAt).date!==day||(clockOutAt&&manilaParts(clockOutAt).date!==day)||(lunchStartAt&&manilaParts(lunchStartAt).date!==day)||(lunchEndAt&&manilaParts(lunchEndAt).date!==day)){
+       await client.query("ROLLBACK");return res.status(400).json({error:"Corrected timestamps must stay on the DTR work date shown."});
+     }
+     const lunchRows=await sql(client,"SELECT id,started_at,ended_at FROM attendance_pauses WHERE shift_id=$1 AND kind='lunch' ORDER BY started_at ASC,id ASC",[id]);
+     const first=lunchRows.rows[0];
+     if(!lunchStartAt&&!lunchEndAt){
+       if(first)await sql(client,"DELETE FROM attendance_pauses WHERE id=$1",[first.id]);
+     }else if(first){
+       await sql(client,"UPDATE attendance_pauses SET started_at=$2,ended_at=$3 WHERE id=$1",[first.id,lunchStartAt,lunchEndAt]);
+     }else{
+       await sql(client,"INSERT INTO attendance_pauses(shift_id,kind,started_at,ended_at) VALUES($1,'lunch',$2,$3)",[id,lunchStartAt,lunchEndAt]);
+     }
+     const state=clockOutAt?"out":(lunchStartAt&&!lunchEndAt?"lunch":"working");
+     const changed=(await sql(client,"UPDATE attendance_shifts SET clock_in=$2,clock_out=$3,state=$4,updated_at=NOW() WHERE id=$1 RETURNING *",[id,clockInAt,clockOutAt,state])).rows[0];
+     if(clockOutAt){
+       const openPause=await sql(client,"SELECT id FROM attendance_pauses WHERE shift_id=$1 AND kind='pause' AND ended_at IS NULL ORDER BY started_at DESC,id DESC LIMIT 1",[id]);
+       if(openPause.rows.length)await sql(client,"UPDATE attendance_pauses SET started_at=$2,ended_at=NULL WHERE id=$1",[openPause.rows[0].id,clockOutAt]);
+       else await sql(client,"INSERT INTO attendance_pauses(shift_id,kind,started_at) VALUES($1,'pause',$2)",[id,clockOutAt]);
+     }else{
+       await sql(client,"DELETE FROM attendance_pauses WHERE shift_id=$1 AND kind='pause' AND ended_at IS NULL",[id]);
+     }
+     await sql(client,"INSERT INTO attendance_audit(shift_id,actor,action,note) VALUES($1,$2,'admin-edit',$3)",[id,"admin:"+String(req.adminAccount?.id||"unknown"),note]);
+     await client.query("COMMIT");
+     res.json({ok:true,shift:await shiftView(pool,changed)});
+   }catch(e){await client.query("ROLLBACK").catch(()=>{});throw e;}finally{client.release();}
+ }));
  app.post("/api/admin/payroll/attendance/:id/close",wrap(async(req,res)=>{
    const id=validId(req.params.id),note=String(req.body?.reason||"").trim().slice(0,400);
    if(!id||!note)return res.status(400).json({error:"A reason is required for an admin time-out."});
@@ -258,11 +328,11 @@ function attendanceRoutes(app){
      const chargedLunch=completed?Math.min(remaining,lunchOver):0;remaining-=chargedLunch;
      const chargedPause=completed?Math.min(remaining,view.pausedMinutes):0;
      if(completed){daysPaid++;lateMinutes+=chargedLate;earlyMinutes+=chargedEarly;extraLunchMinutes+=chargedLunch;pausedMinutes+=chargedPause;}else pending++;
-     results.push({date:dayString(s.work_day),completed,paidWorkMinutes:view.paidWorkMinutes,lateMinutes:late,lateDeductedMinutes:chargedLate,earlyMinutes:early,lunchMinutes:view.lunchMinutes,extraLunchMinutes:lunchOver,pausedMinutes:view.pausedMinutes,state:s.state});
+     results.push({id:s.id,date:dayString(s.work_day),completed,clockIn:view.clockIn,clockOut:view.clockOut,lunchStartAt:view.lunchStartAt,lunchEndAt:view.lunchEndAt,paidWorkMinutes:view.paidWorkMinutes,lateMinutes:late,lateDeductedMinutes:chargedLate,earlyMinutes:early,lunchMinutes:view.lunchMinutes,extraLunchMinutes:lunchOver,pausedMinutes:view.pausedMinutes,state:s.state});
    }
    const perMin=rate/480;
    const gross=money(daysPaid*rate);
-   const earnings=[{label:bounds.label,amount:gross}];
+   const earnings=[{label:bounds.label+" · "+daysPaid+" completed day"+(daysPaid===1?"":"s")+" × ₱"+rate.toFixed(2),amount:gross}];
    const deductions=[
      {label:"Late",amount:money(lateMinutes*perMin)},
      {label:"Early Time Out",amount:money(earlyMinutes*perMin)},
@@ -277,6 +347,21 @@ function attendanceRoutes(app){
  app.get("/api/admin/payroll/payslips",wrap(async(req,res)=>{
    const r=await sql(pool,"SELECT id,payslip_no,employee_name,period_from,period_to,pay_date,updated_at,user_id FROM payroll_payslips ORDER BY updated_at DESC LIMIT 80");
    res.json(r.rows.map(x=>({...x,period_from:dayString(x.period_from),period_to:dayString(x.period_to),pay_date:dayString(x.pay_date)})));
+ }));
+ app.delete("/api/admin/payroll/payslips/:id",wrap(async(req,res)=>{
+   const id=validId(req.params.id);
+   if(!id)return res.status(400).json({error:"Invalid saved payslip."});
+   const client=await pool.connect();
+   try{
+     await client.query("BEGIN");
+     const found=await sql(client,"SELECT * FROM payroll_payslips WHERE id=$1 FOR UPDATE",[id]);
+     if(!found.rows.length){await client.query("ROLLBACK");return res.status(404).json({error:"Saved payslip not found."});}
+     const row=found.rows[0];
+     await sql(client,"INSERT INTO payroll_payslip_audit(payslip_no,actor,action,snapshot) VALUES($1,$2,'delete',$3::jsonb)",[row.payslip_no,"admin:"+String(req.adminAccount?.id||"unknown"),JSON.stringify(row)]);
+     await sql(client,"DELETE FROM payroll_payslips WHERE id=$1",[id]);
+     await client.query("COMMIT");
+     res.json({ok:true,id:row.id,payslip_no:row.payslip_no});
+   }catch(e){await client.query("ROLLBACK").catch(()=>{});throw e;}finally{client.release();}
  }));
  app.post("/api/admin/payroll/payslips",wrap(async(req,res)=>{
    const id=validId(req.body?.employeeId),bounds=periodBounds(req.body?.year,req.body?.month,req.body?.half);
