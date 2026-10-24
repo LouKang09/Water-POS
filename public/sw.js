@@ -1,10 +1,10 @@
 /* Offline Water POS application shell. API data is never cached. */
-const CACHE="water-pos-offline-v137";
+const CACHE="water-pos-offline-v138";
 const SHELL=[
 "/","/index.html","/pos-start.html","/pos-login.html",
 "/styles.css?v=20261016-room-keyboard1","/pos-theme.css?v=20261012-1",
 "/attendance.css?v=20261015-1","/app.js?v=20261017-unitroomfix2",
-"/pos-auth.js?v=20261015-offline130","/offline-pos.js?v=20261016-reference3char1",
+"/pos-auth.js?v=20261015-offline130","/offline-pos.js?v=20261024-storagefallback1",
 "/attendance.js?v=20261015-1","/pos-theme.js?v=20261012-1",
 "/pos-login.js?v=20261015-offline130","/pos-login.css?v=20261011-2",
 "/pos-account.css?v=20261011-3","/offline-pos.css?v=20261016-reviewfix2","/brand/inyou-official-hd.png"
