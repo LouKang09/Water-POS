@@ -174,7 +174,20 @@ async function externalizeInsert(sql, values) {
   if (!isBuffer(image)) return { sql, values };
 
   const currentMime = parsed.mimeValueIndex >= 0 ? values[parsed.mimeValueIndex] : "image/jpeg";
-  const stored = await storeReceipt(image, currentMime, parsed.table === "sales" ? "sales" : "queue");
+  let stored;
+  try {
+    stored = await storeReceipt(image, currentMime, parsed.table === "sales" ? "sales" : "queue");
+  } catch (error) {
+    // A broken S3 signature/credential must not block legitimate POS sales.
+    // Keep the attached image transactionally in PostgreSQL when object storage fails;
+    // never drop the evidence or acknowledge the transaction before DB commit.
+    console.error("Receipt object storage failed; retaining image in PostgreSQL:", error.code || error.name || "storage error");
+    const optimized = await optimizeImage(image, currentMime);
+    const fallbackValues = values.slice();
+    fallbackValues[parsed.imageValueIndex] = optimized.buffer;
+    if (parsed.mimeValueIndex >= 0) fallbackValues[parsed.mimeValueIndex] = optimized.mime;
+    return { sql, values: fallbackValues };
+  }
   if (!stored) return { sql, values };
 
   const nextValues = values.slice();

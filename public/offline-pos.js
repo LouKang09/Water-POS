@@ -118,7 +118,9 @@ async function sync(){
     online=false;lastError="Please sign in online as the same employee to sync pending sales.";break;
    }
    if(response.status>=500||response.status===429){
-    online=false;lastError="Server is unavailable. Will retry automatically.";break;
+    online=false;
+    lastError="Sale upload temporarily rejected by the server ("+response.status+"). Receipt and transaction remain on this device; retry is automatic.";
+    break;
    }
    entry.state="review";
    entry.error=details.error||"Could not accept this transaction; review before retrying.";
@@ -294,7 +296,7 @@ async function updateBanner(){
  $("#offlinePosHeadline").textContent=!isOnline?"Offline · local sales enabled":reviewCount||lastError?"Sync needs attention":count?"Online · "+count+" pending sync":"Online · ready";
  $("#offlinePosDescription").textContent=reviewCount
   ?reviewCount+" sale"+(reviewCount===1?" needs":"s need")+" a receipt or valid reference. Open Pending and choose Edit / Fix."
-  :lastError||(!isOnline?"Sales will upload when your internet returns.":"Confirmed sales sync to the central database.");
+  :lastError||(!isOnline?"Sales will upload when your internet returns.":count?"Pending local sales are being retried. Your transaction images remain on this device until confirmed.":"All locally queued sales are synced.");
  $("#offlinePosDot").className="offline-pos-dot "+(!isOnline?"offline":reviewCount||lastError?"warning":"online");
  const details=$("#offlinePosDetails");
  details.innerHTML=list.length?list.map(x=>{
