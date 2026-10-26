@@ -209,15 +209,26 @@ function createPosLogoutDialog() {
   dialog.querySelector("#posLogoutKeep").addEventListener("click", function () {
     dialog.close();
   });
-  dialog.querySelector("#posLogoutConfirm").addEventListener("click", function () {
-    // Android native bridge clears the WebView session and opens the sign-in page.
-    if (window.AndroidPos && typeof window.AndroidPos.logoutApp === "function") {
-      window.AndroidPos.logoutApp();
-      return;
-    }
+  dialog.querySelector("#posLogoutConfirm").addEventListener("click", async function () {
+    const button=dialog.querySelector("#posLogoutConfirm");
+    button.disabled=true;
+    button.textContent="Logging out…";
+    // Revoke the session remotely when connected; never block local logout
+    // indefinitely if a cashier has no network. IndexedDB pending sales remain.
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>controller.abort(),3000);
+    try{
+      await window.fetch("/api/pos/logout",{method:"POST",signal:controller.signal});
+    }catch(error){
+      console.warn("POS logout server revocation not confirmed:",error.message);
+    }finally{clearTimeout(timeout);}
     posToken = "";
     localStorage.removeItem(POS_TOKEN_KEY);
-    location.replace("/pos-login.html");
+    if (window.AndroidPos && typeof window.AndroidPos.logoutApp === "function") {
+      window.AndroidPos.logoutApp();
+    } else {
+      location.replace("/pos-login.html");
+    }
   });
   return dialog;
 }
@@ -269,6 +280,11 @@ document.addEventListener("click", event => {
     if (res.status===401) throw new Error("unauthorized");
     if (!res.ok) throw new Error("connection");
     currentPosUser = await res.json();
+    if(currentPosUser.sessionToken){
+      posToken=currentPosUser.sessionToken;
+      localStorage.setItem(POS_TOKEN_KEY,posToken);
+      delete currentPosUser.sessionToken;
+    }
     localStorage.setItem("water_pos_cached_user",JSON.stringify(currentPosUser));
     const label = document.querySelector("#posUserLabel");
     if (label) label.textContent = currentPosUser.name || currentPosUser.email || "POS User";
