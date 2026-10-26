@@ -8,17 +8,42 @@ if (!posToken && location.pathname !== "/pos-login.html") {
 
 const nativeFetch = window.fetch.bind(window);
 const protectedPrefixes = ["/api/sales", "/api/pos/"];
+let sessionRecheck = null;
+
+function verifySessionAfterApi401(token) {
+  // Another endpoint can return 401 for its own reasons. Do not erase a
+  // working cashier session unless the authoritative /api/pos/me rejects it.
+  if (!token || localStorage.getItem(POS_TOKEN_KEY) !== token) return;
+  if (sessionRecheck) return;
+  sessionRecheck = (async () => {
+    try {
+      const res = await nativeFetch("/api/pos/me", {
+        headers: { Authorization: "Bearer " + token },
+        cache: "no-store"
+      });
+      if (res.status === 401 && localStorage.getItem(POS_TOKEN_KEY) === token) {
+        posToken = "";
+        localStorage.removeItem(POS_TOKEN_KEY);
+        location.replace("/pos-login.html");
+      }
+    } catch (error) {
+      // A temporary network issue is NOT a logout. Offline sales must work.
+      console.warn("POS session recheck postponed:", error.message);
+    }
+  })().finally(() => { sessionRecheck = null; });
+}
 
 window.fetch = function(input, init = {}) {
   const url = typeof input === "string" ? input : input.url;
   const sameOriginProtected = protectedPrefixes.some(prefix => String(url).startsWith(prefix));
-  if (sameOriginProtected && posToken) {
-    init = { ...init, headers: { ...(init.headers || {}), Authorization: "Bearer " + posToken } };
+  const sentToken = posToken;
+  if (sameOriginProtected && sentToken) {
+    init = { ...init, headers: { ...(init.headers || {}), Authorization: "Bearer " + sentToken } };
   }
   return nativeFetch(input, init).then(response => {
-    if (sameOriginProtected && response.status === 401 && location.pathname !== "/pos-login.html") {
-      localStorage.removeItem(POS_TOKEN_KEY);
-      location.replace("/pos-login.html");
+    if (sameOriginProtected && response.status === 401 &&
+        String(url) !== "/api/pos/me" && location.pathname !== "/pos-login.html") {
+      void verifySessionAfterApi401(sentToken);
     }
     return response;
   });
