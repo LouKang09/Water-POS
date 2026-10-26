@@ -1,10 +1,9 @@
 "use strict";
 const express = require("express");
-const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const { Pool } = require("pg");
+const { posGuard } = require("./pos-auth");
 const pool = new Pool({connectionString:process.env.DATABASE_URL,ssl:process.env.NODE_ENV==="production"?{rejectUnauthorized:false}:false});
-const jwtSecret=process.env.JWT_SECRET||"development-only-change-me";
 const SHIFT_START_MIN=9*60, SHIFT_END_MIN=18*60, LUNCH_MIN=60, LATE_START_MIN=30;
 let schemaPromise;
 const sql = (db,text,params=[])=>db.query(text,params);
@@ -101,15 +100,14 @@ async function ensureSchema(){
   })().catch(e=>{schemaPromise=null;throw e});
   return schemaPromise;
 }
-async function posAuth(req,res,next){
-  try{
-    const h=String(req.headers.authorization||"");
-    const c=jwt.verify(h.startsWith("Bearer ")?h.slice(7):"",jwtSecret);
-    if(c.role!=="pos"||!validId(c.id))throw new Error("role");
-    const r=await sql(pool,"SELECT id,name,active,auth_version FROM pos_users WHERE id=$1",[c.id]);
-    if(!r.rows.length||!r.rows[0].active||Number(r.rows[0].auth_version||1)!==Number(c.authVersion||1))throw new Error("inactive");
-    req.attendanceUser=r.rows[0];next();
-  }catch{res.status(401).json({error:"Please sign into Water POS to record attendance."});}
+function posAuth(req,res,next){
+  // The attendance API must accept the same POS sessions as /api/pos/me,
+  // /api/sales and the online queue. A legacy JWT-only guard here caused
+  // immediate 401s (and forced client-side logout) after successful sign-in.
+  return posGuard(req,res,()=>{
+    req.attendanceUser=req.posUser;
+    next();
+  });
 }
 const wrap=fn=>(req,res)=>Promise.resolve().then(ensureSchema).then(()=>fn(req,res)).catch(e=>{console.error("Attendance/payroll:",e);res.status(e.status||500).json({error:e.status?e.message:"Unable to process attendance or payroll. Try again."});});
 async function shiftView(db,shift,when=new Date()){
