@@ -489,3 +489,7 @@ express.application.listen = function(...args) {
     return originalListen.apply(app, args);
   });
 };
+
+// One source of truth for POS authentication, including revocable persistent
+// sessions and legacy JWT migration. Attendance and other POS modules reuse it.
+module.exports = { posGuard };
