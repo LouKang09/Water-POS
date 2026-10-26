@@ -196,6 +196,10 @@ bindPasswordVisibility();
       const res = await fetch("/api/pos/me", { headers: { Authorization: "Bearer " + existing }, cache: "no-store" });
       if (res.ok){
         const verified=await res.json();
+        if(verified.sessionToken){
+          localStorage.setItem(POS_TOKEN_KEY,verified.sessionToken);
+          delete verified.sessionToken;
+        }
         localStorage.setItem("water_pos_cached_user",JSON.stringify(verified));
         return location.replace("/");
       }

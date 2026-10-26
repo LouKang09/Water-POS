@@ -98,21 +98,48 @@ async function sendPasswordOtp(email, name, code) {
   }
 }
 
+async function createPosSession(user) {
+  // No automatic expiration: only a manual logout, password reset/change,
+  // or admin account revocation invalidates the locally persisted session.
+  const token = "wps_" + crypto.randomBytes(32).toString("hex");
+  await pool.query(
+    "INSERT INTO pos_sessions(user_id,token_hash,auth_version) VALUES($1,$2,$3)",
+    [user.id, tokenHash(token), Number(user.auth_version || user.authVersion || 1)]
+  );
+  return token;
+}
+
+function tokenHash(value) {
+  return crypto.createHash("sha256").update(String(value)).digest("hex");
+}
+
 async function posGuard(req, res, next) {
   const auth = req.headers.authorization || "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
   try {
-    const user = jwt.verify(token, secret);
-    if (user.role !== "pos" || !user.id) throw new Error("role");
-    const result = await pool.query(
-      "SELECT active,auth_version FROM pos_users WHERE id=$1 LIMIT 1",
-      [user.id]
-    );
-    if (!result.rows.length || !result.rows[0].active) throw new Error("inactive");
-    const currentVersion = Number(result.rows[0].auth_version || 1);
-    const tokenVersion = Number(user.authVersion || 1);
-    if (tokenVersion !== currentVersion) throw new Error("revoked");
-    req.posUser = { ...user, authVersion: currentVersion };
+    if (token.startsWith("wps_")) {
+      const result = await pool.query(
+        `SELECT u.id,u.name,u.email,u.active,u.auth_version,s.auth_version AS session_auth_version
+         FROM pos_sessions s JOIN pos_users u ON u.id=s.user_id
+         WHERE s.token_hash=$1 AND s.revoked_at IS NULL LIMIT 1`,
+        [tokenHash(token)]
+      );
+      const row=result.rows[0];
+      if (!row || !row.active || Number(row.auth_version)!==Number(row.session_auth_version)) throw new Error("revoked");
+      req.posUser={role:"pos",id:row.id,name:row.name,email:row.email,authVersion:Number(row.auth_version)};
+      req.posSessionToken=token;
+    } else {
+      // Legacy 12-hour JWTs remain valid until they expire. Existing installed
+      // clients can migrate to a permanent session via /api/pos/me.
+      const user = jwt.verify(token, secret);
+      if (user.role !== "pos" || !user.id) throw new Error("role");
+      const result = await pool.query("SELECT active,auth_version FROM pos_users WHERE id=$1 LIMIT 1",[user.id]);
+      if (!result.rows.length || !result.rows[0].active) throw new Error("inactive");
+      const currentVersion = Number(result.rows[0].auth_version || 1);
+      if (Number(user.authVersion || 1) !== currentVersion) throw new Error("revoked");
+      req.posUser = { ...user, authVersion: currentVersion };
+      req.posLegacySession=true;
+    }
     next();
   } catch {
     res.status(401).json({ error: "POS login required." });
@@ -153,6 +180,16 @@ async function ensureTable() {
 
     ALTER TABLE pos_users ADD COLUMN IF NOT EXISTS auth_version INTEGER NOT NULL DEFAULT 1;
 
+    CREATE TABLE IF NOT EXISTS pos_sessions (
+      id BIGSERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES pos_users(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL UNIQUE,
+      auth_version INTEGER NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      revoked_at TIMESTAMPTZ
+    );
+    CREATE INDEX IF NOT EXISTS idx_pos_sessions_active_user ON pos_sessions(user_id) WHERE revoked_at IS NULL;
+
     CREATE TABLE IF NOT EXISTS pos_password_reset_codes (
       id BIGSERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL REFERENCES pos_users(id) ON DELETE CASCADE,
@@ -189,7 +226,7 @@ function addRoutes(app) {
       [name, email, secure.hash, secure.salt]
     );
     const user = created.rows[0];
-    const token = jwt.sign({ role: "pos", id: user.id, name: user.name, email: user.email, authVersion: 1 }, secret, { expiresIn: "12h" });
+    const token = await createPosSession({ ...user,auth_version:1 });
     res.status(201).json({ token, user });
   });
 
@@ -202,7 +239,7 @@ function addRoutes(app) {
     }
     const row = result.rows[0];
     await pool.query("UPDATE pos_users SET last_login_at=NOW() WHERE id=$1", [row.id]);
-    const token = jwt.sign({ role: "pos", id: row.id, name: row.name, email: row.email, authVersion: Number(row.auth_version || 1) }, secret, { expiresIn: "12h" });
+    const token = await createPosSession(row);
     res.json({ token, user: { id: row.id, name: row.name, email: row.email } });
   });
 
@@ -343,14 +380,50 @@ function addRoutes(app) {
   originalGet.call(app, "/api/pos/me", posGuard, async (req, res) => {
     try {
       const result = await pool.query(
-        "SELECT id,name,email FROM pos_users WHERE id=$1 AND active=TRUE LIMIT 1",
+        "SELECT id,name,email,auth_version FROM pos_users WHERE id=$1 AND active=TRUE LIMIT 1",
         [req.posUser.id]
       );
       if (!result.rows.length) return res.status(401).json({ error: "POS account is no longer active." });
-      res.json(result.rows[0]);
+      const row=result.rows[0];
+      const response={id:row.id,name:row.name,email:row.email};
+      // Upgrade unexpired legacy sessions so current installed apps can retain login.
+      if(req.posLegacySession)response.sessionToken=await createPosSession(row);
+      res.json(response);
     } catch {
       res.status(500).json({ error: "Unable to load POS account." });
     }
+  });
+
+  originalPost.call(app, "/api/pos/logout", posGuard, async (req,res) => {
+    try {
+      if(req.posSessionToken){
+        await pool.query("UPDATE pos_sessions SET revoked_at=NOW() WHERE token_hash=$1 AND revoked_at IS NULL",[tokenHash(req.posSessionToken)]);
+      }
+      res.json({ok:true});
+    }catch(error){
+      console.error("POS session logout failed:",error);
+      res.status(503).json({error:"Unable to revoke session while offline."});
+    }
+  });
+
+  originalGet.call(app, "/api/pos/transactions/today", posGuard, async (req,res) => {
+    try{
+      // Restrict staff to their own transactions and the current Manila calendar day.
+      const data=await pool.query(
+        `SELECT s.id,s.transaction_ref,s.client_sale_key,s.created_at,s.total,
+                s.payment_method,s.payment_provider,s.payment_status,s.delivery_room_unit,
+                COALESCE((SELECT json_agg(json_build_object('label',i.label,'qty',i.qty,'unitPrice',i.unit_price) ORDER BY i.id)
+                          FROM sale_items i WHERE i.sale_id=s.id),'[]'::json) AS items
+         FROM sales s
+         WHERE s.client_sale_user_id=$1
+           AND (s.created_at AT TIME ZONE 'Asia/Manila')::date =
+               (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Manila')::date
+         ORDER BY s.created_at DESC,s.id DESC LIMIT 500`,
+        [req.posUser.id]
+      );
+      res.setHeader("Cache-Control","no-store");
+      res.json(data.rows.map(row=>({...row,total:Number(row.total)})));
+    }catch(error){console.error("Today's POS transactions failed:",error);res.status(500).json({error:"Unable to load today's transactions."});}
   });
 
   originalPatch.call(app, "/api/pos/account", posGuard, async (req, res) => {
@@ -397,7 +470,10 @@ function addRoutes(app) {
         [email, passwordHash, salt, authVersion, row.id]
       );
       const user = updated.rows[0];
-      const token = jwt.sign({ role: "pos", id: user.id, name: user.name, email: user.email, authVersion: Number(user.auth_version || authVersion) }, secret, { expiresIn: "12h" });
+      const token = await createPosSession(user);
+      if(req.posSessionToken){
+        await pool.query("UPDATE pos_sessions SET revoked_at=NOW() WHERE token_hash=$1 AND revoked_at IS NULL",[tokenHash(req.posSessionToken)]);
+      }
       res.json({ token, user, passwordChanged: Boolean(newPassword) });
     } catch (error) {
       console.error(error);

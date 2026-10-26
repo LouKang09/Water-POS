@@ -46,6 +46,12 @@
           cache:"no-store"
         });
         if(res.ok){
+          const verified=await res.json().catch(()=>null);
+          if(verified?.sessionToken){
+            localStorage.setItem(key,verified.sessionToken);
+            delete verified.sessionToken;
+          }
+          if(verified?.id)localStorage.setItem("water_pos_cached_user",JSON.stringify(verified));
           location.replace("/");
           return;
         }

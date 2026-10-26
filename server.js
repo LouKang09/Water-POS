@@ -721,14 +721,14 @@ app.post("/api/pos/queue/:id/complete", async (req,res,next) => {
     const sale=await client.query(
       `INSERT INTO sales(
         transaction_ref,payment_method,payment_provider,payment_reference,payment_reference_status,
-        gcash_reference,delivery_room_unit,total,receipt_mime,receipt_image
+        gcash_reference,delivery_room_unit,total,receipt_mime,receipt_image,client_sale_user_id
        )
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
        RETURNING id,transaction_ref,created_at`,
       [
         reference,q.payment_method,q.payment_provider,q.payment_reference,q.payment_reference_status,
         q.payment_method==="GCash" ? q.payment_reference : null,
-        q.unit_no,q.total,q.receipt_mime,q.receipt_image
+        q.unit_no,q.total,q.receipt_mime,q.receipt_image,req.posUser.id
       ]
     );
 

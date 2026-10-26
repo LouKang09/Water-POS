@@ -11,9 +11,14 @@
   <link rel="stylesheet" href="/pos-theme.css?v=20261012-1">
   <link rel="stylesheet" href="/attendance.css?v=20261015-1">
   <link rel="stylesheet" href="/offline-pos.css?v=20261016-reviewfix2">
+  <link rel="stylesheet" href="/pos-sidebar.css?v=20261026-menu1">
 </head>
 <body class="pos-page">
   <header class="pos-header">
+    <button id="posSidebarToggle" class="pos-sidebar-toggle" type="button" aria-label="Open navigation menu" aria-controls="posSidebar" aria-expanded="false">
+      <span class="pos-sidebar-bars" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span id="posSidebarQueueBadge" class="pos-sidebar-queue-badge" hidden>0</span>
+    </button>
     <div class="pos-brand-block">
       <img class="official-brand-logo" src="/brand/inyou-official-hd.png?v=20261011-2" alt="INYOU Water Supply Co.">
       <div>
@@ -22,16 +27,23 @@
         <small class="pos-user-line">Signed in as <strong id="posUserLabel">POS User</strong></small>
       </div>
     </div>
-    <div class="pos-header-actions">
-      <button id="onlineQueueBtn" class="queue-header-button" type="button">
-        Online Queue <span id="onlineQueueCount">0</span>
-      </button>
-      <a href="/admin.html" class="admin-link">Admin</a>
-      <button id="posAccountBtn" class="pos-account-button" type="button" aria-label="Change account password">Change Password</button>
-      <button id="posThemeToggle" class="pos-theme-trigger" type="button" aria-haspopup="dialog" aria-controls="posAppearanceDialog"><span class="theme-glyph" aria-hidden="true">☾</span><span class="theme-word">Appearance</span></button>
-      <button id="posLogoutBtn" class="admin-link pos-logout-button" type="button" aria-haspopup="dialog" aria-controls="posLogoutDialog"><span aria-hidden="true">↪</span> Log Out</button>
-    </div>
+    <div class="pos-header-actions"><!-- The native Android Exit App button remains here, unchanged. --></div>
   </header>
+  <div id="posSidebarBackdrop" class="pos-sidebar-backdrop" hidden></div>
+  <aside id="posSidebar" class="pos-sidebar" aria-label="Water POS navigation" aria-hidden="true" inert>
+    <div class="pos-sidebar-heading">
+      <div><span class="pos-sidebar-eyebrow">WORKSPACE</span><h2>Menu</h2></div>
+      <button id="posSidebarClose" type="button" class="pos-sidebar-close" aria-label="Close navigation menu">×</button>
+    </div>
+    <nav class="pos-sidebar-nav" aria-label="Main menu">
+      <button id="posTodayTransactionsBtn" class="pos-sidebar-item" type="button"><span class="pos-sidebar-icon" aria-hidden="true">▤</span><span>Transactions <small>Today's history</small></span></button>
+      <button id="onlineQueueBtn" class="pos-sidebar-item queue-header-button" type="button"><span class="pos-sidebar-icon" aria-hidden="true">▣</span><span>Online Queue <small>Delivery requests</small></span><span id="onlineQueueCount" class="pos-sidebar-item-count">0</span></button>
+      <button id="posThemeToggle" class="pos-sidebar-item pos-theme-trigger" type="button" aria-haspopup="dialog" aria-controls="posAppearanceDialog"><span class="pos-sidebar-icon theme-glyph" aria-hidden="true">☾</span><span class="theme-word">Appearance</span></button>
+      <button id="posAccountBtn" class="pos-sidebar-item pos-account-button" type="button"><span class="pos-sidebar-icon" aria-hidden="true">♙</span><span>Change Password</span></button>
+      <a href="/admin.html" class="pos-sidebar-item pos-sidebar-admin-link">Admin dashboard</a>
+    </nav>
+    <div class="pos-sidebar-footer"><button id="posLogoutBtn" class="pos-sidebar-logout pos-logout-button" type="button" aria-haspopup="dialog" aria-controls="posLogoutDialog"><span aria-hidden="true">↪</span> Log Out</button><p>Closing the app keeps you signed in. Only Log Out ends your session.</p></div>
+  </aside>
 
   <main class="pos-shell">
     <nav id="categories" class="category-tabs" aria-label="Order category">
@@ -243,10 +255,11 @@
   </dialog>
 
   <div id="toast" class="toast" role="status"></div>
-  <script src="/pos-auth.js?v=20261015-offline130"></script>
+  <script src="/pos-auth.js?v=20261026-persistent1"></script>
   <script src="/offline-pos.js?v=20261024-storagefallback1"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="/app.js?v=20261017-unitroomfix2"></script>
+  <script src="/app.js?v=20261026-menu1"></script>
+  <script src="/pos-sidebar.js?v=20261026-menu1"></script>
   <script src="/attendance.js?v=20261015-1"></script>
 </body>
 </html>
