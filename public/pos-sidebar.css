@@ -24,7 +24,6 @@ body.pos-sidebar-open{overflow:hidden}
 .pos-sidebar .pos-theme-trigger .theme-glyph{font-size:1.3rem}
 .pos-sidebar .pos-sidebar-item-count{margin-left:auto;flex:none;min-width:25px;height:25px;display:grid;place-items:center;padding:0 6px;border-radius:999px;color:var(--muted);background:var(--surface)}
 .pos-sidebar .pos-sidebar-item-count.has-items{background:#e65055;color:#fff}
-.pos-sidebar-admin-link{color:var(--brand)!important}
 .pos-sidebar-footer{margin-top:auto;padding:16px 2px 0;border-top:1px solid var(--line)}
 .pos-sidebar .pos-sidebar-logout{width:100%;display:flex!important;align-items:center;justify-content:center;gap:9px;min-height:49px;border:1px solid #e6b6bd;border-radius:14px;padding:11px;background:#fff1f2;color:#ad313c;font-weight:850;cursor:pointer}
 .pos-sidebar-footer p{margin:10px 2px 0;font-size:.68rem;line-height:1.5;color:var(--muted)}
