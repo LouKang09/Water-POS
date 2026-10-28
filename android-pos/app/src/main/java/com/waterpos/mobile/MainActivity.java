@@ -59,6 +59,7 @@ public class MainActivity extends Activity {
     private static final long STARTUP_SPLASH_MS = 1800L;
 
     private WebView webView;
+    private AppUpdater appUpdater;
     private ValueCallback<Uri[]> fileCallback;
     private Uri cameraUri;
     private boolean resumeKioskAfterChooser = false;
@@ -220,6 +221,7 @@ public class MainActivity extends Activity {
         if (isFinishing() || isDestroyed()) return;
 
         webView = new WebView(this);
+        appUpdater = new AppUpdater(this, webView);
         webView.setBackgroundColor(Color.WHITE);
         setContentView(webView);
 
@@ -236,7 +238,7 @@ public class MainActivity extends Activity {
         settings.setUseWideViewPort(true);
         settings.setMediaPlaybackRequiresUserGesture(true);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        settings.setUserAgentString(settings.getUserAgentString() + " WaterPOSAndroid/1.3.0");
+        settings.setUserAgentString(settings.getUserAgentString() + " WaterPOSAndroid/1.4.0");
 
         CookieManager cookieManager = CookieManager.getInstance();
         cookieManager.setAcceptCookie(true);
@@ -513,6 +515,16 @@ public class MainActivity extends Activity {
 
     private class AndroidPosBridge {
         @JavascriptInterface
+        public String getAppVersion() {
+            return appUpdater == null ? "unknown|0" : appUpdater.installedVersion();
+        }
+
+        @JavascriptInterface
+        public void downloadAppUpdate(String url, String sha256, int versionCode) {
+            if (appUpdater != null) appUpdater.start(url, sha256, versionCode);
+        }
+
+        @JavascriptInterface
         public void logoutApp() {
             runOnUiThread(() -> {
                 if (webView == null) return;
@@ -632,6 +644,7 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         if (webView != null) webView.onResume();
+        if (appUpdater != null) appUpdater.onResume();
     }
 
     @Override
@@ -660,6 +673,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (appUpdater != null) appUpdater.dispose();
         if (splashAnimator != null) {
             splashAnimator.cancel();
             splashAnimator = null;
