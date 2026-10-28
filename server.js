@@ -1082,6 +1082,34 @@ app.patch("/api/admin/used-products/:id", adminAuth, async (req,res,next) => {
   } catch(e){ next(e); }
 });
 
+// App update feed: refreshed from each GitHub/Railway release. Only publish
+// native installers when a persistent signing key and verified APK are ready.
+// Legacy Railway APK builds use a generated debug key and cannot safely upgrade
+// a differently signed installation without risking the cashier's local data.
+const appReleaseHash = crypto.createHash("sha256");
+for(const p of ["public/index.html","public/app.js","public/pos-sidebar.js","public/offline-pos.js","public/sw.js"]){
+  appReleaseHash.update(require("fs").readFileSync(path.join(__dirname,p)));
+}
+const webRelease = appReleaseHash.digest("hex").slice(0,16);
+app.get("/api/pos/app-update",(req,res)=>{
+  res.setHeader("Cache-Control","no-store");
+  let native=null;
+  const url=String(process.env.POS_ANDROID_UPDATE_URL||"").trim();
+  const sha256=String(process.env.POS_ANDROID_UPDATE_SHA256||"").trim().toLowerCase();
+  const versionCode=Number(process.env.POS_ANDROID_UPDATE_VERSION_CODE);
+  const versionName=String(process.env.POS_ANDROID_UPDATE_VERSION_NAME||"").trim();
+  // The APK host must be one of our known HTTPS Railway app domains.
+  try{
+    const parsed=new URL(url);
+    const approved=["water-pos-apk-builder-production.up.railway.app","water-pos-web-production.up.railway.app"];
+    if(parsed.protocol==="https:"&&approved.includes(parsed.hostname)&&parsed.pathname.endsWith(".apk")&&
+       /^[0-9a-f]{64}$/.test(sha256)&&Number.isInteger(versionCode)&&versionCode>0&&versionName){
+      native={packageName:"com.waterpos.mobile",versionCode,versionName,apkUrl:parsed.href,sha256};
+    }
+  }catch{}
+  res.json({webVersion:webRelease,native,checkedAt:new Date().toISOString()});
+});
+
 app.use((err,req,res,next)=>{
   console.error(err);
   res.status(500).json({error:"Something went wrong. Please try again."});
