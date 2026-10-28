@@ -1087,8 +1087,10 @@ app.patch("/api/admin/used-products/:id", adminAuth, async (req,res,next) => {
 // Legacy Railway APK builds use a generated debug key and cannot safely upgrade
 // a differently signed installation without risking the cashier's local data.
 const appReleaseHash = crypto.createHash("sha256");
-for(const p of ["public/index.html","public/app.js","public/pos-sidebar.js","public/offline-pos.js","public/sw.js"]){
-  appReleaseHash.update(require("fs").readFileSync(path.join(__dirname,p)));
+const publicRoot=path.join(__dirname,"public");
+for(const name of require("fs").readdirSync(publicRoot).filter(file=>/\.(js|css|html)$/.test(file)).sort()){
+  appReleaseHash.update(name);
+  appReleaseHash.update(require("fs").readFileSync(path.join(publicRoot,name)));
 }
 const webRelease = appReleaseHash.digest("hex").slice(0,16);
 app.get("/api/pos/app-update",(req,res)=>{
