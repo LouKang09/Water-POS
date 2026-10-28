@@ -1,0 +1,22 @@
+/* Water POS in-app updater */
+.pos-updates-dialog{width:min(94vw,515px);max-width:515px;max-height:92dvh;margin:auto;border:0;padding:0;background:transparent;color:var(--ink)}
+.pos-updates-sheet{background:var(--surface);border:1px solid var(--line);border-radius:24px;box-shadow:0 22px 75px rgba(7,32,36,.25);overflow:hidden}
+.pos-updates-head{display:flex;gap:12px;justify-content:space-between;align-items:flex-start;padding:21px 20px 17px;border-bottom:1px solid var(--line)}
+.pos-updates-head h2{margin:3px 0;font-size:1.35rem}
+.pos-updates-head p:last-child{margin:4px 0 0;font-size:.76rem;line-height:1.5;color:var(--muted)}
+.pos-updates-body{display:grid;gap:12px;padding:18px 20px 22px}
+.pos-update-tile{display:grid;gap:4px;padding:14px;border:1px solid var(--line);background:var(--surface-2);border-radius:14px}
+.pos-update-tile>span{font-size:.68rem;font-weight:800;letter-spacing:.04em;color:var(--muted);text-transform:uppercase}
+.pos-update-tile>strong{font-size:.95rem;color:var(--ink)}
+.pos-update-tile>small{font-size:.72rem;color:var(--muted);line-height:1.4}
+.pos-update-message{margin:0;padding:10px 12px;border-radius:10px;background:var(--surface-2);font-size:.77rem;line-height:1.5;color:var(--ink)}
+.pos-update-progress{height:8px;background:var(--line);border-radius:20px;overflow:hidden}
+.pos-update-progress[hidden]{display:none}
+#posUpdateProgressBar{width:0;height:100%;background:var(--brand);border-radius:20px;transition:width .25s}
+.pos-update-safety{margin:0;font-size:.69rem;line-height:1.55;color:var(--muted)}
+.pos-update-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:3px}
+.pos-update-actions button{min-height:40px}
+.pos-sidebar .pos-update-available{position:relative;border-color:var(--brand)!important}
+.pos-sidebar .pos-update-available:after{content:"";position:absolute;top:8px;right:8px;width:9px;height:9px;background:#e75d44;border-radius:50%;box-shadow:0 0 0 3px var(--surface)}
+html[data-pos-theme="dark"] .pos-updates-sheet{background:#112734;border-color:#365360}
+@media(max-width:560px){.pos-updates-dialog{width:100%;max-width:none;margin:auto 0 0;max-height:93dvh}.pos-updates-sheet{max-height:93dvh;overflow:auto;border-radius:22px 22px 0 0;padding-bottom:env(safe-area-inset-bottom)}.pos-updates-head{padding:17px 16px 13px}.pos-updates-body{padding:14px 16px 18px}}

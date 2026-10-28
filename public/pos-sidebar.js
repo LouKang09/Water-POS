@@ -37,7 +37,7 @@ sidebar.addEventListener("click",event=>{
     openTransactions();
     return;
   }
-  if(event.target.closest("#onlineQueueBtn,#posThemeToggle,#posAccountBtn,.pos-sidebar-admin-link")){
+  if(event.target.closest("#onlineQueueBtn,#posThemeToggle,#posAccountBtn,#posUpdatesBtn,.pos-sidebar-admin-link")){
     setOpen(false);
   }
 });
