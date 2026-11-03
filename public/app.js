@@ -10,6 +10,8 @@ const state = {
   gcashVerified: false,
   gcashDetectedReference: "",
   referenceUnreadable: false,
+  manualUnpaidReference: false,
+  scanGeneration: 0,
   ocrInProgress: false,
   ocrPhase: "read",
   receiptPreviewUrl: "",
@@ -47,6 +49,8 @@ const els = {
   receiptPreview: document.querySelector("#receiptPreview"),
   gcashReference: document.querySelector("#gcashReference"),
   gcashRefHelp: document.querySelector("#gcashRefHelp"),
+  unpaidManualReferenceOption: document.querySelector("#unpaidManualReferenceOption"),
+  unpaidManualReference: document.querySelector("#unpaidManualReference"),
   receiptDrop: document.querySelector("#receiptDrop"),
   ocrStatus: document.querySelector("#ocrStatus"),
   successDialog: document.querySelector("#successDialog"),
@@ -559,17 +563,28 @@ function updateDigitalCopy() {
   els.receiptInput.disabled=waitingForProvider;
   els.cameraInput.disabled=waitingForProvider;
   els.receiptDrop.classList.toggle("disabled",waitingForProvider);
+  const manualMode=Boolean(state.settlingUnpaidId && state.manualUnpaidReference);
+  const showManual=Boolean(state.settlingUnpaidId && (state.payment==="GCash" || state.payment==="Other") && !waitingForProvider);
+  els.unpaidManualReferenceOption.classList.toggle("hidden",!showManual);
+  els.unpaidManualReference.checked=showManual && manualMode;
   els.receiptTitle.textContent=waitingForProvider
     ? "Choose a payment app first"
-    : (state.receiptFile ? "Replace "+provider+" receipt" : "Add "+provider+" receipt");
+    : (state.receiptFile ? "Replace "+provider+" receipt" : "Add "+provider+" receipt"+(manualMode?" (optional)":""));
   els.referenceLabel.textContent=provider ? provider+" · "+providerReferenceHint(provider) : "Payment reference";
 
   if(waitingForProvider){
     els.gcashRefHelp.textContent="Choose Maya, MariBank, GoTyme, or VYBE / BPI before uploading the receipt.";
-  } else if(!state.receiptFile){
-    els.gcashRefHelp.textContent=provider
-      ? 'The scanner looks for '+providerReferenceHint(provider)+' on the receipt.'
-      : 'Choose a payment provider first.';
+  } else if(manualMode){
+    els.gcashReference.readOnly=false;
+    els.gcashReference.placeholder=provider==="GCash"?"Enter GCash reference (3–18 digits)":"Enter payment reference (3–40 characters)";
+    els.gcashRefHelp.textContent=providerReferenceHint(provider)+" · Manually entered. It will be saved for admin cross-checking.";
+  } else {
+    els.gcashReference.placeholder="Waiting for receipt scan";
+    if(!state.receiptFile){
+      els.gcashRefHelp.textContent=provider
+        ? 'The scanner looks for '+providerReferenceHint(provider)+' on the receipt.'
+        : 'Choose a payment provider first.';
+    }
   }
 
   document.querySelectorAll(".provider-option").forEach(btn=>{
@@ -589,6 +604,10 @@ function updatePaymentButtonState() {
 
   if(state.payment==="Other" && !state.paymentProvider){
     els.confirmPayment.disabled=true;
+    return;
+  }
+  if(state.settlingUnpaidId && state.manualUnpaidReference){
+    els.confirmPayment.disabled=!validReferenceLength(els.gcashReference.value);
     return;
   }
 
@@ -655,6 +674,9 @@ async function warmOcr() {
 }
 
 function clearReceiptScan() {
+  state.scanGeneration+=1;
+  state.manualUnpaidReference=false;
+  if(els.unpaidManualReference)els.unpaidManualReference.checked=false;
   state.receiptFile=null;
   state.gcashVerified=false;
   state.gcashDetectedReference="";
