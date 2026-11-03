@@ -19,6 +19,7 @@ function ensureSchema() {
     ALTER TABLE sales ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ;
     ALTER TABLE sales ADD COLUMN IF NOT EXISTS cancelled_by_pos_user_id INTEGER;
     ALTER TABLE sales ADD COLUMN IF NOT EXISTS cancellation_reason TEXT;
+    ALTER TABLE sales ADD COLUMN IF NOT EXISTS settled_by_pos_user_id INTEGER;
 
     UPDATE sales
     SET payment_status = CASE WHEN payment_method='Pay Later' THEN 'unpaid' ELSE 'paid' END
@@ -182,14 +183,26 @@ async function addRoutes(app) {
       }
 
       const digital = paymentMethod !== "Cash";
-      if (digital && !req.file) return res.status(400).json({ error: provider + " receipt image is required." });
-      if (digital && !String(req.file.mimetype || "").startsWith("image/")) {
+      const manualReference = digital && String(req.body.manualReference || "") === "true";
+      if (digital && !req.file && !manualReference) {
+        return res.status(400).json({ error: provider + " receipt image is required unless a manual reference is entered." });
+      }
+      if (req.file && !String(req.file.mimetype || "").startsWith("image/")) {
         return res.status(400).json({ error: "The payment receipt must be an image." });
       }
 
       let reference = null;
       let referenceStatus = digital ? "unreadable" : null;
-      if (digital && String(req.body.ocrVerified) === "true") {
+      if (manualReference) {
+        const submitted = normalizeReference(req.body.paymentReference, provider);
+        if (!validReference(submitted, provider)) {
+          return res.status(400).json({ error: provider === "GCash"
+            ? "Enter a valid GCash manual reference (3–18 digits)."
+            : "Enter a valid manual reference (3–40 characters)." });
+        }
+        reference = submitted;
+        referenceStatus = "manual";
+      } else if (digital && String(req.body.ocrVerified) === "true") {
         const detected = normalizeReference(req.body.detectedReference, provider);
         const submitted = normalizeReference(req.body.paymentReference, provider);
         if (!validReference(detected, provider) || !validReference(submitted, provider)) {
@@ -204,7 +217,13 @@ async function addRoutes(app) {
 
       let stored = null;
       if (digital && req.file?.buffer && receiptStorage.enabled) {
-        stored = await receiptStorage.storeReceipt(req.file.buffer, req.file.mimetype, "sales");
+        try {
+          stored = await receiptStorage.storeReceipt(req.file.buffer, req.file.mimetype, "sales");
+        } catch (error) {
+          // A receipt-storage outage must not prevent settling a genuine payment.
+          // The receipt remains attached in PostgreSQL when object storage fails.
+          console.error("Unpaid settlement receipt storage failed; using database fallback:", error.code || error.name || "storage error");
+        }
       }
 
       const client = await pool.connect();
@@ -235,12 +254,13 @@ async function addRoutes(app) {
               receipt_key=$7,
               receipt_size=$8,
               receipt_original_size=$9,
-              receipt_sha256=$10
+              receipt_sha256=$10,
+              settled_by_pos_user_id=$12
           WHERE id=$11
         `, [
           paymentMethod, provider, reference, referenceStatus,
           mime, bytea, stored?.key || null, stored?.size || null,
-          stored?.originalSize || null, stored?.sha256 || null, id
+          stored?.originalSize || null, stored?.sha256 || null, id, req.posUser?.id || null
         ]);
         await client.query("COMMIT");
       } catch (error) {
@@ -256,6 +276,7 @@ async function addRoutes(app) {
         total: Number(existing.rows[0].total),
         paymentMethod,
         paymentProvider: provider,
+        referenceStatus,
         status: "paid"
       });
     } catch (error) { next(error); }
