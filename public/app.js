@@ -563,10 +563,13 @@ function updateDigitalCopy() {
   els.receiptInput.disabled=waitingForProvider;
   els.cameraInput.disabled=waitingForProvider;
   els.receiptDrop.classList.toggle("disabled",waitingForProvider);
-  const manualMode=Boolean(state.settlingUnpaidId && state.manualUnpaidReference);
   const showManual=Boolean(state.settlingUnpaidId && (state.payment==="GCash" || state.payment==="Other") && !waitingForProvider);
+  const manualMode=Boolean(showManual && state.manualUnpaidReference);
   els.unpaidManualReferenceOption.classList.toggle("hidden",!showManual);
-  els.unpaidManualReference.checked=showManual && manualMode;
+  els.unpaidManualReference.checked=manualMode;
+  // Unpaid digital references must be directly editable, even before opting into manual mode.
+  // Typing into this field switches to manual mode in the input handler.
+  els.gcashReference.readOnly=!showManual && !state.gcashVerified;
   els.receiptTitle.textContent=waitingForProvider
     ? "Choose a payment app first"
     : (state.receiptFile ? "Replace "+provider+" receipt" : "Add "+provider+" receipt"+(manualMode?" (optional)":""));
@@ -1533,6 +1536,18 @@ els.unpaidManualReference.addEventListener("change",()=>{
   updatePaymentButtonState();
 });
 els.gcashReference.addEventListener("input",()=>{
+  // Directly entering a reference on an unpaid sale is the manual-reference path.
+  if(state.settlingUnpaidId && ["GCash","Other"].includes(state.payment) && selectedProvider() && !state.manualUnpaidReference){
+    state.manualUnpaidReference=true;
+    state.scanGeneration+=1;
+    state.ocrInProgress=false;
+    state.gcashVerified=false;
+    state.gcashDetectedReference="";
+    state.referenceUnreadable=false;
+    els.unpaidManualReference.checked=true;
+    els.gcashReference.readOnly=false;
+    updateDigitalCopy();
+  }
   const cleaned=normalizeReference(els.gcashReference.value);
   if(els.gcashReference.value!==cleaned) els.gcashReference.value=cleaned;
   if(state.settlingUnpaidId && state.manualUnpaidReference){
