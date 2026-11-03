@@ -1058,6 +1058,8 @@ function chooseRefinedReference(initial,candidates) {
 }
 
 async function scanReceipt(file,{sourceType="upload"}={}) {
+  const scanGeneration=++state.scanGeneration;
+  const previousManualReference=state.manualUnpaidReference ? els.gcashReference.value : "";
   state.receiptFile=file||null;
   state.gcashVerified=false;
   state.gcashDetectedReference="";
@@ -1065,8 +1067,8 @@ async function scanReceipt(file,{sourceType="upload"}={}) {
   state.ocrInProgress=true;
   state.ocrPhase="reference";
   state.captureSource=sourceType;
-  els.gcashReference.value="";
-  els.gcashReference.readOnly=true;
+  els.gcashReference.value=previousManualReference;
+  els.gcashReference.readOnly=!state.manualUnpaidReference;
 
   const provider=selectedProvider();
   els.gcashRefHelp.textContent="Looking for "+providerReferenceHint(provider)+" on the receipt photo.";
@@ -1086,6 +1088,13 @@ async function scanReceipt(file,{sourceType="upload"}={}) {
   els.receiptPreview.classList.remove("hidden");
   els.receiptDrop.classList.add("has-file");
   updateDigitalCopy();
+  if(state.manualUnpaidReference && state.settlingUnpaidId){
+    state.ocrInProgress=false;
+    els.gcashReference.readOnly=false;
+    setOcrStatus("Receipt attached. Enter the reference manually; it will be marked for admin verification.","warning");
+    updatePaymentButtonState();
+    return;
+  }
   if(!navigator.onLine){
     state.ocrInProgress=false;
     allowUnreadableReceipt("Offline: receipt photo stored locally. Reference will need admin review after sync.");
@@ -1098,6 +1107,7 @@ async function scanReceipt(file,{sourceType="upload"}={}) {
   try{
     const [worker,loadedImage]=await Promise.all([warmOcr(),loadImageSource(file)]);
     imageSource=loadedImage;
+    if(scanGeneration!==state.scanGeneration)return;
 
     // Pass 1: one fast, enhanced scan. This is intentionally smaller than the old
     // 1800–2100 px passes so photographed phone screens finish much faster.
@@ -1108,6 +1118,7 @@ async function scanReceipt(file,{sourceType="upload"}={}) {
     const bottom=provider==="GCash" ? 0.82 : provider==="Maya" ? 0.72 : 0.92;
     const quickCanvas=makePreparedCanvas(imageSource,1250,top,bottom,0.02,0.98,false,true);
     const quickResult=await worker.recognize(quickCanvas);
+    if(scanGeneration!==state.scanGeneration)return;
     let text=quickResult.data.text||"";
     let labelFound=containsReferenceLabel(text,provider);
     let preferred=referenceCandidateFromContext(text,provider);
@@ -1119,6 +1130,7 @@ async function scanReceipt(file,{sourceType="upload"}={}) {
       setOcrStatus("Quick scan incomplete. Enhancing the reference area…");
       const fallbackCanvas=makePreparedCanvas(imageSource,1350,0.06,0.94,0.02,0.98,true,true);
       const fallbackResult=await worker.recognize(fallbackCanvas);
+      if(scanGeneration!==state.scanGeneration)return;
       const fallbackText=fallbackResult.data.text||"";
       labelFound=labelFound || containsReferenceLabel(fallbackText,provider);
       preferred=preferred || referenceCandidateFromContext(fallbackText,provider);
@@ -1148,6 +1160,7 @@ async function scanReceipt(file,{sourceType="upload"}={}) {
       let candidates=[];
       for(const band of bands){
         const result=await worker.recognize(band);
+        if(scanGeneration!==state.scanGeneration)return;
         const bandText=result.data.text||"";
         const anchored=referenceCandidateFromContext(bandText,provider);
         if(anchored){
@@ -1179,7 +1192,7 @@ async function scanReceipt(file,{sourceType="upload"}={}) {
       allowUnreadableReceipt(providerReferenceHint(provider)+" was visible, but its value could not be read reliably.");
     }
   } catch {
-    allowUnreadableReceipt("Automatic reading failed.");
+    if(scanGeneration===state.scanGeneration)allowUnreadableReceipt("Automatic reading failed.");
   } finally {
     if(imageSource && typeof imageSource.close==="function"){
       try{imageSource.close();}catch{}
@@ -1190,8 +1203,10 @@ async function scanReceipt(file,{sourceType="upload"}={}) {
         await setOcrMode(worker,{digitsOnlyMode:false,singleLine:false});
       }
     }catch{}
-    state.ocrInProgress=false;
-    updatePaymentButtonState();
+    if(scanGeneration===state.scanGeneration){
+      state.ocrInProgress=false;
+      updatePaymentButtonState();
+    }
   }
 }
 
