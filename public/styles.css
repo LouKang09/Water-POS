@@ -1219,3 +1219,37 @@ th{color:var(--muted);font-size:.68rem;text-transform:uppercase;letter-spacing:.
   body.room-unit-keyboard-open .room-unit-field{margin-bottom:22px;padding-bottom:12px}
   body.room-unit-keyboard-open .room-unit-field input{min-height:52px;font-size:16px}
 }
+
+
+/* Manual references are available only when collecting an outstanding digital payment. */
+.unpaid-manual-reference{
+  display:flex;
+  align-items:flex-start;
+  gap:11px;
+  margin:12px 0;
+  padding:13px 14px;
+  border:1px solid #9bcfc8;
+  border-radius:13px;
+  background:var(--surface-2,#f1f9f7);
+  color:var(--ink,#183941);
+  cursor:pointer;
+}
+.unpaid-manual-reference.hidden{display:none!important}
+.unpaid-manual-reference input[type="checkbox"]{
+  width:20px;
+  height:20px;
+  min-width:20px;
+  margin:2px 0 0;
+  accent-color:var(--brand,#0d7771);
+  cursor:pointer;
+}
+.unpaid-manual-reference span{display:grid;gap:4px;min-width:0}
+.unpaid-manual-reference strong{font-size:.83rem;line-height:1.35}
+.unpaid-manual-reference small{font-size:.7rem;line-height:1.55;color:var(--muted,#627b82)}
+.unpaid-manual-reference:focus-within{outline:2px solid var(--brand,#0d7771);outline-offset:2px}
+.unpaid-manual-reference:has(input:checked){border-color:var(--brand,#0d7771);box-shadow:0 0 0 1px var(--brand,#0d7771) inset}
+@media(max-width:480px){
+  .unpaid-manual-reference{padding:11px 12px;gap:10px;margin:10px 0}
+  .unpaid-manual-reference strong{font-size:.78rem}
+  .unpaid-manual-reference small{font-size:.67rem}
+}
