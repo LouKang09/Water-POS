@@ -1225,12 +1225,17 @@ async function submitSale() {
 
   const isDigital=state.payment==="GCash" || state.payment==="Other";
   const provider=selectedProvider();
+  const manualUnpaidReference=Boolean(settling && isDigital && state.manualUnpaidReference);
 
   if(state.payment==="Other" && !provider) return toast("Choose a payment app first.");
-  if(isDigital && !state.receiptFile) return toast("Attach the "+provider+" receipt photo first.");
-  if(isDigital && state.ocrInProgress) return toast("Wait for the receipt scan to finish.");
+  if(isDigital && !state.receiptFile && !manualUnpaidReference) return toast("Attach the "+provider+" receipt photo first.");
+  if(isDigital && state.ocrInProgress && !manualUnpaidReference) return toast("Wait for the receipt scan to finish.");
 
-  if(isDigital && state.gcashVerified){
+  if(manualUnpaidReference){
+    if(!validReferenceLength(els.gcashReference.value,provider)){
+      return toast(provider==="GCash"?"Enter a GCash reference of 3–18 digits.":"Enter a payment reference of 3–40 characters.");
+    }
+  } else if(isDigital && state.gcashVerified){
     if(!isSingleDigitCorrection(state.gcashDetectedReference,normalizeReference(els.gcashReference.value))){
       return toast("The edited reference differs too much from the scanned receipt. Re-scan it or attach the unreadable receipt for review.");
     }
@@ -1249,12 +1254,15 @@ async function submitSale() {
 
   if(isDigital){
     fd.append("paymentProvider",provider);
-    fd.append("ocrVerified",state.gcashVerified ? "true" : "false");
-    if(state.gcashVerified){
+    fd.append("ocrVerified",!manualUnpaidReference && state.gcashVerified ? "true" : "false");
+    if(manualUnpaidReference){
+      fd.append("manualReference","true");
+      fd.append("paymentReference",normalizeReference(els.gcashReference.value,provider));
+    }else if(state.gcashVerified){
       fd.append("paymentReference",normalizeReference(els.gcashReference.value));
       fd.append("detectedReference",state.gcashDetectedReference);
     }
-    fd.append("receipt",state.receiptFile);
+    if(state.receiptFile)fd.append("receipt",state.receiptFile);
   }
 
   try{
@@ -1499,9 +1507,41 @@ els.roomUnit.addEventListener("blur",()=>{
   state.deliveryRoomUnit=normalized;
 });
 els.roomUnit.addEventListener("input",keepRoomUnitVisible);
+els.unpaidManualReference.addEventListener("change",()=>{
+  if(!state.settlingUnpaidId || !["GCash","Other"].includes(state.payment)){
+    state.manualUnpaidReference=false;
+    els.unpaidManualReference.checked=false;
+    return;
+  }
+  const manual=els.unpaidManualReference.checked;
+  state.manualUnpaidReference=manual;
+  state.scanGeneration+=1;
+  state.ocrInProgress=false;
+  state.gcashVerified=false;
+  state.gcashDetectedReference="";
+  state.referenceUnreadable=false;
+  els.gcashReference.value="";
+  els.gcashReference.readOnly=!manual;
+  els.ocrStatus.classList.add("hidden");
+  updateDigitalCopy();
+  if(manual){
+    if(state.receiptFile)setOcrStatus("Receipt attached. Reference will be entered manually and flagged for admin review.","warning");
+    els.gcashReference.focus();
+  }else if(state.receiptFile){
+    void scanReceipt(state.receiptFile,{sourceType:state.captureSource});
+  }
+  updatePaymentButtonState();
+});
 els.gcashReference.addEventListener("input",()=>{
   const cleaned=normalizeReference(els.gcashReference.value);
   if(els.gcashReference.value!==cleaned) els.gcashReference.value=cleaned;
+  if(state.settlingUnpaidId && state.manualUnpaidReference){
+    els.gcashRefHelp.textContent=validReferenceLength(cleaned)
+      ? "Manual reference accepted. It will be marked for admin verification."
+      : (selectedProvider()==="GCash"?"GCash requires 3–18 digits.":"Enter 3–40 letters, numbers, or hyphens.");
+    updatePaymentButtonState();
+    return;
+  }
   const ok=validReferenceLength(cleaned) && isSingleDigitCorrection(state.gcashDetectedReference,cleaned);
   els.gcashRefHelp.textContent=ok
     ? providerReferenceHint()+" verified from the receipt. One OCR character may be corrected if needed."
