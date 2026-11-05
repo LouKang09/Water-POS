@@ -131,7 +131,7 @@ function ensureLedgerAdminUi() {
         <div class="cashflow-table-scroll">
           <table class="cashflow-table cashflow-bank-table" aria-label="Bank Ledger">
             <thead><tr>
-              <th>Date</th><th>Bank Petty</th><th>Credit to Bank</th><th>Debit from Bank</th><th>Running Bank Total</th><th>Note</th>
+              <th>Date</th><th>Bank Balance</th><th>Credit to Bank</th><th>Debit from Bank</th><th>Running Bank Total</th><th>Note</th>
             </tr></thead>
             <tbody id="cashFlowBankBody"><tr><td colspan="6" class="cashflow-empty">Loading bank ledger…</td></tr></tbody>
           </table>
