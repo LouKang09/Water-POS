@@ -678,8 +678,9 @@ function addRoutes(app) {
           ? defaultPettyCash
           : Number(entry.petty_cash_override);
         const dailyIncome = Number(sale.daily_income || 0);
+        const cash = Number(sale.cash || 0);
         const expenses = Number(expensesByDate.get(date) || 0);
-        const expectedTotal = pettyCash + dailyIncome - expenses;
+        const expectedTotal = pettyCash + cash - expenses;
         const actual = entry?.actual == null ? null : Number(entry.actual);
 
         const bankPettyOverride = entry?.bank_petty_override == null ? null : Number(entry.bank_petty_override);
@@ -688,7 +689,6 @@ function addRoutes(app) {
         const debitFromBank = Number(entry?.debit_from_bank || 0);
         runningBank = bankPetty + creditToBank - debitFromBank;
 
-        const cash = Number(sale.cash || 0);
         const gcash = Number(sale.gcash || 0);
         const other = Number(sale.other || 0);
 
