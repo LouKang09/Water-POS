@@ -112,8 +112,8 @@ function ensureLedgerAdminUi() {
         <div class="cashflow-table-scroll">
           <table class="cashflow-table cashflow-income-table" aria-label="Cash Flow Ledger">
             <thead><tr>
-              <th>Date</th><th>Petty Cash</th><th>Daily Income</th><th>Cash</th><th>GCash</th><th>GCash Txns</th>
-              <th>Other Banks</th><th>Cash + GCash</th><th>Total Txns</th><th>Expenses</th><th>Expected Total</th>
+              <th>Date</th><th>Petty Cash</th><th>Daily Income</th><th>Cash</th><th>Cash Txn Ct</th><th>GCash</th><th>GCash Txns</th>
+              <th>Other Banks</th><th>Total Txns</th><th>Expenses</th><th>Expected Total</th>
               <th>Actual</th><th>Variance</th>
             </tr></thead>
             <tbody id="cashFlowBody"><tr><td colspan="13" class="cashflow-empty">Loading cash flow…</td></tr></tbody>
@@ -914,8 +914,8 @@ async function loadCashFlow() {
     cashBody.innerHTML = rows.length ? rows.map(row => `<tr data-cashflow-date="${ledgerEscape(row.date)}" class="${row.date === selected ? "cashflow-selected" : ""}" title="Edit cash entry for ${ledgerEscape(row.date)}">
       <td><strong>${ledgerEscape(row.date)}</strong></td>
       <td>${ledgerMoney(row.pettyCash)}</td><td>${ledgerMoney(row.dailyIncome)}</td>
-      <td>${ledgerMoney(row.cash)}</td><td>${ledgerMoney(row.gcash)}</td><td>${row.gcashTxns}</td>
-      <td>${ledgerMoney(row.other)}</td><td>${ledgerMoney(row.cashPlusGcash)}</td><td>${row.transactionCount}</td>
+      <td>${ledgerMoney(row.cash)}</td><td>${Number(row.cashTxns || 0)}</td><td>${ledgerMoney(row.gcash)}</td><td>${row.gcashTxns}</td>
+      <td>${ledgerMoney(row.other)}</td><td>${row.transactionCount}</td>
       <td>${ledgerMoney(row.expenses)}</td><td><strong>${ledgerMoney(row.expectedTotal)}</strong></td>
       <td>${row.actual == null ? '<span class="muted-value">—</span>' : ledgerMoney(row.actual)}</td>
       <td class="${cashFlowVarianceClass(row.variance)}">${row.variance == null ? "—" : ledgerMoney(row.variance)}</td>
