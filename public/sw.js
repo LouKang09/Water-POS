@@ -45,7 +45,7 @@ self.addEventListener("fetch",event=>{
  }
  // Admin JavaScript/CSS must never be held back by the cashier POS's offline cache.
  // Cashier POS assets below still use cache-first for offline operation.
- if(url.pathname.startsWith("/admin") && /\\.(?:js|css)$/.test(url.pathname)){
+ if(url.pathname.startsWith("/admin") && /\.(?:js|css)$/.test(url.pathname)){
   event.respondWith((async()=>{
    try { return await fetch(req,{cache:"no-store"}); }
    catch { const cache=await caches.open(CACHE); return await cache.match(req)||Response.error(); }
