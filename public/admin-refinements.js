@@ -166,13 +166,13 @@ function loadLedgerAssets() {
   if (!document.querySelector('link[data-admin-ledger="true"]')) {
     const link = document.createElement("link");
     link.rel = "stylesheet";
-    link.href = "/admin-ledger.css?v=20261105-cashtxn-cachefix1";
+    link.href = "/admin-ledger.css?v=20261105-bankbalance1";
     link.dataset.adminLedger = "true";
     document.head.appendChild(link);
   }
   if (document.querySelector('script[data-admin-ledger="true"]')) return;
   const script = document.createElement("script");
-  script.src = "/admin-ledger.js?v=20261105-cashtxn-cachefix1";
+  script.src = "/admin-ledger.js?v=20261105-bankbalance1";
   script.dataset.adminLedger = "true";
   document.body.appendChild(script);
 }
