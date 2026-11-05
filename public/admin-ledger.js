@@ -120,7 +120,7 @@ function ensureLedgerAdminUi() {
           </table>
         </div>
         <p class="muted small cashflow-no-print cashflow-ledger-note">
-          Expected Total = Petty Cash + Daily Income − Expenses. Variance = Actual − Expected Total.
+          Expected Total = Petty Cash + Cash − Expenses. Variance = Actual − Expected Total.
         </p>
       </section>
 
