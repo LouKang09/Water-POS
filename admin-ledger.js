@@ -75,12 +75,27 @@ async function ensureSchema() {
       CREATE TABLE IF NOT EXISTS cash_flow_entries (
         entry_date DATE PRIMARY KEY,
         petty_cash_override NUMERIC(12,2) CHECK (petty_cash_override >= 0),
+        bank_petty_override NUMERIC(12,2) CHECK (bank_petty_override >= 0),
         actual NUMERIC(12,2) CHECK (actual >= 0),
         credit_to_bank NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (credit_to_bank >= 0),
         debit_from_bank NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (debit_from_bank >= 0),
         note TEXT,
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+
+      ALTER TABLE cash_flow_settings
+        ADD COLUMN IF NOT EXISTS default_bank_petty NUMERIC(12,2) NOT NULL DEFAULT 0;
+      ALTER TABLE cash_flow_entries
+        ADD COLUMN IF NOT EXISTS bank_petty_override NUMERIC(12,2);
+
+      ALTER TABLE cash_flow_settings DROP CONSTRAINT IF EXISTS cash_flow_settings_default_bank_petty_check;
+      ALTER TABLE cash_flow_settings
+        ADD CONSTRAINT cash_flow_settings_default_bank_petty_check
+        CHECK (default_bank_petty >= 0);
+      ALTER TABLE cash_flow_entries DROP CONSTRAINT IF EXISTS cash_flow_entries_bank_petty_override_check;
+      ALTER TABLE cash_flow_entries
+        ADD CONSTRAINT cash_flow_entries_bank_petty_override_check
+        CHECK (bank_petty_override IS NULL OR bank_petty_override >= 0);
 
       CREATE TABLE IF NOT EXISTS sale_change_history (
         id BIGSERIAL PRIMARY KEY,
@@ -602,93 +617,133 @@ function addRoutes(app) {
       const to = cleanDate(req.query.to) || today;
       if (from > to) return res.status(400).json({ error: "From date cannot be after To date." });
 
-      const settingResult = await pool.query("SELECT default_petty_cash FROM cash_flow_settings WHERE id=1");
-      const defaultPettyCash = Number(settingResult.rows[0]?.default_petty_cash || 0);
+      const daysBetween = Math.floor((Date.parse(to + "T00:00:00Z") - Date.parse(from + "T00:00:00Z")) / 86400000);
+      if (daysBetween > 3660) return res.status(400).json({ error: "Choose a range of 10 years or less." });
 
-      const { rows } = await pool.query(`
-        WITH days AS (
-          SELECT generate_series($1::date,$2::date,interval '1 day')::date AS day
-        ),
-        sales_daily AS (
-          SELECT (COALESCE(paid_at,created_at) AT TIME ZONE 'Asia/Manila')::date AS day,
+      const [settingResult, salesResult, expenseResult, entryResult] = await Promise.all([
+        pool.query("SELECT default_petty_cash,default_bank_petty FROM cash_flow_settings WHERE id=1"),
+        pool.query(`
+          SELECT to_char((COALESCE(paid_at,created_at) AT TIME ZONE 'Asia/Manila')::date,'YYYY-MM-DD') AS date,
                  COALESCE(SUM(total),0)::numeric AS daily_income,
                  COALESCE(SUM(total) FILTER (WHERE payment_method='Cash'),0)::numeric AS cash,
                  COALESCE(SUM(total) FILTER (WHERE payment_method='GCash'),0)::numeric AS gcash,
                  COALESCE(SUM(total) FILTER (WHERE payment_method='Other'),0)::numeric AS other,
-                 COUNT(*)::int AS transaction_count,
-                 COUNT(*) FILTER (WHERE payment_method='Cash')::int AS cash_txns,
                  COUNT(*) FILTER (WHERE payment_method='GCash')::int AS gcash_txns,
-                 COUNT(*) FILTER (WHERE payment_method='Other')::int AS other_txns
+                 COUNT(*)::int AS transaction_count
           FROM sales
           WHERE payment_status='paid'
             AND (COALESCE(paid_at,created_at) AT TIME ZONE 'Asia/Manila')::date BETWEEN $1::date AND $2::date
           GROUP BY 1
-        ),
-        expense_daily AS (
-          SELECT expense_date AS day,COALESCE(SUM(amount),0)::numeric AS expenses
+        `, [from, to]),
+        pool.query(`
+          SELECT to_char(expense_date,'YYYY-MM-DD') AS date,COALESCE(SUM(amount),0)::numeric AS expenses
           FROM expenses
           WHERE expense_date BETWEEN $1::date AND $2::date
-          GROUP BY 1
-        ),
-        base AS (
-          SELECT d.day,
-                 COALESCE(e.petty_cash_override,$3::numeric)::numeric AS petty_cash,
-                 COALESCE(s.daily_income,0)::numeric AS daily_income,
-                 COALESCE(x.expenses,0)::numeric AS expenses,
-                 e.actual,
-                 COALESCE(s.cash,0)::numeric AS cash,
-                 COALESCE(s.gcash,0)::numeric AS gcash,
-                 COALESCE(s.other,0)::numeric AS other,
-                 COALESCE(s.cash_txns,0)::int AS cash_txns,
-                 COALESCE(s.gcash_txns,0)::int AS gcash_txns,
-                 COALESCE(s.other_txns,0)::int AS other_txns,
-                 COALESCE(s.transaction_count,0)::int AS transaction_count,
-                 COALESCE(e.credit_to_bank,0)::numeric AS credit_to_bank,
-                 COALESCE(e.debit_from_bank,0)::numeric AS debit_from_bank,
-                 COALESCE(e.note,'') AS note
-          FROM days d
-          LEFT JOIN sales_daily s ON s.day=d.day
-          LEFT JOIN expense_daily x ON x.day=d.day
-          LEFT JOIN cash_flow_entries e ON e.entry_date=d.day
-        )
-        SELECT to_char(day,'YYYY-MM-DD') AS date,
-               petty_cash,daily_income,expenses,
-               (petty_cash + daily_income - expenses)::numeric AS expected_total,
-               actual,
-               CASE WHEN actual IS NULL THEN NULL ELSE (actual-(petty_cash+daily_income-expenses))::numeric END AS variance,
-               cash,gcash,other,cash_txns,gcash_txns,other_txns,
-               (cash+gcash)::numeric AS cash_plus_gcash,
-               transaction_count,credit_to_bank,debit_from_bank,note,
-               SUM(credit_to_bank-debit_from_bank) OVER (ORDER BY day)::numeric AS running_bank_total
-        FROM base
-        ORDER BY day ASC
-      `, [from, to, defaultPettyCash]);
+          GROUP BY expense_date
+        `, [from, to]),
+        pool.query(`
+          SELECT to_char(entry_date,'YYYY-MM-DD') AS date,
+                 petty_cash_override,bank_petty_override,actual,
+                 COALESCE(credit_to_bank,0)::numeric AS credit_to_bank,
+                 COALESCE(debit_from_bank,0)::numeric AS debit_from_bank,
+                 COALESCE(note,'') AS note
+          FROM cash_flow_entries
+          WHERE entry_date <= $1::date
+          ORDER BY entry_date ASC
+        `, [to]),
+      ]);
 
+      const defaultPettyCash = Number(settingResult.rows[0]?.default_petty_cash || 0);
+      const defaultBankPetty = Number(settingResult.rows[0]?.default_bank_petty || 0);
+      const salesByDate = new Map(salesResult.rows.map(row => [row.date, row]));
+      const expensesByDate = new Map(expenseResult.rows.map(row => [row.date, Number(row.expenses || 0)]));
+      const entriesByDate = new Map(entryResult.rows.map(row => [row.date, row]));
+
+      let runningBank = defaultBankPetty;
+      for (const entry of entryResult.rows) {
+        if (entry.date >= from) break;
+        if (entry.bank_petty_override != null) runningBank = Number(entry.bank_petty_override);
+        runningBank += Number(entry.credit_to_bank || 0) - Number(entry.debit_from_bank || 0);
+      }
+
+      const rows = [];
+      const start = Date.parse(from + "T00:00:00Z");
+      const end = Date.parse(to + "T00:00:00Z");
+      for (let time = start; time <= end; time += 86400000) {
+        const date = new Date(time).toISOString().slice(0, 10);
+        const sale = salesByDate.get(date) || {};
+        const entry = entriesByDate.get(date) || null;
+
+        const pettyCash = entry?.petty_cash_override == null
+          ? defaultPettyCash
+          : Number(entry.petty_cash_override);
+        const dailyIncome = Number(sale.daily_income || 0);
+        const expenses = Number(expensesByDate.get(date) || 0);
+        const expectedTotal = pettyCash + dailyIncome - expenses;
+        const actual = entry?.actual == null ? null : Number(entry.actual);
+
+        const bankPettyOverride = entry?.bank_petty_override == null ? null : Number(entry.bank_petty_override);
+        const bankPetty = bankPettyOverride == null ? runningBank : bankPettyOverride;
+        const creditToBank = Number(entry?.credit_to_bank || 0);
+        const debitFromBank = Number(entry?.debit_from_bank || 0);
+        runningBank = bankPetty + creditToBank - debitFromBank;
+
+        const cash = Number(sale.cash || 0);
+        const gcash = Number(sale.gcash || 0);
+        const other = Number(sale.other || 0);
+
+        rows.push({
+          date,
+          pettyCash,
+          pettyCashOverride: entry?.petty_cash_override == null ? null : Number(entry.petty_cash_override),
+          dailyIncome,
+          cash,
+          gcash,
+          gcashTxns: Number(sale.gcash_txns || 0),
+          other,
+          cashPlusGcash: cash + gcash,
+          transactionCount: Number(sale.transaction_count || 0),
+          expenses,
+          expectedTotal,
+          actual,
+          variance: actual == null ? null : actual - expectedTotal,
+          bankPetty,
+          bankPettyOverride,
+          creditToBank,
+          debitFromBank,
+          runningBankTotal: runningBank,
+          note: entry?.note || "",
+        });
+      }
+
+      res.json({ from, to, defaultPettyCash, defaultBankPetty, rows });
+    } catch (error) { next(error); }
+  });
+
+  app.get("/api/admin/cash-flow/entry/:date", async (req, res, next) => {
+    try {
+      await ensureSchema();
+      const date = cleanDate(req.params.date);
+      if (!date) return res.status(400).json({ error: "Choose a valid cash-flow date." });
+      const { rows } = await pool.query(`
+        SELECT to_char(entry_date,'YYYY-MM-DD') AS date,
+               petty_cash_override,bank_petty_override,actual,
+               COALESCE(credit_to_bank,0)::numeric AS credit_to_bank,
+               COALESCE(debit_from_bank,0)::numeric AS debit_from_bank,
+               COALESCE(note,'') AS note
+        FROM cash_flow_entries
+        WHERE entry_date=$1::date
+        LIMIT 1
+      `, [date]);
+      const row = rows[0] || {};
       res.json({
-        from,
-        to,
-        defaultPettyCash,
-        rows: rows.map(row => ({
-          date: row.date,
-          pettyCash: numberOrZero(row.petty_cash),
-          dailyIncome: numberOrZero(row.daily_income),
-          expenses: numberOrZero(row.expenses),
-          expectedTotal: numberOrZero(row.expected_total),
-          actual: row.actual == null ? null : Number(row.actual),
-          variance: row.variance == null ? null : Number(row.variance),
-          cash: numberOrZero(row.cash),
-          gcash: numberOrZero(row.gcash),
-          other: numberOrZero(row.other),
-          cashTxns: Number(row.cash_txns || 0),
-          gcashTxns: Number(row.gcash_txns || 0),
-          otherTxns: Number(row.other_txns || 0),
-          cashPlusGcash: numberOrZero(row.cash_plus_gcash),
-          transactionCount: Number(row.transaction_count || 0),
-          creditToBank: numberOrZero(row.credit_to_bank),
-          debitFromBank: numberOrZero(row.debit_from_bank),
-          runningBankTotal: numberOrZero(row.running_bank_total),
-          note: row.note || "",
-        })),
+        date,
+        pettyCashOverride: row.petty_cash_override == null ? null : Number(row.petty_cash_override),
+        bankPettyOverride: row.bank_petty_override == null ? null : Number(row.bank_petty_override),
+        actual: row.actual == null ? null : Number(row.actual),
+        creditToBank: Number(row.credit_to_bank || 0),
+        debitFromBank: Number(row.debit_from_bank || 0),
+        note: row.note || "",
       });
     } catch (error) { next(error); }
   });
@@ -696,17 +751,23 @@ function addRoutes(app) {
   app.patch("/api/admin/cash-flow/settings", async (req, res, next) => {
     try {
       await ensureSchema();
-      const amount = Number(req.body.defaultPettyCash);
-      if (!Number.isFinite(amount) || amount < 0 || amount > 10000000) {
-        return res.status(400).json({ error: "Enter a valid default petty cash amount." });
+      const defaultPettyCash = Number(req.body.defaultPettyCash);
+      const defaultBankPetty = Number(req.body.defaultBankPetty);
+      if (!Number.isFinite(defaultPettyCash) || defaultPettyCash < 0 || defaultPettyCash > 1000000000 ||
+          !Number.isFinite(defaultBankPetty) || defaultBankPetty < 0 || defaultBankPetty > 1000000000) {
+        return res.status(400).json({ error: "Enter valid opening balances." });
       }
       const { rows } = await pool.query(`
         UPDATE cash_flow_settings
-        SET default_petty_cash=$1,updated_at=NOW()
+        SET default_petty_cash=$1,default_bank_petty=$2,updated_at=NOW()
         WHERE id=1
-        RETURNING default_petty_cash,updated_at
-      `, [amount]);
-      res.json({ defaultPettyCash: Number(rows[0].default_petty_cash), updatedAt: rows[0].updated_at });
+        RETURNING default_petty_cash,default_bank_petty,updated_at
+      `, [defaultPettyCash, defaultBankPetty]);
+      res.json({
+        defaultPettyCash: Number(rows[0].default_petty_cash),
+        defaultBankPetty: Number(rows[0].default_bank_petty),
+        updatedAt: rows[0].updated_at,
+      });
     } catch (error) { next(error); }
   });
 
@@ -719,30 +780,51 @@ function addRoutes(app) {
       const nullableMoney = value => {
         if (value === "" || value == null) return null;
         const n = Number(value);
-        if (!Number.isFinite(n) || n < 0 || n > 10000000) throw new Error("Enter valid cash-flow amounts.");
+        if (!Number.isFinite(n) || n < 0 || n > 1000000000 || Math.round(n * 100) / 100 !== n) {
+          throw new Error("Enter non-negative amounts with at most two decimal places.");
+        }
         return n;
       };
       const pettyCashOverride = nullableMoney(req.body.pettyCashOverride);
+      const bankPettyOverride = nullableMoney(req.body.bankPettyOverride);
       const actual = nullableMoney(req.body.actual);
       const creditToBank = nullableMoney(req.body.creditToBank) ?? 0;
       const debitFromBank = nullableMoney(req.body.debitFromBank) ?? 0;
-      const note = String(req.body.note || "").trim().slice(0, 500);
+      const note = String(req.body.note || "").trim();
+      if (note.length > 500) return res.status(400).json({ error: "Note must be 500 characters or fewer." });
 
       const { rows } = await pool.query(`
-        INSERT INTO cash_flow_entries(entry_date,petty_cash_override,actual,credit_to_bank,debit_from_bank,note,updated_at)
-        VALUES($1,$2,$3,$4,$5,$6,NOW())
+        INSERT INTO cash_flow_entries(
+          entry_date,petty_cash_override,bank_petty_override,actual,
+          credit_to_bank,debit_from_bank,note,updated_at
+        )
+        VALUES($1,$2,$3,$4,$5,$6,$7,NOW())
         ON CONFLICT(entry_date) DO UPDATE SET
           petty_cash_override=EXCLUDED.petty_cash_override,
+          bank_petty_override=EXCLUDED.bank_petty_override,
           actual=EXCLUDED.actual,
           credit_to_bank=EXCLUDED.credit_to_bank,
           debit_from_bank=EXCLUDED.debit_from_bank,
           note=EXCLUDED.note,
           updated_at=NOW()
-        RETURNING *
-      `, [date, pettyCashOverride, actual, creditToBank, debitFromBank, note]);
-      res.json(rows[0]);
+        RETURNING to_char(entry_date,'YYYY-MM-DD') AS date,
+                  petty_cash_override,bank_petty_override,actual,
+                  credit_to_bank,debit_from_bank,note,updated_at
+      `, [date, pettyCashOverride, bankPettyOverride, actual, creditToBank, debitFromBank, note]);
+
+      const row = rows[0];
+      res.json({
+        date: row.date,
+        pettyCashOverride: row.petty_cash_override == null ? null : Number(row.petty_cash_override),
+        bankPettyOverride: row.bank_petty_override == null ? null : Number(row.bank_petty_override),
+        actual: row.actual == null ? null : Number(row.actual),
+        creditToBank: Number(row.credit_to_bank || 0),
+        debitFromBank: Number(row.debit_from_bank || 0),
+        note: row.note || "",
+        updatedAt: row.updated_at,
+      });
     } catch (error) {
-      if (/valid cash-flow amounts/.test(error.message)) return res.status(400).json({ error: error.message });
+      if (/non-negative amounts/.test(error.message)) return res.status(400).json({ error: error.message });
       next(error);
     }
   });

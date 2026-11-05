@@ -43,56 +43,104 @@ function ensureLedgerAdminUi() {
   if (main && !document.querySelector("#cashflowSection")) {
     const section = document.createElement("section");
     section.id = "cashflowSection";
-    section.className = "admin-section";
+    section.className = "admin-section cashflow-page";
     section.innerHTML = `
-      <div class="cash-flow-controls">
-        <div class="panel cash-flow-settings">
-          <h3>Default Petty Cash</h3>
-          <p>Used as the starting petty cash for each day unless you enter a one-day override.</p>
-          <form id="cashFlowSettingsForm" class="cash-flow-settings-form">
-            <label class="field"><span>Default amount</span><input id="defaultPettyCash" type="number" min="0" step="0.01" value="0"></label>
-            <button class="primary-button" type="submit">Save</button>
-          </form>
+      <div class="cashflow-page-head">
+        <div>
+          <p class="eyebrow">FINANCIAL RECONCILIATION</p>
+          <h2>Cash Flow</h2>
         </div>
-        <div class="panel cash-flow-entry-panel">
-          <h3>Daily Cash Entry</h3>
-          <p>Enter the actual cash count and any bank movements for a specific day. Petty cash override is optional.</p>
-          <form id="cashFlowEntryForm" class="cash-flow-entry-grid">
-            <label class="field"><span>Date</span><input id="cashFlowEntryDate" type="date" required></label>
-            <label class="field"><span>Petty Cash Override</span><input id="cashFlowPettyOverride" type="number" min="0" step="0.01" placeholder="Use default"></label>
-            <label class="field"><span>Actual</span><input id="cashFlowActual" type="number" min="0" step="0.01" placeholder="Actual cash count"></label>
-            <label class="field"><span>Credit to Bank</span><input id="cashFlowCredit" type="number" min="0" step="0.01" value="0"></label>
-            <label class="field"><span>Debit from Bank</span><input id="cashFlowDebit" type="number" min="0" step="0.01" value="0"></label>
-            <label class="field"><span>Note</span><input id="cashFlowNote" maxlength="500" placeholder="Optional"></label>
-            <div class="cash-flow-entry-actions"><button class="primary-button" type="submit">Save Daily Entry</button></div>
-          </form>
+        <div class="cashflow-page-actions cashflow-no-print">
+          <button id="cashFlowRefresh" type="button" class="small-button">↻ Refresh</button>
+          <button id="cashFlowPrint" type="button" class="primary-button">Print Cash Flow</button>
         </div>
       </div>
+      <p class="cashflow-intro cashflow-no-print">
+        Daily cash movement, based on actual payments received and recorded expenses.
+        Unpaid and cancelled transactions are excluded. Balances are in Philippine pesos.
+      </p>
 
-      <div class="panel">
-        <div class="panel-header">
-          <div class="panel-header-copy">
-            <h2>Cash Flow</h2>
-            <p>Daily operating cash flow modeled after your Water Cash Flow tracker.</p>
+      <div class="cashflow-summary cashflow-no-print">
+        <div><span>Income in range</span><strong id="cashFlowSummaryIncome">₱0</strong></div>
+        <div><span>Expenses in range</span><strong id="cashFlowSummaryExpenses">₱0</strong></div>
+        <div><span>Reconciliation variance</span><strong id="cashFlowSummaryVariance">₱0</strong><small id="cashFlowSummaryCounted">0 day(s) counted</small></div>
+        <div><span>Closing bank total</span><strong id="cashFlowSummaryBank">₱0</strong></div>
+      </div>
+
+      <div class="cashflow-forms cashflow-no-print">
+        <section class="panel cashflow-opening-panel">
+          <h2>Opening balances</h2>
+          <p class="muted small">Default petty cash applies to each day. The bank balance carries forward, including movements before the selected date range.</p>
+          <form id="cashFlowSettingsForm" class="cashflow-settings-grid">
+            <label class="field"><span>Default Petty Cash</span>
+              <input id="defaultPettyCash" type="number" min="0" step="0.01" value="0" required>
+            </label>
+            <label class="field"><span>Bank Petty / Opening Balance</span>
+              <input id="defaultBankPetty" type="number" min="0" step="0.01" value="0" required>
+            </label>
+            <button class="primary-button" type="submit">Save Balances</button>
+          </form>
+        </section>
+
+        <section class="panel cashflow-entry-panel">
+          <h2>Daily Cash Entry</h2>
+          <p class="muted small">Choose a date or select a row below to edit that day's count and bank movements. Leave overrides blank to use the defaults.</p>
+          <form id="cashFlowEntryForm">
+            <div class="cashflow-entry-grid">
+              <label class="field"><span>Date</span><input id="cashFlowEntryDate" type="date" required></label>
+              <label class="field"><span>Petty Cash Override</span><input id="cashFlowPettyOverride" type="number" min="0" step="0.01" placeholder="Use default"><small>Blank uses default petty cash.</small></label>
+              <label class="field"><span>Bank Petty Override</span><input id="cashFlowBankPettyOverride" type="number" min="0" step="0.01" placeholder="Carry forward"><small>Blank carries the previous bank balance.</small></label>
+              <label class="field"><span>Actual Cash Count</span><input id="cashFlowActual" type="number" min="0" step="0.01" placeholder="Leave blank if not yet counted"></label>
+              <label class="field"><span>Credit to Bank</span><input id="cashFlowCredit" type="number" min="0" step="0.01" value="0"></label>
+              <label class="field"><span>Debit from Bank</span><input id="cashFlowDebit" type="number" min="0" step="0.01" value="0"></label>
+            </div>
+            <label class="field cashflow-note-field"><span>Note</span><input id="cashFlowNote" maxlength="500" placeholder="Optional reconciliation note"></label>
+            <button class="primary-button" type="submit">Save Daily Entry</button>
+          </form>
+        </section>
+      </div>
+
+      <section class="panel cashflow-ledger-panel">
+        <div class="cashflow-ledger-head">
+          <div><h2>Cash Flow Ledger</h2><p class="muted small cashflow-no-print">Click any date to load its saved cash entry.</p></div>
+          <div class="cashflow-date-range cashflow-no-print">
+            <label>From <input id="cashFlowFrom" type="date"></label>
+            <label>To <input id="cashFlowTo" type="date"></label>
           </div>
-          <div class="cash-flow-range">
-            <label><span>From</span><input id="cashFlowFrom" type="date"></label>
-            <label><span>To</span><input id="cashFlowTo" type="date"></label>
-            <button id="cashFlowView" type="button" class="small-button">View</button>
-            <button id="cashFlowPrint" type="button" class="small-button">Print</button>
-          </div>
+          <div class="cashflow-print-title"><strong>INYOU Water POS | Cash Flow</strong><span id="cashFlowPrintRange"></span></div>
         </div>
-        <div class="table-wrap">
-          <table class="cash-flow-table">
+        <div class="cashflow-table-scroll">
+          <table class="cashflow-table cashflow-income-table" aria-label="Cash Flow Ledger">
             <thead><tr>
-              <th>Date</th><th>Petty Cash</th><th>Daily Income</th><th>Expenses</th><th>Total</th><th>Actual</th><th>Variance</th>
-              <th>Cash</th><th>GCash</th><th>GCash Txns</th><th>Other</th><th>Cash + GCash</th><th>No. Transactions</th>
-              <th>Credit to Bank</th><th>Debit from Bank</th><th>Running Bank Total</th><th>Note</th>
+              <th>Date</th><th>Petty Cash</th><th>Daily Income</th><th>Cash</th><th>GCash</th><th>GCash Txns</th>
+              <th>Other Banks</th><th>Cash + GCash</th><th>Total Txns</th><th>Expenses</th><th>Expected Total</th>
+              <th>Actual</th><th>Variance</th>
             </tr></thead>
-            <tbody id="cashFlowBody"><tr><td colspan="17">Loading cash flow…</td></tr></tbody>
+            <tbody id="cashFlowBody"><tr><td colspan="13" class="cashflow-empty">Loading cash flow…</td></tr></tbody>
           </table>
         </div>
-      </div>`;
+        <p class="muted small cashflow-no-print cashflow-ledger-note">
+          Expected Total = Petty Cash + Daily Income − Expenses. Variance = Actual − Expected Total.
+        </p>
+      </section>
+
+      <section class="panel cashflow-ledger-panel cashflow-bank-panel">
+        <div class="cashflow-ledger-head">
+          <div><h2>Bank Ledger</h2><p class="muted small cashflow-no-print">Bank movements for the same selected date range. Click any date to edit its entry.</p></div>
+        </div>
+        <div class="cashflow-table-scroll">
+          <table class="cashflow-table cashflow-bank-table" aria-label="Bank Ledger">
+            <thead><tr>
+              <th>Date</th><th>Bank Petty</th><th>Credit to Bank</th><th>Debit from Bank</th><th>Running Bank Total</th><th>Note</th>
+            </tr></thead>
+            <tbody id="cashFlowBankBody"><tr><td colspan="6" class="cashflow-empty">Loading bank ledger…</td></tr></tbody>
+          </table>
+        </div>
+        <p class="muted small cashflow-no-print cashflow-ledger-note">
+          Running Bank Total = Opening Bank Balance + Credits − Debits, including saved overrides.
+        </p>
+      </section>
+    `;
     main.appendChild(section);
   }
 
@@ -802,7 +850,34 @@ async function printSalesReport(period) {
 
 function cashFlowVarianceClass(value) {
   if (value == null || Number(value) === 0) return "";
-  return Number(value) > 0 ? "variance-positive" : "variance-negative";
+  return Number(value) > 0 ? "cashflow-positive" : "cashflow-negative";
+}
+
+function setCashFlowSelectedDate(date) {
+  document.querySelectorAll(".cashflow-table tbody tr[data-cashflow-date]").forEach(row => {
+    row.classList.toggle("cashflow-selected", row.dataset.cashflowDate === date);
+  });
+}
+
+async function loadCashFlowEntry(date = document.querySelector("#cashFlowEntryDate")?.value) {
+  if (!date || !token) return;
+  try {
+    const entry = await api("/api/admin/cash-flow/entry/" + encodeURIComponent(date));
+    document.querySelector("#cashFlowEntryDate").value = date;
+    document.querySelector("#cashFlowPettyOverride").value = entry.pettyCashOverride == null ? "" : entry.pettyCashOverride;
+    document.querySelector("#cashFlowBankPettyOverride").value = entry.bankPettyOverride == null ? "" : entry.bankPettyOverride;
+    document.querySelector("#cashFlowActual").value = entry.actual == null ? "" : entry.actual;
+    document.querySelector("#cashFlowCredit").value = entry.creditToBank ?? 0;
+    document.querySelector("#cashFlowDebit").value = entry.debitFromBank ?? 0;
+    document.querySelector("#cashFlowNote").value = entry.note || "";
+    setCashFlowSelectedDate(date);
+  } catch (error) { toast(error.message); }
+}
+
+function bindCashFlowRows() {
+  document.querySelectorAll(".cashflow-table tbody tr[data-cashflow-date]").forEach(row => {
+    row.addEventListener("click", () => loadCashFlowEntry(row.dataset.cashflowDate));
+  });
 }
 
 async function loadCashFlow() {
@@ -810,57 +885,112 @@ async function loadCashFlow() {
   const from = document.querySelector("#cashFlowFrom").value || monthStartYmd();
   const to = document.querySelector("#cashFlowTo").value || manilaYmd();
   if (from > to) return toast("Cash Flow From date cannot be after To date.");
+
   try {
     const data = await api("/api/admin/cash-flow?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to));
-    document.querySelector("#defaultPettyCash").value = data.defaultPettyCash;
-    const body = document.querySelector("#cashFlowBody");
-    body.innerHTML = data.rows.length ? data.rows.map(row => `<tr>
-      <td>${ledgerEscape(row.date)}</td><td>${ledgerMoney(row.pettyCash)}</td><td>${ledgerMoney(row.dailyIncome)}</td><td>${ledgerMoney(row.expenses)}</td><td><strong>${ledgerMoney(row.expectedTotal)}</strong></td>
-      <td>${row.actual == null ? '<span class="muted-value">—</span>' : ledgerMoney(row.actual)}</td><td class="${cashFlowVarianceClass(row.variance)}">${row.variance == null ? "—" : ledgerMoney(row.variance)}</td>
-      <td>${ledgerMoney(row.cash)}</td><td>${ledgerMoney(row.gcash)}</td><td>${row.gcashTxns}</td><td>${ledgerMoney(row.other)}</td><td>${ledgerMoney(row.cashPlusGcash)}</td><td>${row.transactionCount}</td>
-      <td>${ledgerMoney(row.creditToBank)}</td><td>${ledgerMoney(row.debitFromBank)}</td><td><strong>${ledgerMoney(row.runningBankTotal)}</strong></td><td class="cash-flow-note" title="${ledgerEscape(row.note)}">${ledgerEscape(row.note || "—")}</td>
-    </tr>`).join("") : '<tr><td colspan="17">No cash-flow dates in this range.</td></tr>';
+    const petty = document.querySelector("#defaultPettyCash");
+    const bank = document.querySelector("#defaultBankPetty");
+    if (petty && document.activeElement !== petty) petty.value = data.defaultPettyCash;
+    if (bank && document.activeElement !== bank) bank.value = data.defaultBankPetty;
+
+    const rows = data.rows || [];
+    const total = field => rows.reduce((sum, row) => sum + Number(row[field] || 0), 0);
+    const variance = rows.reduce((sum, row) => sum + Number(row.variance || 0), 0);
+    const counted = rows.filter(row => row.actual != null).length;
+    const closingBank = rows.length ? Number(rows[rows.length - 1].runningBankTotal || 0) : 0;
+
+    document.querySelector("#cashFlowSummaryIncome").textContent = ledgerMoney(total("dailyIncome"));
+    document.querySelector("#cashFlowSummaryExpenses").textContent = ledgerMoney(total("expenses"));
+    const varianceEl = document.querySelector("#cashFlowSummaryVariance");
+    varianceEl.textContent = ledgerMoney(variance);
+    varianceEl.classList.toggle("cashflow-negative", variance < 0);
+    varianceEl.classList.toggle("cashflow-positive", variance > 0);
+    document.querySelector("#cashFlowSummaryCounted").textContent = counted + " day(s) counted";
+    document.querySelector("#cashFlowSummaryBank").textContent = ledgerMoney(closingBank);
+    document.querySelector("#cashFlowPrintRange").textContent = data.from + " to " + data.to;
+
+    const selected = document.querySelector("#cashFlowEntryDate")?.value || "";
+    const cashBody = document.querySelector("#cashFlowBody");
+    cashBody.innerHTML = rows.length ? rows.map(row => `<tr data-cashflow-date="${ledgerEscape(row.date)}" class="${row.date === selected ? "cashflow-selected" : ""}" title="Edit cash entry for ${ledgerEscape(row.date)}">
+      <td><strong>${ledgerEscape(row.date)}</strong></td>
+      <td>${ledgerMoney(row.pettyCash)}</td><td>${ledgerMoney(row.dailyIncome)}</td>
+      <td>${ledgerMoney(row.cash)}</td><td>${ledgerMoney(row.gcash)}</td><td>${row.gcashTxns}</td>
+      <td>${ledgerMoney(row.other)}</td><td>${ledgerMoney(row.cashPlusGcash)}</td><td>${row.transactionCount}</td>
+      <td>${ledgerMoney(row.expenses)}</td><td><strong>${ledgerMoney(row.expectedTotal)}</strong></td>
+      <td>${row.actual == null ? '<span class="muted-value">—</span>' : ledgerMoney(row.actual)}</td>
+      <td class="${cashFlowVarianceClass(row.variance)}">${row.variance == null ? "—" : ledgerMoney(row.variance)}</td>
+    </tr>`).join("") : '<tr><td colspan="13" class="cashflow-empty">No cash flow records for this range.</td></tr>';
+
+    const bankBody = document.querySelector("#cashFlowBankBody");
+    bankBody.innerHTML = rows.length ? rows.map(row => `<tr data-cashflow-date="${ledgerEscape(row.date)}" class="${row.date === selected ? "cashflow-selected" : ""}" title="Edit bank entry for ${ledgerEscape(row.date)}">
+      <td><strong>${ledgerEscape(row.date)}</strong></td>
+      <td><strong>${ledgerMoney(row.bankPetty)}</strong>${row.bankPettyOverride == null ? "" : '<small>Override</small>'}</td>
+      <td>${ledgerMoney(row.creditToBank)}</td><td>${ledgerMoney(row.debitFromBank)}</td>
+      <td><strong>${ledgerMoney(row.runningBankTotal)}</strong></td>
+      <td class="cashflow-note" title="${ledgerEscape(row.note || "")}">${ledgerEscape(row.note || "—")}</td>
+    </tr>`).join("") : '<tr><td colspan="6" class="cashflow-empty">No bank ledger records for this range.</td></tr>';
+
+    bindCashFlowRows();
     if (typeof markAdminRefreshed === "function") markAdminRefreshed();
   } catch (error) { toast(error.message); }
 }
 
 async function saveCashFlowSettings(event) {
   event.preventDefault();
+  const button = event.currentTarget.querySelector("button[type=submit]");
+  if (button) { button.disabled = true; button.textContent = "Saving…"; }
   try {
-    const result = await api("/api/admin/cash-flow/settings", { method: "PATCH", body: { defaultPettyCash: document.querySelector("#defaultPettyCash").value } });
+    const result = await api("/api/admin/cash-flow/settings", {
+      method: "PATCH",
+      body: {
+        defaultPettyCash: document.querySelector("#defaultPettyCash").value,
+        defaultBankPetty: document.querySelector("#defaultBankPetty").value,
+      }
+    });
     document.querySelector("#defaultPettyCash").value = result.defaultPettyCash;
-    toast("Default petty cash saved.");
+    document.querySelector("#defaultBankPetty").value = result.defaultBankPetty;
+    toast("Petty cash and opening bank balance saved.");
     await loadCashFlow();
   } catch (error) { toast(error.message); }
+  finally {
+    if (button) { button.disabled = false; button.textContent = "Save Balances"; }
+  }
 }
 
 async function saveCashFlowEntry(event) {
   event.preventDefault();
   const date = document.querySelector("#cashFlowEntryDate").value;
+  const button = event.currentTarget.querySelector("button[type=submit]");
+  if (button) { button.disabled = true; button.textContent = "Saving…"; }
   try {
-    await api("/api/admin/cash-flow/" + encodeURIComponent(date), { method: "PUT", body: {
-      pettyCashOverride: document.querySelector("#cashFlowPettyOverride").value,
-      actual: document.querySelector("#cashFlowActual").value,
-      creditToBank: document.querySelector("#cashFlowCredit").value,
-      debitFromBank: document.querySelector("#cashFlowDebit").value,
-      note: document.querySelector("#cashFlowNote").value,
-    }});
-    toast("Cash flow entry saved.");
+    await api("/api/admin/cash-flow/" + encodeURIComponent(date), {
+      method: "PUT",
+      body: {
+        pettyCashOverride: document.querySelector("#cashFlowPettyOverride").value,
+        bankPettyOverride: document.querySelector("#cashFlowBankPettyOverride").value,
+        actual: document.querySelector("#cashFlowActual").value,
+        creditToBank: document.querySelector("#cashFlowCredit").value,
+        debitFromBank: document.querySelector("#cashFlowDebit").value,
+        note: document.querySelector("#cashFlowNote").value,
+      }
+    });
+    toast("Daily cash entry saved for " + date + ".");
     await loadCashFlow();
+    await loadCashFlowEntry(date);
   } catch (error) { toast(error.message); }
+  finally {
+    if (button) { button.disabled = false; button.textContent = "Save Daily Entry"; }
+  }
 }
 
 function printCashFlow() {
-  const table = document.querySelector(".cash-flow-table");
-  if (!table) return;
-  const from = document.querySelector("#cashFlowFrom").value;
-  const to = document.querySelector("#cashFlowTo").value;
-  document.querySelector("#printReport").innerHTML = `<div class="print-report-inner"><div class="print-report-head"><div><div class="print-kicker">WATER POS</div><h1>Cash Flow</h1><p>${ledgerEscape(from)} – ${ledgerEscape(to)}</p></div></div>${table.outerHTML}</div>`;
-  document.body.classList.add("printing-report");
-  window.addEventListener("afterprint", () => document.body.classList.remove("printing-report"), { once: true });
-  setTimeout(() => window.print(), 80);
+  const rows = document.querySelectorAll("#cashFlowBody tr[data-cashflow-date]");
+  if (!rows.length) return toast("No cash flow records to print.");
+  document.body.classList.add("cashflow-printing");
+  const cleanup = () => document.body.classList.remove("cashflow-printing");
+  window.addEventListener("afterprint", cleanup, { once: true });
+  setTimeout(() => window.print(), 60);
 }
-
 function bindLedgerUi() {
   ensureLedgerAdminUi();
 
@@ -883,9 +1013,15 @@ function bindLedgerUi() {
 
   document.querySelector("#cashFlowSettingsForm")?.addEventListener("submit", saveCashFlowSettings);
   document.querySelector("#cashFlowEntryForm")?.addEventListener("submit", saveCashFlowEntry);
-  document.querySelector("#cashFlowView")?.addEventListener("click", loadCashFlow);
+  document.querySelector("#cashFlowRefresh")?.addEventListener("click", loadCashFlow);
   document.querySelector("#cashFlowPrint")?.addEventListener("click", printCashFlow);
-  document.querySelector('[data-section="cashflow"]')?.addEventListener("click", () => setTimeout(loadCashFlow, 0));
+  document.querySelector("#cashFlowFrom")?.addEventListener("change", loadCashFlow);
+  document.querySelector("#cashFlowTo")?.addEventListener("change", loadCashFlow);
+  document.querySelector("#cashFlowEntryDate")?.addEventListener("change", event => loadCashFlowEntry(event.currentTarget.value));
+  document.querySelector('[data-section="cashflow"]')?.addEventListener("click", () => setTimeout(async () => {
+    await loadCashFlow();
+    await loadCashFlowEntry(document.querySelector("#cashFlowEntryDate")?.value || manilaYmd());
+  }, 0));
 
   document.querySelectorAll(".sales-filter-button").forEach(button => {
     button.addEventListener("click", () => {
