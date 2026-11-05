@@ -1,5 +1,5 @@
 /* Offline Water POS application shell. API data is never cached. */
-const CACHE="water-pos-offline-v144";
+const CACHE="water-pos-offline-v145";
 const SHELL=[
 "/","/index.html","/pos-start.html","/pos-login.html",
 "/styles.css?v=20261103-unpaid-manual2","/pos-theme.css?v=20261012-1",
@@ -40,6 +40,15 @@ self.addEventListener("fetch",event=>{
     const cache=await caches.open(CACHE);
     return await cache.match(req)||await cache.match(url.pathname)||await cache.match("/index.html")||Response.error();
    }
+  })());
+  return;
+ }
+ // Admin JavaScript/CSS must never be held back by the cashier POS's offline cache.
+ // Cashier POS assets below still use cache-first for offline operation.
+ if(url.pathname.startsWith("/admin") && /\\.(?:js|css)$/.test(url.pathname)){
+  event.respondWith((async()=>{
+   try { return await fetch(req,{cache:"no-store"}); }
+   catch { const cache=await caches.open(CACHE); return await cache.match(req)||Response.error(); }
   })());
   return;
  }
