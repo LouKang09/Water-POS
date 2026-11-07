@@ -1,13 +1,13 @@
 /* Offline Water POS application shell. API data is never cached. */
-const CACHE="water-pos-offline-v145";
+const CACHE="water-pos-offline-v146";
 const SHELL=[
 "/","/index.html","/pos-start.html","/pos-login.html",
 "/styles.css?v=20261103-unpaid-manual2","/pos-theme.css?v=20261012-1",
-"/attendance.css?v=20261015-1","/app.js?v=20261103-unpaid-manual2",
+"/attendance.css?v=20261015-1","/app.js?v=20261107-unitnumber1",
 "/pos-auth.js?v=20261026-sessionfix2","/offline-pos.js?v=20261024-storagefallback1",
 "/attendance.js?v=20261015-1","/pos-theme.js?v=20261012-1",
 "/pos-login.js?v=20261026-persistent1","/pos-login.css?v=20261011-2",
-"/pos-account.css?v=20261011-3","/offline-pos.css?v=20261016-reviewfix2","/pos-sidebar.css?v=20261026-menu1","/pos-sidebar.js?v=20261029-noadmin1","/pos-updates.css?v=20261029-updater1","/pos-updates.js?v=20261029-updater1","/brand/inyou-official-hd.png"
+"/pos-account.css?v=20261011-3","/offline-pos.css?v=20261016-reviewfix2","/pos-sidebar.css?v=20261107-unitnumber1","/pos-sidebar.js?v=20261107-unitnumber1","/pos-updates.css?v=20261029-updater1","/pos-updates.js?v=20261029-updater1","/brand/inyou-official-hd.png"
 ];
 self.addEventListener("install",event=>{
  event.waitUntil((async()=>{
