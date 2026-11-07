@@ -40,6 +40,7 @@ body.pos-sidebar-open{overflow:hidden}
 .pos-transaction-main{min-width:0}
 .pos-transaction-main strong{display:block;overflow-wrap:anywhere;font-size:.82rem}
 .pos-transaction-main small{display:block;margin-top:4px;color:var(--muted);font-size:.69rem;line-height:1.45}
+.pos-transaction-main .pos-transaction-unit{display:inline-block;margin-top:8px;padding:5px 9px;border-radius:8px;background:var(--surface-2);color:var(--brand);font-size:.7rem;font-weight:800;line-height:1.35;overflow-wrap:anywhere}
 .pos-transaction-trailing{display:grid;justify-items:end;gap:6px;text-align:right;flex:none}
 .pos-transaction-trailing strong{font-size:.96rem}
 .pos-transaction-state{font-size:.62rem;font-weight:800;line-height:1;padding:6px 7px;border-radius:9px;background:#dff5e9;color:#126e4a;white-space:nowrap}
