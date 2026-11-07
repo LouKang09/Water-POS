@@ -72,6 +72,21 @@ function listItems(items){
   if(typeof data==="string"){try{data=JSON.parse(data);}catch{data=[];}}
   return Array.isArray(data)?data.map(i=>String(i.label||i.category||"Item")+" × "+Number(i.qty||1)).join(", "):"";
 }
+// Treat legacy "Room", "Room / Unit", and "Unit" prefixes as display labels only.
+// Keep stored delivery_room_unit/roomUnit values untouched for existing transactions.
+function formatUnitNumber(value){
+  const raw=String(value??"").trim().replace(/\\s+/g," ");
+  return raw.replace(/^(?:(?:room|unit)(?:\\s*\\/\\s*(?:room|unit))?\\s*(?:no\\.?|number)?\\s*[:#-]?\\s*)+/i,"").trim() || raw;
+}
+function deliveryUnitLine(sale){
+  const stored=sale.delivery_room_unit??sale.fields?.roomUnit;
+  let items=sale.items;
+  if(typeof items==="string"){try{items=JSON.parse(items);}catch{items=[];}}
+  const isDelivery=Array.isArray(items)&&items.some(item=>String(item.category||"").toLowerCase()==="delivery"||/^delivery(?:\\s|₱|$)/i.test(String(item.label||"")));
+  if(!isDelivery&&!String(stored??"").trim())return "";
+  const unit=formatUnitNumber(stored);
+  return '<small class="pos-transaction-unit">Unit Number: '+textSafe(unit||"Not recorded")+'</small>';
+}
 function initDialog(){
   if($("#posTransactionsDialog"))return;
   const dialog=document.createElement("dialog");
@@ -119,6 +134,7 @@ async function loadTransactions(){
           created_at:x.createdAt,total:x.total,
           payment_method:x.method||x.fields?.paymentMethod||"Cash",
           items:x.fields?.items||"[]",
+          delivery_room_unit:x.fields?.roomUnit||null,
           localState:x.state==="review"?"review":"pending",
           client_sale_key:x.key
         }));
@@ -139,7 +155,7 @@ async function loadTransactions(){
       const stateClass=x.localState==="confirmed"?"":x.localState==="review"?"review":"pending";
       const extra=listItems(x.items);
       return '<article class="pos-transaction-row"><div class="pos-transaction-main"><strong>'+textSafe(x.transaction_ref)+'</strong><small>'+textSafe(timestamp(x.created_at))+" · "+textSafe(x.payment_method||"Cash")+
-        (x.payment_provider?" / "+textSafe(x.payment_provider):"")+'</small><small>'+textSafe(extra||"Sale")+'</small></div><div class="pos-transaction-trailing"><strong>'+textSafe(amount(x.total))+
+        (x.payment_provider?" / "+textSafe(x.payment_provider):"")+'</small><small>'+textSafe(extra||"Sale")+'</small>'+deliveryUnitLine(x)+'</div><div class="pos-transaction-trailing"><strong>'+textSafe(amount(x.total))+
         '</strong><span class="pos-transaction-state '+stateClass+'">'+textSafe(status)+'</span></div></article>';
     }).join("");
   }
