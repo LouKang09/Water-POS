@@ -75,14 +75,14 @@ function listItems(items){
 // Treat legacy "Room", "Room / Unit", and "Unit" prefixes as display labels only.
 // Keep stored delivery_room_unit/roomUnit values untouched for existing transactions.
 function formatUnitNumber(value){
-  const raw=String(value??"").trim().replace(/\\s+/g," ");
-  return raw.replace(/^(?:(?:room|unit)(?:\\s*\\/\\s*(?:room|unit))?\\s*(?:no\\.?|number)?\\s*[:#-]?\\s*)+/i,"").trim() || raw;
+  const raw=String(value??"").trim().replace(/\s+/g," ");
+  return raw.replace(/^(?:(?:room|unit)(?:\s*\/\s*(?:room|unit))?\s*(?:no\.?|number)?\s*[:#-]?\s*)+/i,"").trim() || raw;
 }
 function deliveryUnitLine(sale){
   const stored=sale.delivery_room_unit??sale.fields?.roomUnit;
   let items=sale.items;
   if(typeof items==="string"){try{items=JSON.parse(items);}catch{items=[];}}
-  const isDelivery=Array.isArray(items)&&items.some(item=>String(item.category||"").toLowerCase()==="delivery"||/^delivery(?:\\s|₱|$)/i.test(String(item.label||"")));
+  const isDelivery=Array.isArray(items)&&items.some(item=>String(item.category||"").toLowerCase()==="delivery"||/^delivery(?:\s|₱|$)/i.test(String(item.label||"")));
   if(!isDelivery&&!String(stored??"").trim())return "";
   const unit=formatUnitNumber(stored);
   return '<small class="pos-transaction-unit">Unit Number: '+textSafe(unit||"Not recorded")+'</small>';
