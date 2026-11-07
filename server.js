@@ -400,7 +400,7 @@ app.post("/api/sales", upload.single("receipt"), async (req,res,next) => {
       : null;
 
     if (hasDelivery && !deliveryRoomUnit) {
-      return res.status(400).json({error:"Room / Unit is required for Delivery orders."});
+      return res.status(400).json({error:"Unit Number is required for Delivery orders."});
     }
 
     const isDigital = paymentMethod !== "Cash" && paymentMethod !== "Pay Later";
