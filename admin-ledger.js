@@ -675,9 +675,16 @@ function addRoutes(app) {
         const sale = salesByDate.get(date) || {};
         const entry = entriesByDate.get(date) || null;
 
-        const pettyCash = entry?.petty_cash_override == null
-          ? defaultPettyCash
-          : Number(entry.petty_cash_override);
+        // The previous calendar day's counted cash becomes today's opening petty cash.
+        // Saved petty cash overrides still take precedence; the configured default
+        // remains the fallback when yesterday has no actual count.
+        const pettyCashOverride = entry?.petty_cash_override == null ? null : Number(entry.petty_cash_override);
+        const previousDate = new Date(time - 86400000).toISOString().slice(0, 10);
+        const previousActual = entriesByDate.get(previousDate)?.actual;
+        const pettyCashSource = pettyCashOverride != null ? "override"
+          : previousActual != null ? "previous_actual" : "default";
+        const pettyCash = pettyCashOverride != null ? pettyCashOverride
+          : previousActual != null ? Number(previousActual) : defaultPettyCash;
         const dailyIncome = Number(sale.daily_income || 0);
         const cash = Number(sale.cash || 0);
         const expenses = Number(expensesByDate.get(date) || 0);
@@ -696,7 +703,9 @@ function addRoutes(app) {
         rows.push({
           date,
           pettyCash,
-          pettyCashOverride: entry?.petty_cash_override == null ? null : Number(entry.petty_cash_override),
+          pettyCashSource,
+          pettyCashPreviousDate: pettyCashSource === "previous_actual" ? previousDate : null,
+          pettyCashOverride,
           dailyIncome,
           cash,
           cashTxns: Number(sale.cash_txns || 0),
