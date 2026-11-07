@@ -92,10 +92,12 @@ function normalizeRoomUnit(value){
     .slice(0,100);
 }
 function displayRoomUnit(value){
-  const roomUnit=normalizeRoomUnit(value);
-  if(!roomUnit) return "No room / unit";
-  if(/^(?:room\b|unit\b)/i.test(roomUnit)) return roomUnit;
-  return "Room / Unit "+roomUnit;
+  // Legacy saved delivery locations can begin with "Room", "Unit", or "Room / Unit".
+  // Standardize the visible label without rewriting the stored value.
+  const raw=normalizeRoomUnit(value);
+  if(!raw) return "No unit number";
+  const unit=raw.replace(/^(?:(?:room|unit)(?:\s*\/\s*(?:room|unit))?\s*(?:no\.?|number)?\s*[:#-]?\s*)+/i,"").trim() || raw;
+  return "Unit Number: "+unit;
 }
 const cartTotal = () => state.cart.reduce((sum,i)=>sum+i.unitPrice*i.qty,0);
 
@@ -1222,7 +1224,7 @@ async function submitSale() {
   if(hasDelivery && !state.deliveryRoomUnit.trim()){
     els.paymentDialog.close();
     els.roomUnit.focus();
-    toast("Room / Unit is required for Delivery.");
+    toast("Unit Number is required for Delivery.");
     return;
   }
 
@@ -1485,7 +1487,7 @@ els.checkoutBtn.addEventListener("click",()=>{
   const hasDelivery=state.cart.some(item=>item.category==="Delivery");
   if(hasDelivery && !state.deliveryRoomUnit.trim()){
     els.roomUnit.focus();
-    toast("Room / Unit is required for Delivery.");
+    toast("Unit Number is required for Delivery.");
     return;
   }
   warmOcr().catch(()=>{});
