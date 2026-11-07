@@ -70,7 +70,7 @@ function ensureLedgerAdminUi() {
       <div class="cashflow-forms cashflow-no-print">
         <section class="panel cashflow-opening-panel">
           <h2>Opening balances</h2>
-          <p class="muted small">Default petty cash applies to each day. The bank balance carries forward, including movements before the selected date range.</p>
+          <p class="muted small">Petty cash opens from the previous day's Actual when available. Daily petty cash overrides still take priority; otherwise the default applies if no previous-day count exists. The bank balance carries forward, including movements before the selected range.</p>
           <form id="cashFlowSettingsForm" class="cashflow-settings-grid">
             <label class="field"><span>Default Petty Cash</span>
               <input id="defaultPettyCash" type="number" min="0" step="0.01" value="0" required>
@@ -88,7 +88,7 @@ function ensureLedgerAdminUi() {
           <form id="cashFlowEntryForm">
             <div class="cashflow-entry-grid">
               <label class="field"><span>Date</span><input id="cashFlowEntryDate" type="date" required></label>
-              <label class="field"><span>Petty Cash Override</span><input id="cashFlowPettyOverride" type="number" min="0" step="0.01" placeholder="Use default"><small>Blank uses default petty cash.</small></label>
+              <label class="field"><span>Petty Cash Override</span><input id="cashFlowPettyOverride" type="number" min="0" step="0.01" placeholder="Use carried value"><small>Blank uses the previous day's Actual, or the default when no actual was saved.</small></label>
               <label class="field"><span>Bank Petty Override</span><input id="cashFlowBankPettyOverride" type="number" min="0" step="0.01" placeholder="Carry forward"><small>Blank carries the previous bank balance.</small></label>
               <label class="field"><span>Actual Cash Count</span><input id="cashFlowActual" type="number" min="0" step="0.01" placeholder="Leave blank if not yet counted"></label>
               <label class="field"><span>Credit to Bank</span><input id="cashFlowCredit" type="number" min="0" step="0.01" value="0"></label>
@@ -120,7 +120,7 @@ function ensureLedgerAdminUi() {
           </table>
         </div>
         <p class="muted small cashflow-no-print cashflow-ledger-note">
-          Expected Total = Petty Cash + Cash − Expenses. Variance = Actual − Expected Total.
+          Petty Cash = previous day's Actual (unless overridden; default used if missing). Expected Total = Petty Cash + Cash − Expenses. Variance = Actual − Expected Total.
         </p>
       </section>
 
@@ -913,7 +913,7 @@ async function loadCashFlow() {
     const cashBody = document.querySelector("#cashFlowBody");
     cashBody.innerHTML = rows.length ? rows.map(row => `<tr data-cashflow-date="${ledgerEscape(row.date)}" class="${row.date === selected ? "cashflow-selected" : ""}" title="Edit cash entry for ${ledgerEscape(row.date)}">
       <td><strong>${ledgerEscape(row.date)}</strong></td>
-      <td>${ledgerMoney(row.pettyCash)}</td><td>${ledgerMoney(row.dailyIncome)}</td>
+      <td title="${ledgerEscape(row.pettyCashSource === "override" ? "Daily petty cash override" : row.pettyCashSource === "previous_actual" ? "Previous day's Actual (" + row.pettyCashPreviousDate + ")" : "Default petty cash (no previous-day Actual)")}" >${ledgerMoney(row.pettyCash)}</td><td>${ledgerMoney(row.dailyIncome)}</td>
       <td>${ledgerMoney(row.cash)}</td><td>${Number(row.cashTxns || 0)}</td><td>${ledgerMoney(row.gcash)}</td><td>${row.gcashTxns}</td>
       <td>${ledgerMoney(row.other)}</td><td>${row.transactionCount}</td>
       <td>${ledgerMoney(row.expenses)}</td><td><strong>${ledgerMoney(row.expectedTotal)}</strong></td>
